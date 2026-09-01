@@ -18,7 +18,9 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { layout } from '@/constants/layout';
 import { useColors } from '@/hooks/useColors';
+import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import {
   persistLocalIndex,
   readLocalGallery,
@@ -113,97 +115,103 @@ function Onboarding({
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { contentWidth } = useResponsiveLayout();
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <ScrollView
         contentContainerStyle={[
           styles.onboardingContent,
-          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+          {
+            paddingTop: insets.top + 24,
+            paddingBottom: insets.bottom + 24,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.brandRow}>
-          <LinearGradient
-            colors={[colors.primary, '#8B5CF6']}
-            style={styles.brandMark}
-          >
-            <Feather name="maximize" size={21} color={colors.primaryForeground} />
-          </LinearGradient>
-          <Text style={[styles.brandName, { color: colors.foreground }]}>
-            visage
-          </Text>
-        </View>
+        <View style={[styles.contentFrame, { width: contentWidth }]}>
+          <View style={styles.brandRow}>
+            <LinearGradient
+              colors={[colors.primary, '#8B5CF6']}
+              style={styles.brandMark}
+            >
+              <Feather name="maximize" size={21} color={colors.primaryForeground} />
+            </LinearGradient>
+            <Text style={[styles.brandName, { color: colors.foreground }]}>
+              visage
+            </Text>
+          </View>
 
-        <View style={styles.onboardingHero}>
-          <View style={styles.heroOrbLarge} />
-          <View style={styles.heroOrbSmall} />
-          <LinearGradient
-            colors={['#25235C', '#11182D']}
-            style={styles.faceCard}
-          >
-            <View style={styles.faceLines}>
-              <View style={styles.faceArc} />
-              <View style={styles.faceEyeRow}>
-                <View style={styles.faceEye} />
-                <View style={styles.faceEye} />
+          <View style={styles.onboardingHero}>
+            <View style={styles.heroOrbLarge} />
+            <View style={styles.heroOrbSmall} />
+            <LinearGradient
+              colors={['#25235C', '#11182D']}
+              style={styles.faceCard}
+            >
+              <View style={styles.faceLines}>
+                <View style={styles.faceArc} />
+                <View style={styles.faceEyeRow}>
+                  <View style={styles.faceEye} />
+                  <View style={styles.faceEye} />
+                </View>
+                <View style={styles.faceSmile} />
               </View>
-              <View style={styles.faceSmile} />
-            </View>
-            <View style={styles.scanLine} />
-            <View style={styles.localBadge}>
-              <Feather name="lock" size={12} color={colors.primaryForeground} />
-              <Text style={styles.localBadgeText}>PROCESSAMENTO LOCAL</Text>
-            </View>
-          </LinearGradient>
-        </View>
-
-        <View style={styles.onboardingCopy}>
-          <Text style={[styles.eyebrow, { color: colors.primary }]}>
-            PRIVACIDADE POR PADRÃO
-          </Text>
-          <Text style={[styles.onboardingTitle, { color: colors.foreground }]}>
-            Encontre qualquer rosto.{'\n'}
-            <Text style={{ color: colors.primary }}>Sem enviar nada.</Text>
-          </Text>
-          <Text style={[styles.onboardingSubtitle, { color: colors.mutedForeground }]}>
-            Suas fotos são processadas 100% no seu dispositivo e nunca saem do seu celular.
-          </Text>
-        </View>
-
-        <View style={styles.privacyList}>
-          {[
-            ['cpu', 'Tudo acontece no seu celular', 'Nenhuma imagem ou vetor é enviado para a nuvem.'],
-            ['database', 'Índice local inteligente', 'Reutilize análises já feitas sem gastar dados.'],
-            ['shield', 'Você no controle', 'Apague o índice local quando quiser.'],
-          ].map(([icon, title, description]) => (
-            <View key={title} style={styles.privacyRow}>
-              <IconCircle
-                name={icon as keyof typeof Feather.glyphMap}
-                color={colors.primary}
-                backgroundColor={colors.accent}
-              />
-              <View style={styles.privacyText}>
-                <Text style={[styles.privacyTitle, { color: colors.foreground }]}>
-                  {title}
-                </Text>
-                <Text style={[styles.privacyDescription, { color: colors.mutedForeground }]}>
-                  {description}
-                </Text>
+              <View style={styles.scanLine} />
+              <View style={styles.localBadge}>
+                <Feather name="lock" size={12} color={colors.primaryForeground} />
+                <Text style={styles.localBadgeText}>PROCESSAMENTO LOCAL</Text>
               </View>
-            </View>
-          ))}
-        </View>
+            </LinearGradient>
+          </View>
 
-        <PrimaryButton
-          label="Continuar com segurança"
-          icon="arrow-right"
-          onPress={onContinue}
-          testID="onboarding-continue"
-        />
-        <Text style={[styles.legalNote, { color: colors.mutedForeground }]}>
-          Ao continuar, você permite que o visage acesse suas fotos para realizar a busca local.
-        </Text>
+          <View style={styles.onboardingCopy}>
+            <Text style={[styles.eyebrow, { color: colors.primary }]}>
+              PRIVACIDADE POR PADRÃO
+            </Text>
+            <Text style={[styles.onboardingTitle, { color: colors.foreground }]}>
+              Encontre qualquer rosto.{'\n'}
+              <Text style={{ color: colors.primary }}>Sem enviar nada.</Text>
+            </Text>
+            <Text style={[styles.onboardingSubtitle, { color: colors.mutedForeground }]}>
+              Suas fotos são processadas 100% no seu dispositivo e nunca saem do seu celular.
+            </Text>
+          </View>
+
+          <View style={styles.privacyList}>
+            {[
+              ['cpu', 'Tudo acontece no seu celular', 'Nenhuma imagem ou vetor é enviado para a nuvem.'],
+              ['database', 'Índice local inteligente', 'Reutilize análises já feitas sem gastar dados.'],
+              ['shield', 'Você no controle', 'Apague o índice local quando quiser.'],
+            ].map(([icon, title, description]) => (
+              <View key={title} style={styles.privacyRow}>
+                <IconCircle
+                  name={icon as keyof typeof Feather.glyphMap}
+                  color={colors.primary}
+                  backgroundColor={colors.accent}
+                />
+                <View style={styles.privacyText}>
+                  <Text style={[styles.privacyTitle, { color: colors.foreground }]}>
+                    {title}
+                  </Text>
+                  <Text style={[styles.privacyDescription, { color: colors.mutedForeground }]}>
+                    {description}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <PrimaryButton
+            label="Continuar com segurança"
+            icon="arrow-right"
+            onPress={onContinue}
+            testID="onboarding-continue"
+          />
+          <Text style={[styles.legalNote, { color: colors.mutedForeground }]}>
+            Ao continuar, você permite que o visage acesse suas fotos para realizar a busca local.
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -222,9 +230,18 @@ function Header({
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { horizontalPadding } = useResponsiveLayout();
 
   return (
-    <View style={[styles.header, { paddingTop: Platform.OS === 'web' ? 67 : insets.top + 8 }]}>
+    <View
+      style={[
+        styles.header,
+        {
+          paddingTop: Platform.OS === 'web' ? 67 : insets.top + 8,
+          paddingHorizontal: horizontalPadding,
+        },
+      ]}
+    >
       {onBack ? (
         <Pressable onPress={onBack} hitSlop={14} testID="header-back">
           <Feather name="arrow-left" size={22} color={colors.foreground} />
@@ -268,6 +285,7 @@ function Home({
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { contentWidth } = useResponsiveLayout();
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -276,7 +294,7 @@ function Home({
         contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.homeContent}>
+        <View style={[styles.homeContent, { width: contentWidth, alignSelf: 'center' }]}>
           <LinearGradient
             colors={['#1B1C4A', '#12182E']}
             start={{ x: 0, y: 0 }}
@@ -374,15 +392,31 @@ function SelectPhoto({
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { contentWidth } = useResponsiveLayout();
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Header title="Escolher rosto" subtitle="Isole uma pessoa para buscar" onBack={onBack} />
       <ScrollView
-        contentContainerStyle={[styles.selectContent, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[
+          styles.selectContent,
+          {
+            width: contentWidth,
+            paddingBottom: insets.bottom + 24,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.cropStage, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.cropStage,
+            {
+              width: Math.min(contentWidth, layout.cropMaxSize),
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+          ]}
+        >
           {selectedImage ? (
             <>
               <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
@@ -499,17 +533,22 @@ function Results({
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { contentWidth, numColumns } = useResponsiveLayout();
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Header title="Resultados" subtitle={`${results.length} correspondências encontradas`} onBack={onNewSearch} />
       <FlatList
+        key={`results-${numColumns}`}
         data={results}
         keyExtractor={(item) => item.id}
-        numColumns={2}
+        numColumns={numColumns}
         scrollEnabled={results.length > 0}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.resultsList, { paddingBottom: insets.bottom + 28 }]}
+        contentContainerStyle={[
+          styles.resultsList,
+          { width: contentWidth, alignSelf: 'center', paddingBottom: insets.bottom + 28 },
+        ]}
         columnWrapperStyle={styles.resultsRow}
         ListHeaderComponent={
           <View style={[styles.resultSummary, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -551,7 +590,17 @@ function Results({
           </View>
         }
       />
-      <View style={[styles.resultsFooter, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.resultsFooter,
+          {
+            width: contentWidth,
+            alignSelf: 'center',
+            paddingBottom: insets.bottom + 12,
+            backgroundColor: colors.background,
+          },
+        ]}
+      >
         <PrimaryButton label="Nova busca" icon="plus" onPress={onNewSearch} testID="new-search" />
       </View>
     </View>
@@ -816,7 +865,8 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  onboardingContent: { flexGrow: 1, paddingHorizontal: 22 },
+  onboardingContent: { flexGrow: 1 },
+  contentFrame: { alignSelf: 'center' },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   brandMark: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   brandName: { fontSize: 19, fontFamily: 'Inter_700Bold', letterSpacing: -0.5 },
@@ -856,7 +906,7 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
   headerAction: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   headerActionPlaceholder: { width: 38 },
-  homeContent: { paddingHorizontal: 22, paddingTop: 11 },
+  homeContent: { paddingTop: 11 },
   homeHero: { minHeight: 278, borderRadius: 25, padding: 22, justifyContent: 'flex-end', overflow: 'hidden' },
   heroGlow: { position: 'absolute', width: 210, height: 210, borderRadius: 105, backgroundColor: '#292672', right: -62, top: -55, opacity: 0.65 },
   homeHeroKicker: { fontSize: 10, fontFamily: 'Inter_700Bold', letterSpacing: 1.3, marginBottom: 11 },
@@ -883,8 +933,8 @@ const styles = StyleSheet.create({
   adSlotTop: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   adLabel: { fontSize: 9, letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold' },
   adHint: { fontSize: 10, fontFamily: 'Inter_400Regular' },
-  selectContent: { paddingHorizontal: 22, paddingTop: 12 },
-  cropStage: { height: 350, borderWidth: 1, borderRadius: 24, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  selectContent: { alignSelf: 'center', paddingTop: 12 },
+  cropStage: { aspectRatio: 1, borderWidth: 1, borderRadius: 24, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
   selectedImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   cropOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(3,5,14,0.2)' },
   cropCornerTopLeft: { position: 'absolute', width: 28, height: 28, borderTopWidth: 2, borderLeftWidth: 2, borderColor: '#A5B4FC', left: 25, top: 25, borderTopLeftRadius: 8 },
@@ -917,7 +967,7 @@ const styles = StyleSheet.create({
   progressLabel: { fontFamily: 'Inter_500Medium', fontSize: 11 },
   progressValue: { fontFamily: 'Inter_700Bold', fontSize: 12 },
   analysisSpinner: { marginTop: 30 },
-  resultsList: { paddingHorizontal: 22, paddingTop: 13 },
+  resultsList: { paddingTop: 13 },
   resultsRow: { gap: 12, marginBottom: 12 },
   resultSummary: { minHeight: 79, borderRadius: 17, borderWidth: 1, padding: 12, marginBottom: 17, flexDirection: 'row', alignItems: 'center', gap: 10 },
   summaryIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: '#123429', alignItems: 'center', justifyContent: 'center' },
