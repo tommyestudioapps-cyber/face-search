@@ -1,0 +1,251 @@
+## Estratégia revisada para captura facial confiável e segura
+
+Esta estratégia cobre somente a **detecção, seleção, validação e alinhamento do rosto**. A geração de embeddings e a busca pelos arquivos serão analisadas em uma etapa posterior.
+
+## 1. Decisões técnicas revisadas
+
+### MediaPipe será responsável pela captura facial
+
+Usar o **MediaPipe Face Landmarker** como componente principal para:
+
+- detectar rostos;
+- localizar pontos faciais;
+- determinar a posição e a orientação da cabeça;
+- fornecer os pontos necessários para o alinhamento;
+- validar se o rosto está suficientemente visível.
+
+Não será necessário usar TensorFlow Lite para detectar ou alinhar o rosto.
+
+### TensorFlow Lite ficará separado
+
+O TensorFlow Lite será integrado somente em uma etapa posterior, recebendo o recorte facial já alinhado pelo MediaPipe.
+
+A divisão será:
+
+> **MediaPipe: detectar, validar e alinhar.**  
+> **TensorFlow Lite: gerar características faciais posteriormente.**
+
+Essa separação reduz o acoplamento e permite trocar o modelo de reconhecimento sem alterar a captura facial.
+
+---
+
+## 2. Fase inicial: validar a integração nativa
+
+Antes de alterar o fluxo principal do app, a primeira etapa deverá ser uma validação isolada no APK de desenvolvimento:
+
+- confirmar que o MediaPipe funciona no ambiente React Native/Expo usado pelo projeto;
+- confirmar compatibilidade com o Android alvo;
+- testar o carregamento do modelo;
+- validar o processamento de imagens da galeria;
+- confirmar que o funcionamento não depende do Expo Go;
+- verificar consumo de memória e tempo de processamento.
+
+Somente depois dessa validação a integração deverá ser incorporada às telas atuais.
+
+O objetivo é evitar uma alteração ampla baseada em um módulo que funcione no ambiente de desenvolvimento, mas falhe no APK.
+
+---
+
+## 3. Normalização da imagem de entrada
+
+Antes da detecção, toda imagem deverá passar por uma etapa padronizada:
+
+- interpretar corretamente a orientação EXIF;
+- corrigir rotação;
+- manter a proporção original;
+- reduzir a resolução somente quando isso não prejudicar a detecção;
+- garantir um formato de imagem compatível com o MediaPipe;
+- preservar a imagem original sem sobrescrevê-la.
+
+A mesma normalização deverá ser utilizada futuramente tanto para fotos escolhidas pelo usuário quanto para fotos analisadas da galeria.
+
+Isso é importante porque uma imagem visualmente correta pode estar armazenada com rotação diferente nos metadados.
+
+---
+
+## 4. Detecção dos rostos
+
+O MediaPipe deverá analisar a imagem e retornar, para cada rosto:
+
+- área delimitadora;
+- confiança da detecção;
+- pontos faciais;
+- orientação aproximada da cabeça;
+- posição relativa dentro da imagem.
+
+As respostas deverão ser tratadas explicitamente:
+
+- nenhum rosto: informar que não foi possível encontrar um rosto;
+- um rosto: selecioná-lo automaticamente;
+- vários rostos: não escolher silenciosamente;
+- rosto muito pequeno ou incompleto: rejeitar ou solicitar outra imagem.
+
+Na busca futura, a seleção de um rosto entre vários deverá ser explícita para evitar que o usuário pesquise pela pessoa errada.
+
+---
+
+## 5. Validação de qualidade
+
+Antes do alinhamento final, o rosto deverá passar por critérios mínimos de qualidade:
+
+- tamanho mínimo na imagem;
+- olhos e pontos faciais principais detectáveis;
+- rosto dentro da área da imagem;
+- inclinação horizontal e vertical aceitável;
+- iluminação suficiente;
+- baixa ocorrência de desfoque;
+- ausência de obstrução excessiva;
+- confiança mínima na detecção.
+
+Os limites não deverão ser escolhidos apenas arbitrariamente. A estratégia será:
+
+1. começar com limites conservadores;
+2. testar em imagens reais variadas;
+3. ajustar os limites com base em falsos aceites e rejeições;
+4. manter esses limites centralizados e documentados.
+
+O objetivo é rejeitar imagens que produziriam um recorte pouco confiável, em vez de permitir que qualquer detecção parcial siga para a próxima etapa.
+
+---
+
+## 6. Alinhamento facial
+
+O alinhamento será feito com pontos faciais estáveis, principalmente:
+
+- centro do olho esquerdo;
+- centro do olho direito;
+- nariz;
+- pontos de referência da boca.
+
+A transformação deverá:
+
+1. corrigir a rotação do rosto;
+2. centralizar os olhos e o nariz;
+3. ajustar a escala;
+4. preservar uma margem uniforme;
+5. produzir sempre a mesma orientação;
+6. gerar a mesma proporção para todas as imagens.
+
+O alinhamento deverá usar uma transformação geométrica consistente, e não apenas um recorte baseado na caixa delimitadora. A caixa pode variar bastante conforme a pose, enquanto os pontos faciais fornecem uma referência mais estável.
+
+---
+
+## 7. Contrato do resultado capturado
+
+A etapa de captura deverá entregar somente um resultado padronizado contendo:
+
+- recorte facial alinhado;
+- identificação do rosto selecionado;
+- posição do rosto na imagem original;
+- pontos faciais utilizados;
+- confiança da detecção;
+- resultado da validação de qualidade;
+- orientação e dimensão do recorte.
+
+Esse resultado será a entrada da futura etapa de reconhecimento.
+
+Neste momento, não deverão ser gerados:
+
+- embeddings;
+- comparações;
+- ranking;
+- resultados de busca;
+- índice facial.
+
+---
+
+## 8. Estratégia de segurança e privacidade
+
+A captura deverá seguir estas regras:
+
+- processar as imagens localmente;
+- não enviar fotos, recortes ou landmarks para servidores;
+- não baixar modelos durante o uso;
+- incluir o modelo do MediaPipe no APK ou validar rigorosamente qualquer recurso externo;
+- não gravar imagens ou rostos em logs;
+- não registrar URIs sensíveis em logs de depuração;
+- manter o recorte alinhado apenas em memória quando possível;
+- liberar o recorte ao sair da etapa de captura;
+- não criar cópias permanentes da foto original;
+- respeitar o cancelamento e a negativa de permissões;
+- usar somente o acesso necessário à galeria ou câmera.
+
+O banco local não deverá receber dados biométricos nesta etapa. O armazenamento de embeddings será tratado separadamente quando a estratégia de busca for definida.
+
+---
+
+## 9. Tratamento de situações problemáticas
+
+A implementação deverá evitar comportamentos silenciosos. Cada situação deverá ter uma resposta definida:
+
+- imagem inválida;
+- URI inacessível;
+- permissão revogada;
+- formato não suportado;
+- falha no carregamento do modelo;
+- nenhum rosto detectado;
+- múltiplos rostos;
+- rosto com baixa qualidade;
+- memória insuficiente;
+- processamento cancelado pelo usuário.
+
+Uma falha de captura não deverá ser convertida em uma imagem demonstrativa nem em um resultado falso.
+
+---
+
+## 10. Validação no APK de desenvolvimento
+
+O APK de desenvolvimento deverá ser usado para validar:
+
+- fotos frontais;
+- rostos inclinados;
+- diferentes níveis de iluminação;
+- óculos e acessórios;
+- rostos parcialmente obstruídos;
+- fotos de grupo;
+- imagens pequenas;
+- fotos rotacionadas;
+- fotos com diferentes proporções;
+- imagens escolhidas da galeria;
+- imagens capturadas pela câmera;
+- aparelhos com diferentes capacidades.
+
+Também deverão ser medidas:
+
+- tempo de detecção;
+- tempo de alinhamento;
+- consumo de memória;
+- estabilidade após várias capturas;
+- comportamento sem conexão com a internet.
+
+---
+
+## 11. Validação no APK final
+
+Depois de aprovada no APK de desenvolvimento, a mesma captura deverá ser verificada no APK final:
+
+- instalação limpa;
+- execução sem ferramentas de desenvolvimento;
+- funcionamento offline;
+- permissões permitidas e negadas;
+- processamento repetido;
+- fotos de diferentes resoluções;
+- ausência de logs sensíveis;
+- ausência de upload de imagens;
+- comportamento após fechar e reabrir o app.
+
+O APK final somente deverá ser considerado aprovado quando produzir recortes equivalentes aos do APK de desenvolvimento, sem depender de configurações de desenvolvimento.
+
+## Resultado esperado
+
+Ao terminar essa etapa, o app terá uma captura facial baseada em um processo controlado:
+
+1. normalizar a imagem;
+2. detectar o rosto com MediaPipe;
+3. selecionar explicitamente o rosto correto;
+4. validar a qualidade;
+5. alinhar usando landmarks;
+6. entregar um recorte padronizado;
+7. manter o processamento local e sem persistência biométrica.
+
+Somente depois dessa base estar estável deverá ser estudada a integração do TensorFlow Lite para gerar embeddings e definir a estratégia de busca pelos arquivos.
