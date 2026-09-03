@@ -1,2 +1,3 @@
 - [Captura facial nativa](face-capture-native.md) — o modelo precisa entrar nos assets Android e a resposta do MediaPipe agrupa vários rostos dentro de um único frame.
 - [Runtime de reconhecimento local](face-recognition-runtime.md) — TFLite/Nitro é nativo e o MobileFaceNet adotado exige entrada 112×112 e saída de 192 valores.
+- [Build Android neste ambiente](android-build-environment.md) — o APK remoto depende de um token EAS válido; o build local pode exceder a cota ao instalar o NDK.
