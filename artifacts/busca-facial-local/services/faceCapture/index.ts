@@ -11,6 +11,7 @@ import {
   type DetectedFace,
   type FaceDetectionSession,
   type FaceLandmark,
+  type FaceQualityIssue,
 } from './types';
 
 export * from './types';
@@ -103,6 +104,38 @@ export async function alignSelectedFace(
 
 export function getSelectableFaces(faces: DetectedFace[]): DetectedFace[] {
   return faces.filter((face) => face.quality.accepted);
+}
+
+function qualityIssueMessage(issue: FaceQualityIssue): string {
+  switch (issue) {
+    case 'face-too-small':
+      return 'O rosto está muito pequeno na imagem.';
+    case 'face-out-of-frame':
+      return 'O rosto precisa estar completamente dentro do enquadramento.';
+    case 'low-confidence':
+      return 'A detecção do rosto não teve confiança suficiente.';
+    case 'excessive-rotation':
+      return 'Gire a imagem para deixar o rosto mais reto.';
+    case 'insufficient-light':
+      return 'A imagem está escura. Use uma foto com mais iluminação.';
+    case 'excessive-light':
+      return 'A imagem está clara demais. Evite luz direta no rosto.';
+    case 'blur-detected':
+      return 'A imagem está desfocada. Use uma foto mais nítida.';
+    case 'landmarks-incomplete':
+      return 'Não foi possível identificar todos os pontos principais do rosto.';
+  }
+}
+
+export function getFaceQualityError(faces: DetectedFace[]): FaceCaptureError {
+  const issue = faces.flatMap((face) => face.quality.issues)[0];
+  if (issue) {
+    return new FaceCaptureError(issue, qualityIssueMessage(issue));
+  }
+  return new FaceCaptureError(
+    'quality-rejected',
+    'Nenhum rosto atende aos critérios de qualidade.',
+  );
 }
 
 export async function releaseFaceDetectionSession(

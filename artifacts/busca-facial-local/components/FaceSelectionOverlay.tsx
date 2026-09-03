@@ -34,6 +34,8 @@ export function FaceSelectionOverlay({
             accessibilityRole="button"
             accessibilityLabel={`Rosto ${face.id + 1}${accepted ? '' : ', qualidade insuficiente'}`}
             onPress={() => onSelect(face.id)}
+            disabled={!accepted}
+            accessibilityState={{ disabled: !accepted, selected }}
             style={[
               styles.faceBox,
               {

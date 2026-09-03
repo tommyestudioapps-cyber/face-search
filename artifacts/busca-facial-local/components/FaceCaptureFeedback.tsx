@@ -3,9 +3,11 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import type { FaceCaptureError } from '@/services/faceCapture';
+import type { FaceCaptureStatus } from '@/services/faceCapture';
 
 interface FaceCaptureFeedbackProps {
   isProcessing: boolean;
+  status: FaceCaptureStatus;
   error: FaceCaptureError | null;
   faceCount: number;
   hasAlignedFace: boolean;
@@ -21,6 +23,22 @@ function getErrorMessage(error: FaceCaptureError): string {
       return 'Selecione um dos rostos detectados para continuar.';
     case 'quality-rejected':
       return error.message;
+    case 'face-too-small':
+      return 'O rosto está muito pequeno na imagem.';
+    case 'face-out-of-frame':
+      return 'O rosto precisa estar completamente dentro do enquadramento.';
+    case 'low-confidence':
+      return 'A detecção do rosto não teve confiança suficiente.';
+    case 'excessive-rotation':
+      return 'Gire a imagem para deixar o rosto mais reto.';
+    case 'insufficient-light':
+      return 'A imagem está escura. Use uma foto com mais iluminação.';
+    case 'excessive-light':
+      return 'A imagem está clara demais. Evite luz direta no rosto.';
+    case 'blur-detected':
+      return 'A imagem está desfocada. Use uma foto mais nítida.';
+    case 'landmarks-incomplete':
+      return 'Não foi possível identificar todos os pontos principais do rosto.';
     case 'model-unavailable':
       return 'O modelo facial não está disponível neste APK.';
     case 'native-module-unavailable':
@@ -36,13 +54,14 @@ function getErrorMessage(error: FaceCaptureError): string {
 
 export function FaceCaptureFeedback({
   isProcessing,
+  status,
   error,
   faceCount,
   hasAlignedFace,
 }: FaceCaptureFeedbackProps) {
   const colors = useColors();
 
-  if (isProcessing) {
+  if (isProcessing || status === 'preparing' || status === 'detecting' || status === 'validating' || status === 'aligning') {
     return (
       <View style={[styles.feedback, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <ActivityIndicator color={colors.primary} size="small" />
