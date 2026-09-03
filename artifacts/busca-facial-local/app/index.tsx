@@ -263,9 +263,11 @@ function Header({
 function Home({
   onSelect,
   onSettings,
+  indexedPhotoCount,
 }: {
   onSelect: () => void;
   onSettings: () => void;
+  indexedPhotoCount: number;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -323,7 +325,7 @@ function Home({
 
           <View style={styles.statsRow}>
             {[
-              ['1.248', 'fotos indexadas', 'image'],
+              [String(indexedPhotoCount), 'fotos indexadas', 'image'],
               ['0', 'dados na nuvem', 'cloud-off'],
             ].map(([value, label, icon]) => (
               <View key={label} style={[styles.statCard, { backgroundColor: colors.card }]}>
@@ -786,6 +788,7 @@ export default function HomeScreen() {
     status: faceSearchStatus,
     progress: faceSearchProgress,
     results,
+    storedIndexStats,
     error: faceSearchError,
     cancelIndexing,
     indexAndSearch,
@@ -953,7 +956,13 @@ export default function HomeScreen() {
         return <Results results={results} onNewSearch={goHome} />;
       case 'home':
       default:
-        return <Home onSelect={openSearch} onSettings={() => undefined} />;
+        return (
+          <Home
+            onSelect={openSearch}
+            onSettings={() => undefined}
+            indexedPhotoCount={storedIndexStats.indexedPhotos}
+          />
+        );
     }
   }, [
     screen,
@@ -970,6 +979,7 @@ export default function HomeScreen() {
     faceSearchProgress,
     faceSearchStatus,
     faceSearchError,
+    storedIndexStats,
     cancelIndexing,
     results,
   ]);
