@@ -22,6 +22,7 @@ aparelho Android real.
 | Reabrir e reutilizar SQLite | Não observado em execução nativa |
 | APK instalado | Não |
 | Dispositivo Android/ADB | Não disponível |
+| Logs nativos do SQLite | Não coletados; não houve execução em aparelho |
 | Resultado físico | Não reproduzido; requer APK e aparelho Android |
 
 ## Evidências da implementação
@@ -62,6 +63,7 @@ das fotos na galeria do aparelho.
 - `adb` não está instalado/disponível.
 - Java, `javac`, Gradle e Android SDK não estão disponíveis.
 - Nenhum arquivo `.apk` ou `.aab` foi encontrado no workspace.
+- `pnpm dlx eas-cli@latest whoami` rejeitou todas as variantes de token EAS disponíveis; não foi possível obter um APK remoto.
 - O workflow disponível é apenas o servidor Metro/preview; ele não equivale a
   um APK com os módulos nativos de SQLite, Media Library e reconhecimento facial.
 
