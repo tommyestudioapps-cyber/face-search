@@ -32,7 +32,11 @@ import {
   type LocalPhoto,
   type PhotoMatch,
 } from '@/services/localFaceSearch';
-import type { DetectedFace, FaceCaptureError } from '@/services/faceCapture';
+import type {
+  DetectedFace,
+  FaceCaptureError,
+  FaceCaptureStatus,
+} from '@/services/faceCapture';
 
 type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results';
 
@@ -390,6 +394,7 @@ function SelectPhoto({
   imageHeight,
   captureError,
   captureProcessing,
+  captureStatus,
   onPickLibrary,
   onTakePhoto,
   onSelectFace,
@@ -404,6 +409,7 @@ function SelectPhoto({
   imageHeight: number | null;
   captureError: FaceCaptureError | null;
   captureProcessing: boolean;
+  captureStatus: FaceCaptureStatus;
   onPickLibrary: () => void;
   onTakePhoto: () => void;
   onSelectFace: (faceId: number) => void;
@@ -482,6 +488,7 @@ function SelectPhoto({
 
         <FaceCaptureFeedback
           isProcessing={captureProcessing}
+          status={captureStatus}
           error={captureError}
           faceCount={faces.length}
           hasAlignedFace={Boolean(alignedImageUri)}
@@ -764,6 +771,7 @@ export default function HomeScreen() {
     selectedFaceId,
     setSelectedFaceId,
     alignedFace,
+    status: captureStatus,
     isProcessing: captureProcessing,
     error: captureError,
     analyze: analyzeFace,
@@ -901,6 +909,12 @@ export default function HomeScreen() {
     setScreen('home');
   };
 
+  const leaveSelection = () => {
+    void resetCapture();
+    setSelectedImage(null);
+    setScreen('home');
+  };
+
   const content = useMemo(() => {
     switch (screen) {
       case 'onboarding':
@@ -916,6 +930,7 @@ export default function HomeScreen() {
             imageHeight={imageHeight}
             captureError={captureError}
             captureProcessing={captureProcessing}
+            captureStatus={captureStatus}
             onPickLibrary={pickFromLibrary}
             onTakePhoto={takePhoto}
             onSelectFace={(faceId) => {
@@ -923,7 +938,7 @@ export default function HomeScreen() {
               void alignFace(faceId);
             }}
             onSearch={beginSearch}
-            onBack={() => setScreen('home')}
+            onBack={leaveSelection}
           />
         );
       case 'analyzing':
@@ -944,6 +959,7 @@ export default function HomeScreen() {
     imageHeight,
     captureError,
     captureProcessing,
+    captureStatus,
     progress,
     results,
   ]);

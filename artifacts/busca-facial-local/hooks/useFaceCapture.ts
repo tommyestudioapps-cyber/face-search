@@ -64,6 +64,7 @@ export function useFaceCapture() {
 
   const reset = useCallback(async () => {
     requestId.current += 1;
+    setIsProcessing(false);
     setFaces([]);
     setSelectedFaceId(null);
     await clearAlignedFace();
@@ -110,6 +111,7 @@ export function useFaceCapture() {
         return null;
       }
 
+      setStatus('validating');
       const selectableFaces = getSelectableFaces(nextSession.faces);
       if (selectableFaces.length === 0) {
         await releaseFaceDetectionSession(nextSession);
@@ -149,20 +151,29 @@ export function useFaceCapture() {
     if (!sessionRef.current || faceId === null) {
       return null;
     }
+    const currentRequest = requestId.current;
     setIsProcessing(true);
     setError(null);
     setStatus('aligning');
     try {
       const result = await alignSelectedFace(sessionRef.current, faceId);
+      if (requestId.current !== currentRequest) {
+        await releaseTemporaryUris([result.uri]);
+        return null;
+      }
       await setAlignedFaceResult(result);
       setStatus('completed');
       return result;
     } catch (caught) {
-      setError(toCaptureError(caught));
-      setStatus('error');
+      if (requestId.current === currentRequest) {
+        setError(toCaptureError(caught));
+        setStatus('error');
+      }
       return null;
     } finally {
-      setIsProcessing(false);
+      if (requestId.current === currentRequest) {
+        setIsProcessing(false);
+      }
     }
   }, [selectedFaceId, setAlignedFaceResult, toCaptureError]);
 

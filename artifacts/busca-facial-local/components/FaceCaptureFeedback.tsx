@@ -52,6 +52,21 @@ function getErrorMessage(error: FaceCaptureError): string {
   }
 }
 
+function getProcessingMessage(status: FaceCaptureStatus): string {
+  switch (status) {
+    case 'preparing':
+      return 'Preparando o modelo facial…';
+    case 'detecting':
+      return 'Detectando rostos na imagem…';
+    case 'validating':
+      return 'Validando a qualidade do rosto…';
+    case 'aligning':
+      return 'Alinhando o rosto selecionado…';
+    default:
+      return 'Processando a captura…';
+  }
+}
+
 export function FaceCaptureFeedback({
   isProcessing,
   status,
@@ -65,7 +80,9 @@ export function FaceCaptureFeedback({
     return (
       <View style={[styles.feedback, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <ActivityIndicator color={colors.primary} size="small" />
-        <Text style={[styles.text, { color: colors.mutedForeground }]}>Detectando e alinhando o rosto…</Text>
+        <Text style={[styles.text, { color: colors.mutedForeground }]}>
+          {getProcessingMessage(status)}
+        </Text>
       </View>
     );
   }
