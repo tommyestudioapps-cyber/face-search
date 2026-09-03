@@ -1,10 +1,23 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { File } from 'expo-file-system';
 import type { FaceCaptureError, NormalizedImage } from './types';
 import { FaceCaptureError as FaceCaptureFailure } from './types';
 import { faceCapture } from '@/constants/faceCapture';
+import {
+  getNormalizedImageDimensions,
+  getPhysicalOrientation,
+  readJpegMetadata,
+} from './preprocessingGeometry';
 
-function getPhysicalOrientation(width: number, height: number): NormalizedImage['orientation'] {
-  return height >= width ? 'portrait' : 'landscape-left';
+async function readSourceJpegMetadata(sourceUri: string) {
+  try {
+    const bytes = await new File(sourceUri).bytes();
+    return readJpegMetadata(bytes);
+  } catch {
+    // Android content:// providers may not expose bytes to JavaScript. The
+    // image manipulator still performs the native EXIF normalization.
+    return null;
+  }
 }
 
 export async function normalizeImage(sourceUri: string): Promise<NormalizedImage> {
@@ -13,10 +26,32 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
   }
 
   try {
-    const oriented = await manipulateAsync(sourceUri, [], {
+    const sourceMetadata = await readSourceJpegMetadata(sourceUri);
+    // Rendering a new bitmap is intentional: Android and iOS then hand the
+    // detector pixels whose visual orientation no longer depends on EXIF.
+    const oriented = await manipulateAsync(sourceUri, [{ rotate: 0 }], {
       compress: 0.92,
       format: SaveFormat.JPEG,
     });
+    if (oriented.width <= 0 || oriented.height <= 0) {
+      throw new FaceCaptureFailure('invalid-image', 'A imagem normalizada não possui dimensões válidas.');
+    }
+    if (sourceMetadata) {
+      const expectedDimensions = getNormalizedImageDimensions(
+        sourceMetadata.width,
+        sourceMetadata.height,
+        sourceMetadata.orientation,
+      );
+      if (
+        oriented.width !== expectedDimensions.width ||
+        oriented.height !== expectedDimensions.height
+      ) {
+        throw new FaceCaptureFailure(
+          'invalid-image',
+          'A orientação da imagem não pôde ser normalizada com segurança.',
+        );
+      }
+    }
     const temporaryUris = [oriented.uri];
 
     const largestDimension = Math.max(oriented.width, oriented.height);
