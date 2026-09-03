@@ -741,9 +741,9 @@ function OfflineModal({
           <View style={[styles.rewardIcon, { backgroundColor: '#3A222D' }]}>
             <Feather name="wifi-off" size={21} color="#FB7185" />
           </View>
-          <Text style={[styles.rewardTitle, { color: colors.foreground }]}>Você está offline</Text>
+          <Text style={[styles.rewardTitle, { color: colors.foreground }]}>Processamento 100% Local</Text>
           <Text style={[styles.rewardBody, { color: colors.mutedForeground }]}>
-            Conecte-se à internet para liberar a busca gratuita na sua galeria. Suas fotos continuam protegidas no dispositivo.
+            O app funciona sem conexão. Fotos, embeddings e dados faciais permanecem protegidos neste dispositivo.
           </Text>
           <Pressable
             onPress={onClose}
