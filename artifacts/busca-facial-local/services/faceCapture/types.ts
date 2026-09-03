@@ -1,3 +1,18 @@
+export type ImageOrientation =
+  | 'portrait'
+  | 'portrait-upside-down'
+  | 'landscape-left'
+  | 'landscape-right'
+  | 'unknown';
+
+export interface NormalizedImage {
+  uri: string;
+  width: number;
+  height: number;
+  orientation: ImageOrientation;
+  temporaryUris: string[];
+}
+
 export interface FaceLandmark {
   x: number;
   y: number;
@@ -15,9 +30,28 @@ export interface FaceBounds {
   height: number;
 }
 
+export interface FaceBoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  coordinateSpace: 'normalized' | 'pixels';
+}
+
+export type FaceQualityIssue =
+  | 'face-too-small'
+  | 'face-out-of-frame'
+  | 'low-confidence'
+  | 'excessive-rotation'
+  | 'insufficient-light'
+  | 'excessive-light'
+  | 'blur-detected'
+  | 'landmarks-incomplete';
+
 export interface FaceQuality {
   accepted: boolean;
   faceSizeAccepted: boolean;
+  faceInFrameAccepted: boolean;
   landmarksAccepted: boolean;
   rotationAccepted: boolean;
   lightingAccepted: boolean;
@@ -26,21 +60,15 @@ export interface FaceQuality {
   brightness: number | null;
   sharpness: number | null;
   rollDegrees: number;
-  reason:
-    | 'accepted'
-    | 'face-too-small'
-    | 'landmarks-incomplete'
-    | 'excessive-rotation'
-    | 'insufficient-light'
-    | 'excessive-light'
-    | 'blur-detected'
-    | 'low-confidence';
+  reason: 'accepted' | FaceQualityIssue;
+  issues: FaceQualityIssue[];
 }
 
 export interface DetectedFace {
   id: number;
   landmarks: FaceLandmark[];
   bounds: FaceBounds;
+  boundingBox: FaceBoundingBox;
   rollDegrees: number;
   confidence: number | null;
   confidenceSource: 'mediapipe-threshold';
@@ -61,6 +89,8 @@ export interface AlignedFace {
   width: number;
   height: number;
   faceId: number;
+  standardized: boolean;
+  sourceUri?: string;
   rotationDegrees: number;
   crop: {
     originX: number;
@@ -70,6 +100,28 @@ export interface AlignedFace {
   };
 }
 
+export type FaceCaptureStatus =
+  | 'idle'
+  | 'preparing'
+  | 'detecting'
+  | 'validating'
+  | 'awaiting-face-selection'
+  | 'aligning'
+  | 'completed'
+  | 'cancelled'
+  | 'error';
+
+export interface FaceCaptureState {
+  status: FaceCaptureStatus;
+  progress: number;
+  sourceUri: string | null;
+  session: FaceDetectionSession | null;
+  detectedFaces: DetectedFace[];
+  selectedFaceId: number | null;
+  alignedFace: AlignedFace | null;
+  error: FaceCaptureError | null;
+}
+
 export type FaceCaptureErrorCode =
   | 'web-unsupported'
   | 'invalid-image'
@@ -77,6 +129,12 @@ export type FaceCaptureErrorCode =
   | 'native-module-unavailable'
   | 'no-face'
   | 'multiple-faces'
+  | 'face-out-of-frame'
+  | 'low-confidence'
+  | 'excessive-rotation'
+  | 'insufficient-light'
+  | 'blur-detected'
+  | 'landmarks-incomplete'
   | 'quality-rejected'
   | 'processing-failed'
   | 'cancelled';

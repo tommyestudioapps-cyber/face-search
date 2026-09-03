@@ -146,6 +146,8 @@ export async function alignFace(
       width: aligned.width,
       height: aligned.height,
       faceId: face.id,
+      standardized: true,
+      sourceUri,
       rotationDegrees,
       crop,
     };
