@@ -1,0 +1,1152 @@
+# Estratégia de ação — Busca Facial Local Android
+
+
+
+Esta é uma estratégia de planejamento, não uma alteração direta no código. A execução deverá ser fragmentada em etapas pequenas, com validação após cada uma e possibilidade de interrupção caso algum requisito nativo falhe.
+
+
+
+## Estado inicial conhecido
+
+
+
+Atualmente temos:
+
+
+
+- **29 testes faciais aprovados**
+
+  - 22 de captura/alinhamento;
+
+  - 2 de overlay;
+
+  - 5 de busca.
+
+- Typecheck dos pacotes aprovado.
+
+- Preview web funcionando após a inicialização.
+
+- API respondendo em `/api/healthz`.
+
+- Modelos presentes:
+
+  - `assets/models/face-landmarker.task`;
+
+  - `assets/models/face-recognition.tflite`.
+
+- Configuração Android:
+
+  - pacote `com.buscafacial.local`;
+
+  - perfis EAS `preview` e `development`;
+
+  - APK configurado como saída;
+
+  - `developmentClient: true` no perfil de desenvolvimento.
+
+- Integração Expo e novos segredos configurados, mas a validade do fluxo EAS ainda precisa ser comprovada.
+
+- Não há, neste workspace:
+
+  - APK;
+
+  - projeto `android/`;
+
+  - `adb`;
+
+  - Android SDK;
+
+  - Gradle;
+
+  - dispositivo ou emulador conectado.
+
+- A validação de MediaPipe, SQLite e TFLite em Android real ainda não foi concluída.
+
+
+
+---
+
+
+
+# Índice 0 — Preservar o estado e estabelecer uma linha de base
+
+
+
+## Objetivo
+
+
+
+Evitar que mudanças futuras misturem problemas de configuração, código facial ou ambiente Android.
+
+
+
+## Procedimento
+
+
+
+Antes de qualquer alteração:
+
+
+
+1. Confirmar que o workspace está limpo.
+
+2. Registrar o estado atual dos arquivos:
+
+   - `app.json`;
+
+   - `eas.json`;
+
+   - `package.json`;
+
+   - `artifacts/busca-facial-local/package.json`;
+
+   - `pnpm-lock.yaml`.
+
+3. Executar novamente:
+
+   - typecheck de todos os pacotes;
+
+   - testes de captura;
+
+   - testes de overlay;
+
+   - testes de busca;
+
+   - `expo install --check`;
+
+   - validação de `app.json` e `eas.json`.
+
+4. Confirmar que os modelos continuam presentes e com checksum estável.
+
+5. Criar um checkpoint antes da primeira mudança funcional.
+
+
+
+## Arquivos envolvidos
+
+
+
+Nenhum arquivo de aplicação deve ser alterado nesta etapa.
+
+
+
+Documentos de referência:
+
+
+
+- `SEGURANÇA_E_AUDITORIA.md`;
+
+- `artifacts/busca-facial-local/TESTE_MANUAL_TAREFA_17.md`;
+
+- `.agents/memory/android-build-environment.md`.
+
+
+
+## Critério de parada
+
+
+
+Se a linha de base não passar, não iniciar a implementação de contador, configurações ou pose. Primeiro deve ser corrigido o problema encontrado.
+
+
+
+---
+
+
+
+# Índice 1 — Desbloquear e validar o APK Android nativo
+
+
+
+Esta é a etapa mais importante porque sem ela não é possível confirmar o funcionamento real dos módulos nativos.
+
+
+
+## Objetivo
+
+
+
+Obter um APK instalável e verificar se o projeto realmente compila com:
+
+
+
+- MediaPipe;
+
+- Vision Camera;
+
+- SQLite;
+
+- TFLite/Nitro;
+
+- modelos nativos;
+
+- permissões Android.
+
+
+
+## Procedimento EAS
+
+
+
+1. Usar a autenticação EAS na máquina local, sem copiar tokens para o código ou para o chat.
+
+2. Confirmar que a conta autenticada tem acesso ao projeto EAS cujo `projectId` está em `app.json`.
+
+3. Disparar o perfil `preview` pelo atalho já criado no projeto.
+
+4. Aguardar o artefato APK.
+
+5. Registrar:
+
+   - data e hora do build;
+
+   - perfil usado;
+
+   - resultado do build;
+
+   - URL ou identificador do artefato, sem registrar token;
+
+   - versão do APK.
+
+
+
+## Inspeção do APK antes da instalação
+
+
+
+No APK obtido, verificar:
+
+
+
+1. Se é realmente `.apk`, não `.aab`.
+
+2. Se o pacote é `com.buscafacial.local`.
+
+3. Se os modelos estão presentes em:
+
+   - `android/app/src/main/assets/face-landmarker.task`;
+
+   - `android/app/src/main/assets/face-recognition.tflite`.
+
+4. Se as bibliotecas nativas esperadas foram incluídas.
+
+5. Se as permissões finais do manifesto correspondem ao planejado:
+
+   - câmera;
+
+   - leitura de imagens;
+
+   - suporte às versões Android relevantes;
+
+   - ausência de permissão de escrita desnecessária.
+
+6. Se o APK contém as arquiteturas compatíveis com o aparelho de teste.
+
+
+
+## Arquivos de configuração relacionados
+
+
+
+- `artifacts/busca-facial-local/eas.json`;
+
+- `artifacts/busca-facial-local/app.json`;
+
+- `artifacts/busca-facial-local/plugins/withFaceLandmarkerModel.js`;
+
+- `artifacts/busca-facial-local/plugins/withFaceRecognitionModel.js`;
+
+- `artifacts/busca-facial-local/metro.config.js`;
+
+- `artifacts/busca-facial-local/package.json`.
+
+
+
+## Critérios de parada
+
+
+
+Interromper imediatamente se ocorrer qualquer um destes casos:
+
+
+
+- build gera `.aab` em vez de `.apk`;
+
+- pacote Android incorreto;
+
+- modelo ausente;
+
+- módulo nativo não autolinkado;
+
+- erro de compilação do Nitro/TFLite;
+
+- erro de permissão no manifesto;
+
+- APK instala, mas fecha ao abrir;
+
+- MediaPipe ou TFLite não carregam.
+
+
+
+Não avançar para a varredura real se o APK não passar nessa inspeção básica.
+
+
+
+---
+
+
+
+# Índice 2 — Instalar e executar o roteiro Android mínimo
+
+
+
+## Objetivo
+
+
+
+Confirmar o funcionamento real, não apenas a configuração estática.
+
+
+
+## Procedimento
+
+
+
+Em um aparelho Android real:
+
+
+
+1. Registrar:
+
+   - fabricante;
+
+   - modelo;
+
+   - versão do Android;
+
+   - arquitetura, se disponível;
+
+   - espaço livre;
+
+   - quantidade aproximada de fotos na galeria.
+
+2. Instalar o APK.
+
+3. Abrir o app sem rede móvel e sem Wi-Fi.
+
+4. Verificar se o onboarding aparece.
+
+5. Conceder permissão de fotos.
+
+6. Negar e conceder novamente a permissão da câmera.
+
+7. Testar:
+
+   - galeria vazia;
+
+   - galeria com uma foto;
+
+   - galeria com várias fotos;
+
+   - uma foto com múltiplos rostos;
+
+   - uma foto com orientação EXIF 6;
+
+   - uma foto com orientação EXIF 8.
+
+8. Confirmar que nenhuma foto é enviada para a API.
+
+9. Confirmar que o app não depende de internet para captura, indexação ou busca.
+
+10. Registrar todos os estados observados em:
+
+    - `artifacts/busca-facial-local/TESTE_MANUAL_TAREFA_17.md`.
+
+
+
+## Arquivos que representam o fluxo
+
+
+
+- `artifacts/busca-facial-local/app/index.tsx`;
+
+- `artifacts/busca-facial-local/hooks/useFaceCapture.ts`;
+
+- `artifacts/busca-facial-local/services/faceCapture/nativeAdapter.ts`;
+
+- `artifacts/busca-facial-local/services/faceCapture/captureFlow.ts`;
+
+- `artifacts/busca-facial-local/services/faceSearch/galleryIndexer.ts`;
+
+- `artifacts/busca-facial-local/services/faceSearch/model.ts`;
+
+- `artifacts/busca-facial-local/services/faceSearch/repository.ts`.
+
+
+
+## Critério de sucesso
+
+
+
+A instalação só deve ser considerada aprovada quando:
+
+
+
+- câmera e galeria funcionarem;
+
+- MediaPipe carregar o modelo;
+
+- SQLite inicializar;
+
+- MobileFaceNet carregar;
+
+- uma busca completar;
+
+- o app continuar operando sem internet.
+
+
+
+---
+
+
+
+# Índice 3 — Substituir o contador fixo por dados reais
+
+
+
+Esta é a principal correção funcional de produto depois do APK.
+
+
+
+## Problema atual
+
+
+
+A Home mostra `1.248` como valor fixo. Isso não representa a galeria do usuário.
+
+
+
+Além disso, a indexação já possui vários contadores com significados diferentes:
+
+
+
+- `totalAssets`: total de fotos encontradas pela Media Library;
+
+- `processedAssets`: fotos processadas até o momento;
+
+- `indexedPhotos`: fotos novas ou alteradas indexadas nessa execução;
+
+- `indexedFaces`: rostos processados nessa execução;
+
+- `skippedAssets`: fotos ignoradas;
+
+- `removedPhotos`: registros órfãos removidos.
+
+
+
+Não devemos confundir “fotos encontradas” com “fotos indexadas”.
+
+
+
+## Estratégia de dados
+
+
+
+Definir claramente os indicadores:
+
+
+
+### Durante a varredura
+
+
+
+Exibir:
+
+
+
+- `processedAssets / totalAssets`;
+
+- quantidade de rostos encontrados até o momento;
+
+- quantidade de fotos ignoradas;
+
+- estado de cancelamento ou erro.
+
+
+
+### Após a varredura
+
+
+
+Consultar o SQLite e exibir totais persistentes:
+
+
+
+- fotos encontradas na última varredura;
+
+- fotos armazenadas no índice;
+
+- rostos indexados;
+
+- última data de varredura;
+
+- quantidade de itens ignorados.
+
+
+
+O valor `indexedPhotos` retornado apenas pela execução atual não deve ser usado como total permanente, pois uma nova varredura sem alterações pode retornar zero fotos novas mesmo com o índice cheio.
+
+
+
+## Arquivos afetados
+
+
+
+- `artifacts/busca-facial-local/app/index.tsx`
+
+  - remover o valor fixo;
+
+  - exibir os dados do estado real.
+
+- `artifacts/busca-facial-local/hooks/useFaceSearch.ts`
+
+  - manter estado de progresso e estatísticas;
+
+  - atualizar estatísticas após conclusão, cancelamento ou erro.
+
+- `artifacts/busca-facial-local/services/faceSearch/galleryIndexer.ts`
+
+  - preservar a diferença entre encontrados, processados, indexados e ignorados.
+
+- `artifacts/busca-facial-local/services/faceSearch/repository.ts`
+
+  - adicionar consultas agregadas persistentes, se ainda não existirem.
+
+- `artifacts/busca-facial-local/services/faceSearch/types.ts`
+
+  - criar ou consolidar o tipo de estatísticas da galeria.
+
+
+
+## Possível arquivo novo
+
+
+
+Se a lógica ficar grande, criar:
+
+
+
+- `artifacts/busca-facial-local/services/faceSearch/indexStats.ts`
+
+
+
+Esse módulo deve concentrar:
+
+
+
+- leitura das estatísticas;
+
+- tipos de estatísticas;
+
+- conversão dos dados persistidos para o formato exibido pela Home.
+
+
+
+## Testes a criar
+
+
+
+- galeria vazia retorna zero;
+
+- primeira varredura conta fotos encontradas;
+
+- segunda varredura sem alterações não zera o total;
+
+- foto alterada é reprocessada;
+
+- cancelamento não apresenta a varredura como completa;
+
+- órfãos são removidos somente após varredura completa;
+
+- contagem de faces é separada da contagem de fotos.
+
+
+
+---
+
+
+
+# Índice 4 — Implementar o painel de configurações do índice
+
+
+
+## Objetivo
+
+
+
+Dar ao usuário controle sobre os dados locais, especialmente porque o produto promete processamento privado e apagável.
+
+
+
+## Funcionalidades
+
+
+
+O painel deve permitir:
+
+
+
+1. ver total de fotos encontradas;
+
+2. ver total de fotos indexadas;
+
+3. ver total de rostos indexados;
+
+4. ver a última varredura;
+
+5. iniciar nova varredura;
+
+6. apagar o índice local;
+
+7. confirmar antes de qualquer exclusão;
+
+8. informar que apagar o índice não apaga as fotos da galeria.
+
+
+
+## Arquivos afetados
+
+
+
+- `artifacts/busca-facial-local/app/index.tsx`
+
+  - substituir o callback vazio `onSettings={() => undefined}`.
+
+- `artifacts/busca-facial-local/app/_layout.tsx`
+
+  - registrar uma rota de configurações, se for usada navegação separada.
+
+- `artifacts/busca-facial-local/hooks/useFaceSearch.ts`
+
+  - expor ações de limpar, reindexar e recarregar estatísticas.
+
+- `artifacts/busca-facial-local/services/faceSearch/repository.ts`
+
+  - reutilizar ou revisar o método de limpeza do índice.
+
+- `artifacts/busca-facial-local/services/faceSearch/galleryIndexer.ts`
+
+  - garantir que uma reindexação posterior comece em estado consistente.
+
+
+
+## Possível arquivo novo
+
+
+
+- `artifacts/busca-facial-local/app/settings.tsx`;
+
+- ou `artifacts/busca-facial-local/components/IndexSettings.tsx`.
+
+
+
+A escolha depende de o painel ser uma tela completa ou um modal.
+
+
+
+## Cuidados
+
+
+
+- não apagar dados sem confirmação;
+
+- não apagar a galeria do aparelho;
+
+- não interromper uma transação SQLite no meio;
+
+- não perder o índice completo se o usuário apenas cancelar uma varredura;
+
+- bloquear “apagar índice” enquanto uma operação crítica estiver em andamento;
+
+- após apagar, atualizar a Home para mostrar zero.
+
+
+
+---
+
+
+
+# Índice 5 — Confirmar capturas sem nariz e sem boca no Android
+
+
+
+## Objetivo
+
+
+
+Separar a confirmação automatizada da confirmação real do MediaPipe.
+
+
+
+## Roteiro
+
+
+
+No APK aprovado:
+
+
+
+1. Capturar uma imagem em que o nariz não tenha landmarks.
+
+2. Confirmar que o rosto não recebe `landmarks-incomplete`.
+
+3. Confirmar chegada a `aligning` ou `completed`.
+
+4. Repetir com ausência dos landmarks da boca.
+
+5. Registrar:
+
+   - aparelho;
+
+   - Android;
+
+   - tipo de captura;
+
+   - estados exibidos;
+
+   - mensagens;
+
+   - resultado do alinhamento.
+
+6. Testar também:
+
+   - uma face válida;
+
+   - múltiplas faces;
+
+   - face rejeitada por olhos ausentes;
+
+   - imagem desfocada;
+
+   - imagem escura;
+
+   - rosto parcialmente fora do quadro.
+
+
+
+## Arquivos monitorados
+
+
+
+- `services/faceCapture/nativeAdapter.ts`;
+
+- `services/faceCapture/nativeAdapterCore.ts`;
+
+- `services/faceCapture/quality.ts`;
+
+- `services/faceCapture/landmarkGeometry.ts`;
+
+- `services/faceCapture/captureFlow.ts`;
+
+- `app/index.tsx`.
+
+
+
+## Critério de segurança
+
+
+
+Não reduzir novamente os landmarks obrigatórios apenas para fazer o caso parcial passar. O nariz e a boca devem continuar opcionais, mas os pontos realmente necessários para o alinhamento precisam permanecer obrigatórios.
+
+
+
+---
+
+
+
+# Índice 6 — Aplicar yaw e pitch com cautela
+
+
+
+## Situação atual
+
+
+
+Os limites existem em:
+
+
+
+- `constants/faceCapture.ts`.
+
+
+
+Valores atuais:
+
+
+
+- yaw máximo: 35 graus;
+
+- pitch máximo: 30 graus;
+
+- roll máximo: 35 graus.
+
+
+
+A validação atual usa roll, mas não aplica yaw e pitch.
+
+
+
+## Estratégia
+
+
+
+1. Definir matematicamente como yaw e pitch serão calculados.
+
+2. Preferir landmarks estáveis:
+
+   - olhos;
+
+   - centro facial;
+
+   - profundidade `z`, quando confiável;
+
+   - caixa facial como fallback.
+
+3. Não tornar nariz ou boca obrigatórios novamente.
+
+4. Criar funções puras de geometria.
+
+5. Testar com casos sintéticos.
+
+6. Testar no APK com fotos reais.
+
+7. Ajustar os limites somente após observar falsos positivos e falsos negativos.
+
+
+
+## Arquivos afetados
+
+
+
+- `constants/faceCapture.ts`;
+
+- `services/faceCapture/landmarkGeometry.ts`;
+
+- `services/faceCapture/quality.ts`;
+
+- `services/faceCapture/types.ts`;
+
+- `components/FaceCaptureFeedback.tsx`, se os motivos forem exibidos ao usuário.
+
+
+
+## Testes a criar ou ampliar
+
+
+
+- `services/faceCapture/__tests__/landmarkGeometry.test.mjs`;
+
+- `services/faceCapture/__tests__/qualityAlignment.test.mjs`;
+
+- `services/faceCapture/__tests__/captureFlow.test.mjs`.
+
+
+
+## Critério de parada
+
+
+
+Se a implementação de yaw/pitch começar a rejeitar rostos sem nariz ou boca, interromper e revisar a geometria antes de continuar.
+
+
+
+---
+
+
+
+# Índice 7 — Decidir o destino do modal offline
+
+
+
+## Situação atual
+
+
+
+O estado `showOffline` existe, mas não é ativado.
+
+
+
+O app foi projetado para ser offline por padrão, portanto o modal não deve bloquear nenhuma função.
+
+
+
+## Estratégia recomendada para Android
+
+
+
+Preferir uma mensagem permanente e clara:
+
+
+
+- “Processamento 100% local”;
+
+- “Nenhuma foto sai do aparelho”;
+
+- “A busca funciona sem internet”.
+
+
+
+Essa informação pode ficar:
+
+
+
+- no onboarding;
+
+- nas configurações;
+
+- na tela de progresso da indexação.
+
+
+
+O modal só deve permanecer se tiver uma ação concreta. Caso contrário, deve ser removido para evitar código morto.
+
+
+
+## Arquivo principal
+
+
+
+- `artifacts/busca-facial-local/app/index.tsx`.
+
+
+
+## Não fazer
+
+
+
+- não adicionar verificação de internet para permitir captura;
+
+- não bloquear indexação por falta de rede;
+
+- não introduzir chamadas HTTP apenas para detectar conectividade;
+
+- não associar o funcionamento facial à API.
+
+
+
+---
+
+
+
+# Índice 8 — Manter a API fora do caminho crítico Android
+
+
+
+## Situação atual
+
+
+
+O app facial processa localmente. A API atualmente possui essencialmente uma rota de saúde.
+
+
+
+A API usa:
+
+
+
+- CORS aberto;
+
+- `express.json()` sem limite;
+
+- `express.urlencoded()` sem limite.
+
+
+
+## Estratégia
+
+
+
+Para o Android atual:
+
+
+
+- não enviar fotos para a API;
+
+- não enviar landmarks;
+
+- não enviar embeddings;
+
+- não fazer a indexação depender da API;
+
+- manter o servidor como componente separado.
+
+
+
+Antes de adicionar qualquer endpoint que receba dados:
+
+
+
+1. restringir CORS;
+
+2. definir limite de payload;
+
+3. adicionar autenticação quando necessário;
+
+4. adicionar rate limiting;
+
+5. validar entradas com schema;
+
+6. criar testes de requisições grandes e origens não autorizadas.
+
+
+
+## Arquivo afetado posteriormente
+
+
+
+- `artifacts/api-server/src/app.ts`.
+
+
+
+## Prioridade
+
+
+
+Não deve atrasar o APK offline, desde que a API continue fora do fluxo de fotos.
+
+
+
+---
+
+
+
+# Índice 9 — Tratar riscos de dependências e release
+
+
+
+## `image-size`
+
+
+
+Manter o alerta documentado até haver atualização compatível do Metro/Expo. Não forçar upgrade major sem validar o SDK 54.
+
+
+
+## `esbuild`
+
+
+
+Atualizar apenas em conjunto com `esbuild-plugin-pino`, com build do API após a atualização.
+
+
+
+## Arquivos relacionados
+
+
+
+- `pnpm-workspace.yaml`;
+
+- `pnpm-lock.yaml`;
+
+- `artifacts/api-server/package.json`;
+
+- `SEGURANÇA_E_AUDITORIA.md`;
+
+- `.agents/memory/security-audit.md`.
+
+
+
+## Perfil de produção
+
+
+
+O perfil `production` do EAS só deve ser criado depois de definir:
+
+
+
+- assinatura Android;
+
+- distribuição pretendida;
+
+- política de versão;
+
+- canais de release;
+
+- checklist de publicação.
+
+
+
+Como o foco atual é Android de teste, não deve ser misturado com a primeira validação do APK `preview`.
+
+
+
+---
+
+
+
+# Ordem final recomendada
+
+
+
+1. Preservar a linha de base.
+
+2. Confirmar o build APK no EAS.
+
+3. Inspecionar o APK e instalar no Android.
+
+4. Executar o roteiro mínimo de permissões, câmera, galeria, SQLite, MediaPipe e TFLite.
+
+5. Substituir o contador fixo por estatísticas reais.
+
+6. Criar configurações para visualizar, reindexar e apagar o índice.
+
+7. Registrar capturas reais sem nariz e sem boca.
+
+8. Implementar yaw/pitch com testes e validação real.
+
+9. Remover ou reaproveitar o modal offline.
+
+10. Fazer hardening da API.
+
+11. Revisar dependências transitivas quando houver versões compatíveis.
+
+12. Só depois preparar o perfil de produção.
+
+
+
+## Regra principal
+
+
+
+O app só deve ser considerado **funcionando no Android** depois de:
+
+
+
+- APK instalado;
+
+- modelos carregados;
+
+- câmera funcionando;
+
+- galeria funcionando;
+
+- SQLite funcionando;
+
+- embeddings gerados;
+
+- busca concluída;
+
+- operação offline confirmada;
+
+- contador baseado em dados reais;
+
+- capturas parciais observadas no aparelho real.
+
+
+
+Até lá, o estado correto é: **código e testes automatizados prontos, preview web funcionando, mas prontidão nativa ainda não comprovada**. 
+
+
+
+reveja os passos para comparar 
+
