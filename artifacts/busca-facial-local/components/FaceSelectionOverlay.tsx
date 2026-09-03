@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { DetectedFace } from '@/services/faceCapture';
+import { getFaceOverlayLayout } from './faceOverlayLayout';
 
 interface FaceSelectionOverlayProps {
   faces: DetectedFace[];
@@ -17,17 +18,12 @@ export function FaceSelectionOverlay({
   imageHeight,
   onSelect,
 }: FaceSelectionOverlayProps) {
-  const sourceAspectRatio = imageWidth / imageHeight;
-  const displayedWidth = sourceAspectRatio < 1 ? sourceAspectRatio * 100 : 100;
-  const displayedHeight = sourceAspectRatio > 1 ? (100 / sourceAspectRatio) : 100;
-  const horizontalOffset = (100 - displayedWidth) / 2;
-  const verticalOffset = (100 - displayedHeight) / 2;
-
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {faces.map((face) => {
         const selected = face.id === selectedFaceId;
         const accepted = face.quality.accepted;
+        const layout = getFaceOverlayLayout(face.bounds, imageWidth, imageHeight);
         return (
           <Pressable
             key={face.id}
@@ -39,10 +35,10 @@ export function FaceSelectionOverlay({
             style={[
               styles.faceBox,
               {
-                left: `${horizontalOffset + face.bounds.minX * displayedWidth}%`,
-                top: `${verticalOffset + face.bounds.minY * displayedHeight}%`,
-                width: `${face.bounds.width * displayedWidth}%`,
-                height: `${face.bounds.height * displayedHeight}%`,
+                left: `${layout.left}%`,
+                top: `${layout.top}%`,
+                width: `${layout.width}%`,
+                height: `${layout.height}%`,
               },
               accepted ? styles.accepted : styles.rejected,
               selected ? styles.selected : null,

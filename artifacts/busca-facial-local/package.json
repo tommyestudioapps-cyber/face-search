@@ -8,6 +8,7 @@
     "build": "node scripts/build.js",
     "serve": "node server/serve.js",
     "test:face-capture": "node --experimental-strip-types --test services/faceCapture/__tests__/*.test.mjs",
+    "test:face-overlay": "node --experimental-strip-types --test components/__tests__/*.test.mjs",
     "test:face-search": "node --experimental-strip-types --test services/faceSearch/__tests__/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
