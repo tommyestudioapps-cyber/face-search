@@ -5,7 +5,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Image,
   Modal,
@@ -23,7 +22,13 @@ import { useFaceCapture } from '@/hooks/useFaceCapture';
 import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { FaceCaptureFeedback } from '@/components/FaceCaptureFeedback';
 import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
-import type { PhotoMatch } from '@/services/localFaceSearch';
+import { FaceSearchProgress } from '@/components/FaceSearchProgress';
+import { useFaceSearch, type FaceSearchStatus } from '@/hooks/useFaceSearch';
+import type {
+  FaceIndexProgress,
+  FaceRecognitionError,
+  FaceSearchResult,
+} from '@/services/faceSearch';
 import type {
   DetectedFace,
   FaceCaptureError,
@@ -533,7 +538,19 @@ function SelectPhoto({
   );
 }
 
-function Analyzing({ progress }: { progress: number }) {
+function Analyzing({
+  progress,
+  status,
+  error,
+  onCancel,
+  onDismiss,
+}: {
+  progress: FaceIndexProgress;
+  status: FaceSearchStatus;
+  error: FaceRecognitionError | null;
+  onCancel: () => void;
+  onDismiss: () => void;
+}) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   return (
@@ -547,16 +564,15 @@ function Analyzing({ progress }: { progress: number }) {
       <Text style={[styles.analysisBody, { color: colors.mutedForeground }]}>
         Comparando vetores localmente.{'\n'}Suas fotos continuam no seu dispositivo.
       </Text>
-      <View style={styles.progressWrap}>
-        <View style={[styles.progressTrack, { backgroundColor: colors.card }]}>
-          <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${progress}%` }]} />
-        </View>
-        <View style={styles.progressMeta}>
-          <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>Índice local</Text>
-          <Text style={[styles.progressValue, { color: colors.foreground }]}>{progress}%</Text>
-        </View>
+      <View style={styles.analysisProgressCard}>
+        <FaceSearchProgress
+          progress={progress}
+          status={status}
+          error={error}
+          onCancel={onCancel}
+          onDismiss={onDismiss}
+        />
       </View>
-      <ActivityIndicator color={colors.primary} style={styles.analysisSpinner} />
     </View>
   );
 }
@@ -565,7 +581,7 @@ function Results({
   results,
   onNewSearch,
 }: {
-  results: PhotoMatch[];
+  results: FaceSearchResult[];
   onNewSearch: () => void;
 }) {
   const colors = useColors();
@@ -579,7 +595,7 @@ function Results({
       <FlatList
         key={`results-${numColumns}`}
         data={results}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.assetId}
         numColumns={numColumns}
         scrollEnabled={results.length > 0}
         showsVerticalScrollIndicator={false}
@@ -604,11 +620,11 @@ function Results({
               <Text style={[styles.summaryBody, { color: colors.mutedForeground }]}>
                 {hasResults
                   ? 'Todas as correspondências foram encontradas no seu dispositivo.'
-                  : 'O rosto foi validado e alinhado. A busca no índice será conectada em uma etapa posterior.'}
+                  : 'Nenhuma foto do índice atingiu o limiar mínimo de similaridade.'}
               </Text>
             </View>
             {hasResults ? (
-              <Text style={[styles.summaryTime, { color: colors.mutedForeground }]}>1.4s</Text>
+             <Text style={[styles.summaryTime, { color: colors.mutedForeground }]}>Local</Text>
             ) : null}
           </View>
         }
@@ -620,10 +636,10 @@ function Results({
                 {item.filename ?? 'Foto da galeria'}
               </Text>
               <View style={styles.confidenceRow}>
-                <View style={[styles.confidenceBar, { backgroundColor: colors.muted }]}>
-                  <View style={[styles.confidenceFill, { backgroundColor: '#34D399', width: `${item.confidence}%` }]} />
+                 <View style={[styles.confidenceBar, { backgroundColor: colors.muted }]}>
+                   <View style={[styles.confidenceFill, { backgroundColor: colors.primary, width: `${Math.round(item.similarity * 100)}%` }]} />
                 </View>
-                <Text style={styles.confidenceText}>{item.confidence}%</Text>
+                 <Text style={styles.confidenceText}>{Math.round(item.similarity * 100)}%</Text>
               </View>
             </View>
           </View>
@@ -747,11 +763,9 @@ function OfflineModal({
 export default function HomeScreen() {
   const [screen, setScreen] = useState<AppScreen>('onboarding');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [results, setResults] = useState<PhotoMatch[]>([]);
   const [showReward, setShowReward] = useState(false);
   const [showOffline, setShowOffline] = useState(false);
   const [rewardCountdown, setRewardCountdown] = useState(3);
-  const [progress, setProgress] = useState(0);
   const colors = useColors();
   const {
     faces,
@@ -768,6 +782,14 @@ export default function HomeScreen() {
     imageHeight,
     normalizedImageUri,
   } = useFaceCapture();
+  const {
+    status: faceSearchStatus,
+    progress: faceSearchProgress,
+    results,
+    error: faceSearchError,
+    cancelIndexing,
+    indexAndSearch,
+  } = useFaceSearch();
 
   useEffect(() => {
     void AsyncStorage.getItem('visage.onboarding.complete').then((value) => {
@@ -793,23 +815,6 @@ export default function HomeScreen() {
     }, 900);
     return () => clearInterval(timer);
   }, [showReward]);
-
-  useEffect(() => {
-    if (screen !== 'analyzing') {
-      return undefined;
-    }
-    const timer = setInterval(() => {
-      setProgress((value) => {
-        const next = Math.min(value + 20, 100);
-        if (next === 100) {
-          clearInterval(timer);
-          setTimeout(() => setScreen('results'), 260);
-        }
-        return next;
-      });
-    }, 300);
-    return () => clearInterval(timer);
-  }, [screen]);
 
   const handleOnboarding = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -871,6 +876,7 @@ export default function HomeScreen() {
 
   const startAnalysis = async () => {
     if (
+      !selectedImage ||
       !alignedFace ||
       captureStatus !== 'completed' ||
       !alignedFace.standardized
@@ -878,9 +884,15 @@ export default function HomeScreen() {
       return;
     }
     setShowReward(false);
-    setProgress(0);
-    setResults([]);
-    setScreen('results');
+    setScreen('analyzing');
+    try {
+      const searchSummary = await indexAndSearch(alignedFace);
+      if (searchSummary) {
+        setScreen('results');
+      }
+    } catch {
+      // The progress component presents the friendly error and recovery action.
+    }
   };
 
   const goHome = () => {
@@ -893,6 +905,11 @@ export default function HomeScreen() {
     void resetCapture();
     setSelectedImage(null);
     setScreen('home');
+  };
+
+  const dismissSearchProgress = () => {
+    cancelIndexing();
+    setScreen('select');
   };
 
   const content = useMemo(() => {
@@ -923,7 +940,15 @@ export default function HomeScreen() {
           />
         );
       case 'analyzing':
-        return <Analyzing progress={progress} />;
+        return (
+          <Analyzing
+            progress={faceSearchProgress}
+            status={faceSearchStatus}
+            error={faceSearchError}
+            onCancel={cancelIndexing}
+            onDismiss={dismissSearchProgress}
+          />
+        );
       case 'results':
         return <Results results={results} onNewSearch={goHome} />;
       case 'home':
@@ -942,7 +967,10 @@ export default function HomeScreen() {
     captureError,
     captureProcessing,
     captureStatus,
-    progress,
+    faceSearchProgress,
+    faceSearchStatus,
+    faceSearchError,
+    cancelIndexing,
     results,
   ]);
 
@@ -1066,13 +1094,7 @@ const styles = StyleSheet.create({
   analysisRingInner: { width: 102, height: 102, borderWidth: 1.5, borderRadius: 51, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   analysisTitle: { fontFamily: 'Inter_700Bold', fontSize: 23, letterSpacing: -0.5 },
   analysisBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 11 },
-  progressWrap: { width: '100%', marginTop: 37 },
-  progressTrack: { height: 7, borderRadius: 4, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 4 },
-  progressMeta: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
-  progressLabel: { fontFamily: 'Inter_500Medium', fontSize: 11 },
-  progressValue: { fontFamily: 'Inter_700Bold', fontSize: 12 },
-  analysisSpinner: { marginTop: 30 },
+  analysisProgressCard: { width: '100%', marginTop: 25 },
   resultsList: { paddingTop: 13 },
   resultsRow: { gap: 12, marginBottom: 12 },
   resultSummary: { minHeight: 79, borderRadius: 17, borderWidth: 1, padding: 12, marginBottom: 17, flexDirection: 'row', alignItems: 'center', gap: 10 },
