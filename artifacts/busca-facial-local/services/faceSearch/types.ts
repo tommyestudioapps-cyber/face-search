@@ -45,6 +45,11 @@ export interface IndexedPhoto {
   faceCount: number;
 }
 
+export interface StoredIndexStats {
+  indexedPhotos: number;
+  indexedFaces: number;
+}
+
 export interface IndexedFace {
   id: string;
   assetId: string;

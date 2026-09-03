@@ -17,6 +17,7 @@ import type {
   FaceIndexProgress,
   FaceSearchSummary,
   IndexedPhoto,
+  StoredIndexStats,
 } from './types';
 import type { AlignedFace } from '../faceCapture/types';
 
@@ -98,6 +99,11 @@ export async function searchFace(
 export async function readIndexedPhotos(): Promise<IndexedPhoto[]> {
   await faceSearchRepository.initialize();
   return faceSearchRepository.getIndexedPhotos();
+}
+
+export async function getStoredIndexStats(): Promise<StoredIndexStats> {
+  await faceSearchRepository.initialize();
+  return faceSearchRepository.getStoredIndexStats();
 }
 
 export * from './types';

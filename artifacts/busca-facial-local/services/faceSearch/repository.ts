@@ -10,6 +10,7 @@ import {
   type FaceSearchModelMetadata,
   type IndexedFace,
   type IndexedPhoto,
+  type StoredIndexStats,
 } from './types';
 
 const DATABASE_NAME = 'face-search.sqlite';
@@ -485,6 +486,33 @@ export class FaceSearchRepository {
     );
 
     return rows.map(mapIndexedPhotoRow);
+  }
+
+  async getStoredIndexStats(): Promise<StoredIndexStats> {
+    const database = await getDatabase();
+    const photoCount = await database.getFirstAsync<{ count: number }>(
+      `
+        SELECT COUNT(*) AS count
+        FROM indexed_photos
+        WHERE indexing_status = ?
+      `,
+      [INDEXED_STATUS],
+    );
+    const faceCount = await database.getFirstAsync<{ count: number }>(
+      `
+        SELECT COUNT(*) AS count
+        FROM face_embeddings fe
+        INNER JOIN indexed_photos ip
+          ON ip.id_media_library = fe.photo_id
+        WHERE ip.indexing_status = ?
+      `,
+      [INDEXED_STATUS],
+    );
+
+    return {
+      indexedPhotos: Number(photoCount?.count ?? 0),
+      indexedFaces: Number(faceCount?.count ?? 0),
+    };
   }
 
   async getStoredModelVersion(): Promise<string | null> {

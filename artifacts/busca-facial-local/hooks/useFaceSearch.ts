@@ -6,6 +6,7 @@ import {
   type FaceIndexProgress,
   type FaceSearchResult,
   type FaceSearchSummary,
+  type StoredIndexStats,
 } from '@/services/faceSearch/types';
 import type {
   GalleryIndexResult,
@@ -31,6 +32,7 @@ export interface UseFaceSearchResult {
   progress: FaceIndexProgress;
   results: FaceSearchResult[];
   summary: FaceSearchSummary | null;
+  storedIndexStats: StoredIndexStats;
   error: FaceRecognitionError | null;
   startIndexing: () => Promise<GalleryIndexResult | null>;
   cancelIndexing: () => void;
@@ -48,6 +50,11 @@ const initialProgress: FaceIndexProgress = {
   skippedAssets: 0,
   currentAssetId: null,
   error: null,
+};
+
+const initialStoredIndexStats: StoredIndexStats = {
+  indexedPhotos: 0,
+  indexedFaces: 0,
 };
 
 function toFaceSearchError(
@@ -87,6 +94,8 @@ export function useFaceSearch(): UseFaceSearchResult {
   const [progress, setProgress] = useState<FaceIndexProgress>(initialProgress);
   const [results, setResults] = useState<FaceSearchResult[]>([]);
   const [summary, setSummary] = useState<FaceSearchSummary | null>(null);
+  const [storedIndexStats, setStoredIndexStats] =
+    useState<StoredIndexStats>(initialStoredIndexStats);
   const [error, setError] = useState<FaceRecognitionError | null>(null);
   const mountedRef = useRef(true);
   const initializationPromiseRef = useRef<Promise<void> | null>(null);
@@ -130,7 +139,13 @@ export function useFaceSearch(): UseFaceSearchResult {
     }
 
     const initialization = getFaceSearchModule()
-      .then((module) => module.initializeFaceSearch())
+      .then(async (module) => {
+        await module.initializeFaceSearch();
+        const nextStats = await module.getStoredIndexStats();
+        if (mountedRef.current) {
+          setStoredIndexStats(nextStats);
+        }
+      })
       .then(() => {
         if (mountedRef.current) {
           setStatus('ready');
@@ -199,6 +214,12 @@ export function useFaceSearch(): UseFaceSearchResult {
 
       try {
         const result = await task.promise;
+        if (result.status === 'completed') {
+          const nextStats = await faceSearchModule.getStoredIndexStats();
+          if (mountedRef.current) {
+            setStoredIndexStats(nextStats);
+          }
+        }
         if (mountedRef.current) {
           setStatus(result.status === 'completed' ? 'ready' : 'cancelled');
         }
@@ -343,6 +364,7 @@ export function useFaceSearch(): UseFaceSearchResult {
     progress,
     results,
     summary,
+    storedIndexStats,
     error,
     startIndexing,
     cancelIndexing,
