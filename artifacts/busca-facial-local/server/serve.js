@@ -12,10 +12,29 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const STATIC_ROOT = path.resolve(__dirname, '..', 'static-build');
 const TEMPLATE_PATH = path.resolve(__dirname, 'templates', 'landing-page.html');
 const basePath = (process.env.BASE_PATH || '/').replace(/\/+$/, '');
+const SAFE_PATH_SEGMENT = /^[A-Za-z0-9._@+(),~=-]+$/;
+const IOS_MANIFEST_PATH = path.join(STATIC_ROOT, 'ios', 'manifest.json');
+const ANDROID_MANIFEST_PATH = path.join(
+  STATIC_ROOT,
+  'android',
+  'manifest.json',
+);
+const SECURITY_HEADERS = {
+  'content-security-policy':
+    "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' https://unpkg.com; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'",
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'referrer-policy': 'no-referrer',
+  'permissions-policy':
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'cross-origin-opener-policy': 'same-origin',
+  'cross-origin-resource-policy': 'same-origin',
+};
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -63,41 +82,94 @@ function toScriptString(value) {
     .replaceAll('&', '\\u0026');
 }
 
+function send(res, statusCode, headers, body) {
+  res.writeHead(statusCode, { ...SECURITY_HEADERS, ...headers });
+  res.end(body);
+}
+
+function getRequestOrigin(req) {
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const protocol =
+    forwardedProto === 'http' || forwardedProto === 'https'
+      ? forwardedProto
+      : 'https';
+  const forwardedHost = req.headers['x-forwarded-host'];
+  const requestedHost = forwardedHost || req.headers.host;
+
+  if (typeof requestedHost !== 'string' || requestedHost.length > 255) {
+    return { protocol, host: 'localhost' };
+  }
+
+  try {
+    const parsedHost = new URL(`https://${requestedHost}`);
+    if (
+      parsedHost.username ||
+      parsedHost.password ||
+      parsedHost.pathname !== '/' ||
+      parsedHost.search ||
+      parsedHost.hash
+    ) {
+      return { protocol, host: 'localhost' };
+    }
+    return { protocol, host: parsedHost.host };
+  } catch {
+    return { protocol, host: 'localhost' };
+  }
+}
+
 function serveManifest(platform, res) {
-  const manifestPath = path.join(STATIC_ROOT, platform, 'manifest.json');
+  const manifestPath =
+    platform === 'ios' ? IOS_MANIFEST_PATH : ANDROID_MANIFEST_PATH;
 
   if (!fs.existsSync(manifestPath)) {
-    res.writeHead(404, { 'content-type': 'application/json' });
-    res.end(
+    return send(
+      res,
+      404,
+      { 'content-type': 'application/json' },
       JSON.stringify({ error: `Manifest not found for platform: ${platform}` }),
     );
-    return;
   }
 
   const manifest = fs.readFileSync(manifestPath, 'utf-8');
-  res.writeHead(200, {
-    'content-type': 'application/json',
-    'expo-protocol-version': '1',
-    'expo-sfv-version': '0',
-  });
-  res.end(manifest);
+  send(
+    res,
+    200,
+    {
+      'content-type': 'application/json',
+      'expo-protocol-version': '1',
+      'expo-sfv-version': '0',
+    },
+    manifest,
+  );
 }
 
 function serveLandingPage(req, res, landingPageTemplate, appName) {
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  const protocol = forwardedProto || 'https';
-  const host = req.headers['x-forwarded-host'] || req.headers['host'];
+  const { protocol, host } = getRequestOrigin(req);
   const baseUrl = `${protocol}://${host}`;
   const expsUrl = `exps://${host}${basePath}`;
+  const nonce = crypto.randomBytes(16).toString('base64');
 
   const html = landingPageTemplate
     .replace(/BASE_URL_PLACEHOLDER/g, baseUrl)
     .replace(/EXPS_URL_ATTRIBUTE_PLACEHOLDER/g, escapeHtml(expsUrl))
     .replace(/EXPS_URL_JSON_PLACEHOLDER/g, toScriptString(expsUrl))
+    .replace(/CSP_NONCE/g, escapeHtml(nonce))
     .replace(/APP_NAME_PLACEHOLDER/g, escapeHtml(appName));
 
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  res.end(html);
+  send(
+    res,
+    200,
+    {
+      'content-type': 'text/html; charset=utf-8',
+      'content-security-policy': SECURITY_HEADERS[
+        'content-security-policy'
+      ].replace(
+        "script-src 'self' https://unpkg.com",
+        `script-src 'self' https://unpkg.com 'nonce-${nonce}'`,
+      ).replace("style-src 'self'", `style-src 'self' 'nonce-${nonce}'`),
+    },
+    html,
+  );
 }
 
 function serveStaticFile(urlPath, res) {
@@ -105,38 +177,76 @@ function serveStaticFile(urlPath, res) {
   try {
     decodedPath = decodeURIComponent(urlPath);
   } catch {
-    res.writeHead(400);
-    res.end('Bad Request');
+    send(res, 400, {}, 'Bad Request');
     return;
   }
 
-  const filePath = path.resolve(STATIC_ROOT, `.${decodedPath}`);
-  const relativePath = path.relative(STATIC_ROOT, filePath);
+  if (
+    !decodedPath.startsWith('/') ||
+    decodedPath.includes('\0') ||
+    decodedPath.includes('\\')
+  ) {
+    send(res, 403, {}, 'Forbidden');
+    return;
+  }
 
+  const segments = decodedPath.split('/');
+  if (
+    segments.some(
+      (segment) =>
+        !segment ||
+        segment === '.' ||
+        segment === '..' ||
+        !SAFE_PATH_SEGMENT.test(segment),
+    )
+  ) {
+    send(res, 403, {}, 'Forbidden');
+    return;
+  }
+
+  const rootPath = fs.realpathSync(STATIC_ROOT);
+  const filePath = path.join(rootPath, ...segments);
+  const relativePath = path.relative(rootPath, filePath);
   if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    res.writeHead(403);
-    res.end('Forbidden');
+    send(res, 403, {}, 'Forbidden');
     return;
   }
 
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    res.writeHead(404);
-    res.end('Not Found');
+    send(res, 404, {}, 'Not Found');
     return;
   }
 
-  const ext = path.extname(filePath).toLowerCase();
+  const realFilePath = fs.realpathSync(filePath);
+  const realRelativePath = path.relative(rootPath, realFilePath);
+  if (
+    realRelativePath.startsWith('..') ||
+    path.isAbsolute(realRelativePath)
+  ) {
+    send(res, 403, {}, 'Forbidden');
+    return;
+  }
+
+  const ext = path.extname(realFilePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-  const content = fs.readFileSync(filePath);
-  res.writeHead(200, { 'content-type': contentType });
-  res.end(content);
+  const content = fs.readFileSync(realFilePath);
+  send(res, 200, { 'content-type': contentType }, content);
 }
 
 const landingPageTemplate = fs.readFileSync(TEMPLATE_PATH, 'utf-8');
 const appName = getAppName();
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url || '/', `http://${req.headers.host}`);
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return send(res, 405, { allow: 'GET, HEAD' }, 'Method Not Allowed');
+  }
+
+  let url;
+  try {
+    url = new URL(req.url || '/', 'http://localhost');
+  } catch {
+    return send(res, 400, {}, 'Bad Request');
+  }
   let pathname = url.pathname;
 
   if (basePath && pathname.startsWith(basePath)) {

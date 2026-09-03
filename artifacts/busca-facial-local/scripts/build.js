@@ -49,16 +49,47 @@ function setupSignalHandlers() {
 }
 
 function stripProtocol(domain) {
+  if (typeof domain !== 'string' || domain.length > 255) {
+    throw new Error('Invalid deployment domain');
+  }
+
   let urlString = domain.trim();
 
   if (!/^https?:\/\//i.test(urlString)) {
     urlString = `https://${urlString}`;
   }
 
-  return new URL(urlString).host;
+  const parsed = new URL(urlString);
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== '/' ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error('Deployment domain must contain only a host and optional port');
+  }
+
+  return parsed.host;
 }
 
 function getDeploymentDomain() {
+  const buildProfile = (
+    process.env.EAS_BUILD_PROFILE ||
+    process.env.APP_ENV ||
+    (process.env.NODE_ENV === 'production' ? 'production' : '') ||
+    'development'
+  ).toLowerCase();
+
+  if (buildProfile === 'production') {
+    if (!process.env.REPLIT_INTERNAL_APP_DOMAIN) {
+      throw new Error(
+        'Production builds require REPLIT_INTERNAL_APP_DOMAIN; refusing to use a preview domain',
+      );
+    }
+    return stripProtocol(process.env.REPLIT_INTERNAL_APP_DOMAIN);
+  }
+
   if (process.env.REPLIT_INTERNAL_APP_DOMAIN) {
     return stripProtocol(process.env.REPLIT_INTERNAL_APP_DOMAIN);
   }
@@ -177,12 +208,28 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
   console.log('Starting Metro...');
   console.log(`Using Metro port ${metroPort}`);
   console.log(`Setting EXPO_PUBLIC_DOMAIN=${expoPublicDomain}`);
-  const env = {
-    ...process.env,
-    EXPO_PUBLIC_DOMAIN: expoPublicDomain,
-    EXPO_PUBLIC_REPL_ID: expoPublicReplId,
+  const env = Object.fromEntries(
+    [
+      'PATH',
+      'HOME',
+      'TMPDIR',
+      'TMP',
+      'TEMP',
+      'LANG',
+      'LC_ALL',
+      'NODE_OPTIONS',
+    ]
+      .filter((key) => process.env[key])
+      .map((key) => [key, process.env[key]]),
+  );
+  Object.assign(env, {
+    NODE_ENV: 'production',
     CI: '1',
-  };
+    EXPO_PUBLIC_DOMAIN: expoPublicDomain,
+    ...(expoPublicReplId
+      ? { EXPO_PUBLIC_REPL_ID: expoPublicReplId }
+      : {}),
+  });
 
   if (expoPublicReplId) {
     console.log(`Setting EXPO_PUBLIC_REPL_ID=${expoPublicReplId}`);
