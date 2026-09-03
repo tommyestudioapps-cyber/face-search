@@ -4,8 +4,8 @@ import {
   cleanupTempFiles,
   detectFaces,
   getFaceQualityError,
-  getSelectableFaces,
   releaseFaceDetectionSession,
+  runFaceCaptureFlow,
   type AlignedFace,
   type DetectedFace,
   type FaceCaptureError,
@@ -102,36 +102,26 @@ export function useFaceCapture() {
     await releaseFaceDetectionSession(previous);
 
     try {
-      setStatus('detecting');
-      const nextSession = await detectFaces(uri);
-      if (requestId.current !== currentRequest) {
-        await releaseFaceDetectionSession(nextSession);
-        return null;
-      }
-
-      setStatus('validating');
-      const selectableFaces = getSelectableFaces(nextSession.faces);
-      if (selectableFaces.length === 0) {
-        await releaseFaceDetectionSession(nextSession);
-        throw getFaceQualityError(nextSession.faces);
-      }
-
-      setSession(nextSession);
-      sessionRef.current = nextSession;
-      setFaces(nextSession.faces);
-      const onlyFace = selectableFaces.length === 1 ? selectableFaces[0] : null;
-      setSelectedFaceId(onlyFace?.id ?? null);
-      if (!onlyFace) {
-        setStatus('awaiting-face-selection');
-      } else {
-        setStatus('aligning');
-        const result = await alignSelectedFace(nextSession, onlyFace.id);
-        if (requestId.current === currentRequest) {
-          await setAlignedFaceResult(result);
-          setStatus('completed');
-        }
-      }
-      return nextSession;
+      return await runFaceCaptureFlow(
+        uri,
+        {
+          detectFaces,
+          alignSelectedFace,
+          releaseFaceDetectionSession,
+          getFaceQualityError,
+        },
+        {
+          onStatus: setStatus,
+          onSession: (nextSession) => {
+            setSession(nextSession);
+            sessionRef.current = nextSession;
+          },
+          onFaces: setFaces,
+          onSelectedFaceId: setSelectedFaceId,
+          onAlignedFace: setAlignedFaceResult,
+          isCurrent: () => requestId.current === currentRequest,
+        },
+      );
     } catch (caught) {
       if (requestId.current === currentRequest) {
         setError(toCaptureError(caught));
