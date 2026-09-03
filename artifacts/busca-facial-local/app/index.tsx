@@ -23,6 +23,7 @@ import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { FaceCaptureFeedback } from '@/components/FaceCaptureFeedback';
 import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
 import { FaceSearchProgress } from '@/components/FaceSearchProgress';
+import { IndexSettings } from '@/components/IndexSettings';
 import { useFaceSearch, type FaceSearchStatus } from '@/hooks/useFaceSearch';
 import type {
   FaceIndexProgress,
@@ -766,6 +767,7 @@ export default function HomeScreen() {
   const [screen, setScreen] = useState<AppScreen>('onboarding');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showReward, setShowReward] = useState(false);
+  const [showIndexSettings, setShowIndexSettings] = useState(false);
   const [showOffline, setShowOffline] = useState(false);
   const [rewardCountdown, setRewardCountdown] = useState(3);
   const colors = useColors();
@@ -791,6 +793,7 @@ export default function HomeScreen() {
     storedIndexStats,
     error: faceSearchError,
     cancelIndexing,
+    clearIndex,
     indexAndSearch,
   } = useFaceSearch();
 
@@ -959,7 +962,7 @@ export default function HomeScreen() {
         return (
           <Home
             onSelect={openSearch}
-            onSettings={() => undefined}
+            onSettings={() => setShowIndexSettings(true)}
             indexedPhotoCount={storedIndexStats.indexedPhotos}
           />
         );
@@ -998,6 +1001,12 @@ export default function HomeScreen() {
         }}
       />
       <OfflineModal visible={showOffline} onClose={() => setShowOffline(false)} />
+      <IndexSettings
+        visible={showIndexSettings}
+        stats={storedIndexStats}
+        onClose={() => setShowIndexSettings(false)}
+        onClearIndex={clearIndex}
+      />
     </>
   );
 }
