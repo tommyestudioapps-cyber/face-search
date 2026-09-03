@@ -38,6 +38,17 @@ interface IndexedFaceRow {
   photo_model_version: string;
 }
 
+interface IndexedPhotoRow {
+  id_media_library: string;
+  uri_local: string;
+  file_name: string | null;
+  created_at: number | null;
+  updated_at: number | null;
+  dimensions: string;
+  indexing_status: string;
+  model_version: string;
+}
+
 interface ModelVersionRow {
   model_version: string;
 }
@@ -166,6 +177,22 @@ function mapPhoto(row: IndexedFaceRow): IndexedPhoto {
     height: dimensions.height,
     modelVersion: row.photo_model_version,
     indexedAt: row.face_created_at,
+    faceCount: 0,
+  };
+}
+
+function mapIndexedPhotoRow(row: IndexedPhotoRow): IndexedPhoto {
+  const dimensions = parseDimensions(row.dimensions);
+  return {
+    assetId: row.id_media_library,
+    uri: row.uri_local,
+    filename: row.file_name,
+    creationTime: row.created_at,
+    modificationTime: row.updated_at,
+    width: dimensions.width,
+    height: dimensions.height,
+    modelVersion: row.model_version,
+    indexedAt: row.updated_at ?? 0,
     faceCount: 0,
   };
 }
@@ -435,6 +462,29 @@ export class FaceSearchRepository {
         faceCount: photoFaceCounts.get(row.asset_id) ?? 0,
       },
     }));
+  }
+
+  async getIndexedPhotos(): Promise<IndexedPhoto[]> {
+    const database = await getDatabase();
+    const rows = await database.getAllAsync<IndexedPhotoRow>(
+      `
+        SELECT
+          id_media_library,
+          uri_local,
+          file_name,
+          created_at,
+          updated_at,
+          dimensions,
+          indexing_status,
+          model_version
+        FROM indexed_photos
+        WHERE indexing_status = ?
+        ORDER BY id_media_library
+      `,
+      [INDEXED_STATUS],
+    );
+
+    return rows.map(mapIndexedPhotoRow);
   }
 
   async getStoredModelVersion(): Promise<string | null> {
