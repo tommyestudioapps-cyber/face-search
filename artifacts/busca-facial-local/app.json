@@ -18,6 +18,11 @@
     },
     "android": {
       "package": "com.buscafacial.local",
+      "abiFilters": [
+        "armeabi-v7a",
+        "arm64-v8a",
+        "x86_64"
+      ],
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES",
