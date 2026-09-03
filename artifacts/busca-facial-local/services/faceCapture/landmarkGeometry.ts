@@ -51,3 +51,20 @@ export function getAlignmentLandmarks(landmarks: FaceLandmark[]) {
     mouth: averageLandmarks(LANDMARK_GROUPS.mouth, landmarks),
   };
 }
+
+/**
+ * The eyes are the landmarks required by alignment. Nose and mouth are
+ * useful anchors, but the crop can be calculated from whichever optional
+ * anchors are available.
+ */
+export function hasRequiredLandmarks(
+  landmarks: FaceLandmark[],
+  minimumLandmarkCount: number,
+): boolean {
+  if (landmarks.length < minimumLandmarkCount) {
+    return false;
+  }
+
+  const { leftEye, rightEye } = getAlignmentLandmarks(landmarks);
+  return leftEye !== null && rightEye !== null;
+}

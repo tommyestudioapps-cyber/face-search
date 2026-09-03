@@ -2,7 +2,7 @@ import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { faceCapture } from '@/constants/faceCapture';
 import { FaceCaptureError } from './types';
 import type { AlignedFace, DetectedFace } from './types';
-import { getAlignmentLandmarks } from './quality';
+import { getAlignmentLandmarks } from './landmarkGeometry';
 import { calculateAlignmentCrop, rotatedDimensions } from './alignmentGeometry';
 
 export async function alignFace(

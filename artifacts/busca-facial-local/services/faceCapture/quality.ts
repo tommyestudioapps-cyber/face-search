@@ -14,6 +14,7 @@ import {
   averageLandmarks,
   getAlignmentLandmarks,
   getLandmark,
+  hasRequiredLandmarks,
 } from './landmarkGeometry';
 
 interface DecodedImage {
@@ -22,7 +23,12 @@ interface DecodedImage {
   data: Uint8Array;
 }
 
-export { averageLandmarks, getAlignmentLandmarks, getLandmark } from './landmarkGeometry';
+export {
+  averageLandmarks,
+  getAlignmentLandmarks,
+  getLandmark,
+  hasRequiredLandmarks,
+} from './landmarkGeometry';
 
 export function calculateFaceBounds(landmarks: FaceLandmark[]): FaceBounds {
   if (landmarks.length === 0) {
@@ -115,10 +121,7 @@ export async function evaluateFaceQuality(
 ): Promise<{ bounds: FaceBounds; rollDegrees: number; quality: FaceQuality }> {
   const bounds = calculateFaceBounds(landmarks);
   const rollDegrees = calculateRollDegrees(landmarks);
-  const alignedLandmarks = getAlignmentLandmarks(landmarks);
-  const landmarksAccepted =
-    landmarks.length >= faceCapture.minLandmarkCount &&
-    Object.values(alignedLandmarks).every(Boolean);
+  const landmarksAccepted = hasRequiredLandmarks(landmarks, faceCapture.minLandmarkCount);
   const faceInFrameAccepted =
     bounds.minX >= 0 && bounds.minY >= 0 && bounds.maxX <= 1 && bounds.maxY <= 1;
   const faceSizeAccepted =
