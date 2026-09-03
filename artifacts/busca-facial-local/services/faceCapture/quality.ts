@@ -1,7 +1,13 @@
 import * as jpeg from 'jpeg-js';
 import { File } from 'expo-file-system';
 import { faceCapture } from '@/constants/faceCapture';
-import type { DetectedFace, FaceBounds, FaceLandmark, FaceQuality } from './types';
+import type {
+  DetectedFace,
+  FaceBounds,
+  FaceLandmark,
+  FaceQuality,
+  FaceQualityIssue,
+} from './types';
 import { FaceCaptureError } from './types';
 
 interface DecodedImage {
@@ -54,10 +60,10 @@ export function calculateFaceBounds(landmarks: FaceLandmark[]): FaceBounds {
     return { minX: 0, minY: 0, maxX: 0, maxY: 0, width: 0, height: 0 };
   }
 
-  const minX = Math.max(0, Math.min(...landmarks.map((point) => point.x)));
-  const minY = Math.max(0, Math.min(...landmarks.map((point) => point.y)));
-  const maxX = Math.min(1, Math.max(...landmarks.map((point) => point.x)));
-  const maxY = Math.min(1, Math.max(...landmarks.map((point) => point.y)));
+  const minX = Math.min(...landmarks.map((point) => point.x));
+  const minY = Math.min(...landmarks.map((point) => point.y));
+  const maxX = Math.max(...landmarks.map((point) => point.x));
+  const maxY = Math.max(...landmarks.map((point) => point.y));
 
   return {
     minX,
@@ -140,14 +146,15 @@ export async function evaluateFaceQuality(
   const bounds = calculateFaceBounds(landmarks);
   const rollDegrees = calculateRollDegrees(landmarks);
   const alignedLandmarks = getAlignmentLandmarks(landmarks);
-  const landmarksAccepted = Object.values(alignedLandmarks).every(Boolean);
+  const landmarksAccepted =
+    landmarks.length >= faceCapture.minLandmarkCount &&
+    Object.values(alignedLandmarks).every(Boolean);
+  const faceInFrameAccepted =
+    bounds.minX >= 0 && bounds.minY >= 0 && bounds.maxX <= 1 && bounds.maxY <= 1;
   const faceSizeAccepted =
     bounds.width >= faceCapture.minFaceWidthRatio &&
     bounds.height >= faceCapture.minFaceHeightRatio &&
-    bounds.minX >= 0 &&
-    bounds.minY >= 0 &&
-    bounds.maxX <= 1 &&
-    bounds.maxY <= 1;
+    bounds.width * bounds.height >= faceCapture.minFaceAreaRatio;
   const rotationAccepted = Math.abs(rollDegrees) <= faceCapture.maxRollDegrees;
   const pixels = await analyzePixels(await decodeImage(sampleUri), bounds);
   const lightingAccepted =
@@ -157,19 +164,19 @@ export async function evaluateFaceQuality(
   const sharpnessAccepted =
     pixels.sharpness !== null && pixels.sharpness >= faceCapture.minSharpness;
 
-  let reason: FaceQuality['reason'] = 'accepted';
-  if (!landmarksAccepted) reason = 'landmarks-incomplete';
-  else if (!faceSizeAccepted) reason = 'face-too-small';
-  else if (!rotationAccepted) reason = 'excessive-rotation';
-  else if (pixels.brightness !== null && pixels.brightness < faceCapture.minBrightness) {
-    reason = 'insufficient-light';
+  const issues: FaceQualityIssue[] = [];
+  if (!landmarksAccepted) issues.push('landmarks-incomplete');
+  if (!faceInFrameAccepted) issues.push('face-out-of-frame');
+  if (!faceSizeAccepted) issues.push('face-too-small');
+  if (!rotationAccepted) issues.push('excessive-rotation');
+  if (pixels.brightness !== null && pixels.brightness < faceCapture.minBrightness) {
+    issues.push('insufficient-light');
   } else if (pixels.brightness !== null && pixels.brightness > faceCapture.maxBrightness) {
-    reason = 'excessive-light';
-  } else if (!sharpnessAccepted) {
-    reason = 'blur-detected';
-  } else if (!confidenceAccepted) {
-    reason = 'low-confidence';
+    issues.push('excessive-light');
   }
+  if (!sharpnessAccepted) issues.push('blur-detected');
+  if (!confidenceAccepted) issues.push('low-confidence');
+  const reason: FaceQuality['reason'] = issues[0] ?? 'accepted';
 
   return {
     bounds,
@@ -177,12 +184,14 @@ export async function evaluateFaceQuality(
     quality: {
       accepted:
         landmarksAccepted &&
+        faceInFrameAccepted &&
         faceSizeAccepted &&
         rotationAccepted &&
         lightingAccepted &&
         sharpnessAccepted &&
         confidenceAccepted,
       faceSizeAccepted,
+      faceInFrameAccepted,
       landmarksAccepted,
       rotationAccepted,
       lightingAccepted,
@@ -192,6 +201,7 @@ export async function evaluateFaceQuality(
       sharpness: pixels.sharpness,
       rollDegrees,
       reason,
+      issues,
     },
   };
 }
@@ -207,6 +217,13 @@ export function createDetectedFace(
     id,
     landmarks,
     bounds,
+    boundingBox: {
+      x: bounds.minX,
+      y: bounds.minY,
+      width: bounds.width,
+      height: bounds.height,
+      coordinateSpace: 'normalized',
+    },
     rollDegrees,
     confidence: null,
     confidenceSource: 'mediapipe-threshold',
