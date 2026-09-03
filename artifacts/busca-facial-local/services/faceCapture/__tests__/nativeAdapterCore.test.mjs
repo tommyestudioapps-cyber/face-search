@@ -4,9 +4,55 @@ import {
   getNativeErrorDetails,
   mapNativeResult,
 } from '../nativeAdapterCore.ts';
+import {
+  getAlignmentLandmarks,
+  hasRequiredLandmarks,
+} from '../landmarkGeometry.ts';
+import { calculateAlignmentCrop } from '../alignmentGeometry.ts';
+import { faceCapture } from '../../../constants/faceCapture.ts';
 
 function landmark(x, y, z = 0) {
   return { x, y, z };
+}
+
+function createNativeFace() {
+  const landmarks = Array.from({ length: 363 }, () => landmark(0.46, 0.42));
+  landmarks[33] = landmark(0.35, 0.4);
+  landmarks[133] = landmark(0.37, 0.4);
+  landmarks[263] = landmark(0.55, 0.4);
+  landmarks[362] = landmark(0.57, 0.4);
+  landmarks[1] = landmark(0.472, 0.51);
+  landmarks[61] = landmark(0.432, 0.58);
+  landmarks[291] = landmark(0.488, 0.58);
+  return landmarks;
+}
+
+function assertNativePartialFaceReachesAlignment(faceLandmarks, missingAnchor) {
+  const result = mapNativeResult({
+    results: [{ faceLandmarks: [faceLandmarks] }],
+  });
+  const [face] = result.faces;
+
+  assert.ok(face);
+  assert.equal(hasRequiredLandmarks(face.landmarks, faceCapture.minLandmarkCount), true);
+  assert.equal(getAlignmentLandmarks(face.landmarks)[missingAnchor], null);
+
+  const crop = calculateAlignmentCrop(
+    face.landmarks,
+    1200,
+    900,
+    0,
+    1200,
+    900,
+    faceCapture,
+    getAlignmentLandmarks(face.landmarks),
+  );
+  assert.equal(crop.width, crop.height);
+  assert.ok(crop.width > 0);
+  assert.ok(crop.originX >= 0);
+  assert.ok(crop.originY >= 0);
+  assert.ok(crop.originX + crop.width <= 1200);
+  assert.ok(crop.originY + crop.height <= 900);
 }
 
 test('retorna zero faces quando o MediaPipe não encontra landmarks', () => {
@@ -82,6 +128,21 @@ test('achata várias faces do mesmo frame sem misturar seus landmarks', () => {
       coordinateSpace: 'normalized',
     },
   ]);
+});
+
+test('preserva uma face nativa sem nariz até o alinhamento', () => {
+  const landmarks = createNativeFace();
+  delete landmarks[1];
+
+  assertNativePartialFaceReachesAlignment(landmarks, 'nose');
+});
+
+test('preserva uma face nativa sem boca até o alinhamento', () => {
+  const landmarks = createNativeFace();
+  delete landmarks[61];
+  delete landmarks[291];
+
+  assertNativePartialFaceReachesAlignment(landmarks, 'mouth');
 });
 
 test('preserva mensagens específicas para falhas de modelo, imagem e módulo nativo', () => {
