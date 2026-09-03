@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,14 +23,7 @@ import { useFaceCapture } from '@/hooks/useFaceCapture';
 import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { FaceCaptureFeedback } from '@/components/FaceCaptureFeedback';
 import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
-import {
-  persistLocalIndex,
-  readLocalGallery,
-  readPersistedIndex,
-  searchIndexedGallery,
-  type LocalPhoto,
-  type PhotoMatch,
-} from '@/services/localFaceSearch';
+import type { PhotoMatch } from '@/services/localFaceSearch';
 import type {
   DetectedFace,
   FaceCaptureError,
@@ -39,27 +31,6 @@ import type {
 } from '@/services/faceCapture';
 
 type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results';
-
-const demoMatches: PhotoMatch[] = [
-  {
-    id: 'preview-01',
-    uri: require('@/assets/images/match-01.jpg'),
-    confidence: 98,
-    filename: 'Retrato de sábado',
-  },
-  {
-    id: 'preview-02',
-    uri: require('@/assets/images/match-02.jpg'),
-    confidence: 92,
-    filename: 'Encontro no parque',
-  },
-  {
-    id: 'preview-03',
-    uri: require('@/assets/images/match-03.jpg'),
-    confidence: 86,
-    filename: 'Café da tarde',
-  },
-];
 
 function IconCircle({
   name,
@@ -387,6 +358,7 @@ function Home({
 
 function SelectPhoto({
   selectedImage,
+  normalizedImageUri,
   alignedImageUri,
   faces,
   selectedFaceId,
@@ -402,6 +374,7 @@ function SelectPhoto({
   onBack,
 }: {
   selectedImage: string | null;
+  normalizedImageUri: string | null;
   alignedImageUri: string | null;
   faces: DetectedFace[];
   selectedFaceId: number | null;
@@ -445,7 +418,10 @@ function SelectPhoto({
         >
           {selectedImage ? (
             <>
-              <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
+              <Image
+                source={{ uri: normalizedImageUri ?? selectedImage }}
+                style={styles.selectedImage}
+              />
               {faces.length === 0 ? (
                 <>
                   <View style={styles.cropOverlay}>
@@ -595,6 +571,7 @@ function Results({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { contentWidth, numColumns } = useResponsiveLayout();
+  const hasResults = results.length > 0;
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -614,15 +591,25 @@ function Results({
         ListHeaderComponent={
           <View style={[styles.resultSummary, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.summaryIcon}>
-              <Feather name="check-circle" size={20} color="#34D399" />
+              <Feather
+                name={hasResults ? 'check-circle' : 'clock'}
+                size={20}
+                color={hasResults ? '#34D399' : colors.primary}
+              />
             </View>
             <View style={styles.summaryCopy}>
-              <Text style={[styles.summaryTitle, { color: colors.foreground }]}>Busca concluída</Text>
+              <Text style={[styles.summaryTitle, { color: colors.foreground }]}>
+                {hasResults ? 'Busca concluída' : 'Captura pronta'}
+              </Text>
               <Text style={[styles.summaryBody, { color: colors.mutedForeground }]}>
-                Todas as correspondências foram encontradas no seu dispositivo.
+                {hasResults
+                  ? 'Todas as correspondências foram encontradas no seu dispositivo.'
+                  : 'O rosto foi validado e alinhado. A busca no índice será conectada em uma etapa posterior.'}
               </Text>
             </View>
-            <Text style={[styles.summaryTime, { color: colors.mutedForeground }]}>1.4s</Text>
+            {hasResults ? (
+              <Text style={[styles.summaryTime, { color: colors.mutedForeground }]}>1.4s</Text>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => (
@@ -760,7 +747,7 @@ function OfflineModal({
 export default function HomeScreen() {
   const [screen, setScreen] = useState<AppScreen>('onboarding');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [results, setResults] = useState<PhotoMatch[]>(demoMatches);
+  const [results, setResults] = useState<PhotoMatch[]>([]);
   const [showReward, setShowReward] = useState(false);
   const [showOffline, setShowOffline] = useState(false);
   const [rewardCountdown, setRewardCountdown] = useState(3);
@@ -779,6 +766,7 @@ export default function HomeScreen() {
     reset: resetCapture,
     imageWidth,
     imageHeight,
+    normalizedImageUri,
   } = useFaceCapture();
 
   useEffect(() => {
@@ -870,37 +858,29 @@ export default function HomeScreen() {
   const openSearch = () => setScreen('select');
 
   const beginSearch = async () => {
-    if (!selectedImage) {
-      return;
-    }
-    if (!alignedFace) {
-      const aligned = await alignFace();
-      if (!aligned) {
-        return;
-      }
-    }
-    const network = await NetInfo.fetch();
-    if (network.isConnected === false) {
-      setShowOffline(true);
+    if (
+      !selectedImage ||
+      !alignedFace ||
+      captureStatus !== 'completed' ||
+      !alignedFace.standardized
+    ) {
       return;
     }
     setShowReward(true);
   };
 
   const startAnalysis = async () => {
-    if (!selectedImage) {
+    if (
+      !alignedFace ||
+      captureStatus !== 'completed' ||
+      !alignedFace.standardized
+    ) {
       return;
     }
     setShowReward(false);
     setProgress(0);
-    setScreen('analyzing');
-    const gallery = (await readLocalGallery()) as LocalPhoto[];
-    if (gallery.length > 0) {
-      await persistLocalIndex(gallery);
-    }
-    const indexedGallery = gallery.length > 0 ? gallery : await readPersistedIndex();
-    const localMatches = searchIndexedGallery(selectedImage, indexedGallery);
-    setResults(localMatches.length > 0 ? localMatches.slice(0, 12) : demoMatches);
+    setResults([]);
+    setScreen('results');
   };
 
   const goHome = () => {
@@ -923,6 +903,7 @@ export default function HomeScreen() {
         return (
           <SelectPhoto
             selectedImage={selectedImage}
+            normalizedImageUri={normalizedImageUri}
             alignedImageUri={alignedFace?.uri ?? null}
             faces={faces}
             selectedFaceId={selectedFaceId}
@@ -957,6 +938,7 @@ export default function HomeScreen() {
     selectedFaceId,
     imageWidth,
     imageHeight,
+    normalizedImageUri,
     captureError,
     captureProcessing,
     captureStatus,

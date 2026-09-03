@@ -196,6 +196,7 @@ export function useFaceCapture() {
     error,
     imageWidth: session?.width ?? null,
     imageHeight: session?.height ?? null,
+    normalizedImageUri: session?.normalizedUri ?? null,
     analyze,
     align,
     cancel,
