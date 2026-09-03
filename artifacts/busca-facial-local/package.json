@@ -64,7 +64,9 @@
     "expo-media-library": "~18.2.1",
     "expo-sqlite": "~16.0.10",
     "jpeg-js": "^0.4.4",
+    "react-native-fast-tflite": "3.0.1",
     "react-native-mediapipe": "0.6.0",
+    "react-native-nitro-modules": "0.37.1",
     "react-native-vision-camera": "4.7.3",
     "react-native-worklets-core": "1.6.3"
   }

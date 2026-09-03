@@ -2,8 +2,10 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-if (!config.resolver.assetExts.includes('task')) {
-  config.resolver.assetExts.push('task');
+for (const extension of ['task', 'tflite']) {
+  if (!config.resolver.assetExts.includes(extension)) {
+    config.resolver.assetExts.push(extension);
+  }
 }
 
 module.exports = config;

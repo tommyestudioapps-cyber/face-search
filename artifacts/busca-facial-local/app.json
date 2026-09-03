@@ -38,7 +38,20 @@
           "cameraPermissionText": "Permita que o Busca Facial Local use a câmera para capturar um rosto."
         }
       ],
-      "./plugins/withFaceLandmarkerModel"
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Permita que o Busca Facial Local acesse suas fotos para procurar rostos localmente.",
+          "savePhotosPermission": false,
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": [
+            "photo"
+          ]
+        }
+      ],
+      "react-native-fast-tflite",
+      "./plugins/withFaceLandmarkerModel",
+      "./plugins/withFaceRecognitionModel"
     ],
     "experiments": {
       "typedRoutes": true,
