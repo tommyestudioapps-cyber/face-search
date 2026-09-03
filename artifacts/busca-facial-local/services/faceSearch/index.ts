@@ -106,6 +106,11 @@ export async function getStoredIndexStats(): Promise<StoredIndexStats> {
   return faceSearchRepository.getStoredIndexStats();
 }
 
+export async function clearStoredIndex(): Promise<void> {
+  await faceSearchRepository.initialize();
+  await faceSearchRepository.clearIndex();
+}
+
 export * from './types';
 export * from './galleryIndexer';
 export { searchAlignedFace };

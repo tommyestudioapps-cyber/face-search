@@ -36,6 +36,7 @@ export interface UseFaceSearchResult {
   error: FaceRecognitionError | null;
   startIndexing: () => Promise<GalleryIndexResult | null>;
   cancelIndexing: () => void;
+  clearIndex: () => Promise<void>;
   search: (alignedFace: AlignedFace | null) => Promise<FaceSearchSummary | null>;
   indexAndSearch: (
     alignedFace: AlignedFace | null,
@@ -266,6 +267,19 @@ export function useFaceSearch(): UseFaceSearchResult {
     indexTaskRef.current.cancel();
   }, []);
 
+  const clearIndex = useCallback(async (): Promise<void> => {
+    const faceSearchModule = await getFaceSearchModule();
+    await faceSearchModule.clearStoredIndex();
+    if (mountedRef.current) {
+      setStoredIndexStats(initialStoredIndexStats);
+      setProgress({ ...initialProgress });
+      setSummary(null);
+      setResults([]);
+      setError(null);
+      setStatus('ready');
+    }
+  }, [getFaceSearchModule]);
+
   const search = useCallback(
     async (alignedFace: AlignedFace | null): Promise<FaceSearchSummary | null> => {
       if (!alignedFace || !alignedFace.standardized) {
@@ -368,6 +382,7 @@ export function useFaceSearch(): UseFaceSearchResult {
     error,
     startIndexing,
     cancelIndexing,
+    clearIndex,
     search,
     indexAndSearch,
   };
