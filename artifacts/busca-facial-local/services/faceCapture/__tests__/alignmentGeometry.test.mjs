@@ -35,7 +35,13 @@ function createFace({ centerX, centerY, rollDegrees }) {
   return landmarks;
 }
 
-function expectedAnchor(landmarks, rotationDegrees, outputWidth, outputHeight) {
+function expectedAnchor(
+  landmarks,
+  rotationDegrees,
+  outputWidth,
+  outputHeight,
+  { includeNose = true, includeMouth = true } = {},
+) {
   const feature = (index) => landmarks[index];
   const leftEye = feature(33);
   const leftEyeOther = feature(133);
@@ -46,10 +52,14 @@ function expectedAnchor(landmarks, rotationDegrees, outputWidth, outputHeight) {
     y: (leftEye.y + leftEyeOther.y + rightEye.y + rightEyeOther.y) / 4,
   };
   const nose = feature(1);
-  const mouth = {
-    x: (feature(61).x + feature(291).x) / 2,
-    y: (feature(61).y + feature(291).y) / 2,
-  };
+  const mouthPoints = [feature(61), feature(291)];
+  const mouth =
+    mouthPoints.every(Boolean)
+      ? {
+          x: (mouthPoints[0].x + mouthPoints[1].x) / 2,
+          y: (mouthPoints[0].y + mouthPoints[1].y) / 2,
+        }
+      : null;
   const transform = (normalizedPoint) =>
     transformPointForRotation(
       {
@@ -63,18 +73,16 @@ function expectedAnchor(landmarks, rotationDegrees, outputWidth, outputHeight) {
       rotationDegrees,
     );
   const transformedEyeCenter = transform(eyeCenter);
-  const transformedNose = transform(nose);
-  const transformedMouth = transform(mouth);
+  const anchorPoints = [
+    { point: transformedEyeCenter, weight: 0.35 },
+    includeNose && nose ? { point: transform(nose), weight: 0.4 } : null,
+    includeMouth && mouth ? { point: transform(mouth), weight: 0.25 } : null,
+  ].filter(Boolean);
+  const totalWeight = anchorPoints.reduce((sum, item) => sum + item.weight, 0);
 
   return {
-    x:
-      transformedEyeCenter.x * 0.35 +
-      transformedNose.x * 0.4 +
-      transformedMouth.x * 0.25,
-    y:
-      transformedEyeCenter.y * 0.35 +
-      transformedNose.y * 0.4 +
-      transformedMouth.y * 0.25,
+    x: anchorPoints.reduce((sum, item) => sum + item.point.x * item.weight, 0) / totalWeight,
+    y: anchorPoints.reduce((sum, item) => sum + item.point.y * item.weight, 0) / totalWeight,
   };
 }
 
@@ -165,4 +173,69 @@ test('mantém o recorte dentro da imagem quando o rosto encosta no canto inferio
   assertCropIsSafeAndSquare(crop, IMAGE_WIDTH, IMAGE_HEIGHT);
   assert.equal(crop.originX + crop.width, IMAGE_WIDTH);
   assert.equal(crop.originY + crop.height, IMAGE_HEIGHT);
+});
+
+test('usa olhos e boca quando o nariz não é detectado', () => {
+  const landmarks = createFace({
+    centerX: 0.46,
+    centerY: 0.42,
+    rollDegrees: 0,
+  });
+  delete landmarks[1];
+
+  const dimensions = rotatedDimensions(IMAGE_WIDTH, IMAGE_HEIGHT, 0);
+  const crop = calculateAlignmentCrop(
+    landmarks,
+    IMAGE_WIDTH,
+    IMAGE_HEIGHT,
+    0,
+    dimensions.width,
+    dimensions.height,
+    faceCapture,
+    getAlignmentLandmarks(landmarks),
+  );
+  const anchor = expectedAnchor(landmarks, 0, dimensions.width, dimensions.height, {
+    includeNose: false,
+  });
+  const cropCenter = {
+    x: crop.originX + crop.width / 2,
+    y: crop.originY + crop.height / 2,
+  };
+
+  assertCropIsSafeAndSquare(crop, dimensions.width, dimensions.height);
+  assert.ok(Math.abs(cropCenter.x - anchor.x) <= 1);
+  assert.ok(Math.abs(cropCenter.y - anchor.y) <= 1);
+});
+
+test('usa olhos e nariz quando a boca não é detectada', () => {
+  const landmarks = createFace({
+    centerX: 0.46,
+    centerY: 0.42,
+    rollDegrees: 0,
+  });
+  delete landmarks[61];
+  delete landmarks[291];
+
+  const dimensions = rotatedDimensions(IMAGE_WIDTH, IMAGE_HEIGHT, 0);
+  const crop = calculateAlignmentCrop(
+    landmarks,
+    IMAGE_WIDTH,
+    IMAGE_HEIGHT,
+    0,
+    dimensions.width,
+    dimensions.height,
+    faceCapture,
+    getAlignmentLandmarks(landmarks),
+  );
+  const anchor = expectedAnchor(landmarks, 0, dimensions.width, dimensions.height, {
+    includeMouth: false,
+  });
+  const cropCenter = {
+    x: crop.originX + crop.width / 2,
+    y: crop.originY + crop.height / 2,
+  };
+
+  assertCropIsSafeAndSquare(crop, dimensions.width, dimensions.height);
+  assert.ok(Math.abs(cropCenter.x - anchor.x) <= 1);
+  assert.ok(Math.abs(cropCenter.y - anchor.y) <= 1);
 });

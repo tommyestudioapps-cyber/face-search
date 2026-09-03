@@ -7,8 +7,21 @@ const LANDMARK_GROUPS = {
   mouth: [61, 291],
 } as const;
 
+function isUsableLandmark(
+  landmark: FaceLandmark | null | undefined,
+): landmark is FaceLandmark {
+  return (
+    landmark !== null &&
+    landmark !== undefined &&
+    Number.isFinite(landmark.x) &&
+    Number.isFinite(landmark.y) &&
+    Number.isFinite(landmark.z)
+  );
+}
+
 export function getLandmark(index: number, landmarks: FaceLandmark[]): FaceLandmark | null {
-  return landmarks[index] ?? null;
+  const landmark = landmarks[index];
+  return isUsableLandmark(landmark) ? landmark : null;
 }
 
 export function averageLandmarks(

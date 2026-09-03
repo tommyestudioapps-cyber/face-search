@@ -70,16 +70,25 @@ export function calculateAlignmentCrop(
   config: AlignmentCropConfig,
   keyLandmarks: AlignmentLandmarks,
 ): AlignmentCrop {
-  const points = landmarks.map((point) =>
-    transformPointForRotation(
-      { x: point.x * imageWidth, y: point.y * imageHeight },
-      imageWidth,
-      imageHeight,
-      rotatedWidth,
-      rotatedHeight,
-      rotationDegrees,
-    ),
-  );
+  const points = landmarks
+    .filter(
+      (point): point is FaceLandmark =>
+        point !== null &&
+        point !== undefined &&
+        Number.isFinite(point.x) &&
+        Number.isFinite(point.y) &&
+        Number.isFinite(point.z),
+    )
+    .map((point) =>
+      transformPointForRotation(
+        { x: point.x * imageWidth, y: point.y * imageHeight },
+        imageWidth,
+        imageHeight,
+        rotatedWidth,
+        rotatedHeight,
+        rotationDegrees,
+      ),
+    );
   const minX = Math.min(...points.map((point) => point.x));
   const maxX = Math.max(...points.map((point) => point.x));
   const minY = Math.min(...points.map((point) => point.y));
