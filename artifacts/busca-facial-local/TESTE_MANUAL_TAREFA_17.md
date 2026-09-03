@@ -51,6 +51,26 @@ Resultado: **6 testes aprovados, 0 falhas**, incluindo:
 Esses testes usam landmarks sintéticos e confirmam o mapeamento e a geometria
 do alinhamento, mas não substituem a execução do MediaPipe em Android.
 
+## Rechecagem do ambiente para a tarefa 18 — 03/09/2026
+
+Os pré-requisitos foram conferidos novamente neste workspace:
+
+| Verificação | Resultado |
+| --- | --- |
+| `adb` e aparelho Android | `adb` não está disponível; nenhum aparelho detectável |
+| Java/Javac, Android SDK e Gradle | Não disponíveis no ambiente |
+| APK/AAB instalável no workspace | Não encontrado |
+| `static-build/android` | Contém somente `manifest.json`, não um APK |
+| Perfil `preview` | Configurado em `eas.json` com `buildType: apk`, mas sem artefato gerado |
+| Testes `test:face-capture` | 20 aprovados, 0 falhas |
+| `typecheck` | Aprovado |
+
+Assim, a tarefa 18 permanece sem confirmação física: não foi possível instalar
+um APK preview, identificar fabricante/modelo ou versão do Android, nem
+reproduzir as duas capturas em um dispositivo real. Os testes automatizados
+continuam confirmando que os cenários sem nariz e sem boca chegam ao alinhamento
+quando executados com landmarks fornecidos ao pipeline.
+
 ## Reexecução necessária
 
 Quando houver acesso ao dispositivo:
