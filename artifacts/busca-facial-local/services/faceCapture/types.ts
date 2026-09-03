@@ -38,6 +38,29 @@ export interface FaceBoundingBox {
   coordinateSpace: 'normalized' | 'pixels';
 }
 
+export interface NativeFaceResult {
+  faceLandmarks?: FaceLandmark[][];
+}
+
+export interface NativeResultBundle {
+  results?: NativeFaceResult[];
+  inputImageHeight?: number;
+  inputImageWidth?: number;
+  inferenceTime?: number;
+}
+
+export interface NativeDetectedFace {
+  landmarks: FaceLandmark[];
+  boundingBox: FaceBoundingBox;
+}
+
+export interface NativeDetectionResult {
+  faces: NativeDetectedFace[];
+  inputImageHeight: number | null;
+  inputImageWidth: number | null;
+  inferenceTime: number | null;
+}
+
 export type FaceQualityIssue =
   | 'face-too-small'
   | 'face-out-of-frame'
