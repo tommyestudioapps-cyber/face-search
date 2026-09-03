@@ -4,6 +4,7 @@ import { faceCapture } from '@/constants/faceCapture';
 import type {
   DetectedFace,
   FaceBounds,
+  FaceBoundingBox,
   FaceLandmark,
   FaceQuality,
   FaceQualityIssue,
@@ -212,12 +213,13 @@ export function createDetectedFace(
   bounds: FaceBounds,
   rollDegrees: number,
   quality: FaceQuality,
+  boundingBox?: FaceBoundingBox,
 ): DetectedFace {
   return {
     id,
     landmarks,
     bounds,
-    boundingBox: {
+    boundingBox: boundingBox ?? {
       x: bounds.minX,
       y: bounds.minY,
       width: bounds.width,

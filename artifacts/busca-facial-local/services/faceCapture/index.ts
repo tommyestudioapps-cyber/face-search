@@ -3,7 +3,7 @@ import { File } from 'expo-file-system';
 import { faceCapture } from '@/constants/faceCapture';
 import { alignFace } from './alignment';
 import { detectFacesWithMediaPipe } from './nativeAdapter';
-import { createQualitySample, normalizeImage } from './preprocessing';
+import { createAnalysisSample, normalizeImage } from './preprocessing';
 import { createDetectedFace, evaluateFaceQuality } from './quality';
 import {
   FaceCaptureError,
@@ -27,14 +27,12 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
   let qualitySampleUri: string | null = null;
 
   try {
-    const qualitySample = await createQualitySample(normalized.uri);
+    const qualitySample = await createAnalysisSample(normalized.uri);
     qualitySampleUri = qualitySample.uri;
     const result = await detectFacesWithMediaPipe(normalized.uri);
-    const landmarkSets = (result.results ?? []).flatMap(
-      (frame) => frame.faceLandmarks ?? [],
-    );
+    const nativeFaces = result.faces;
 
-    if (landmarkSets.length === 0) {
+    if (nativeFaces.length === 0) {
       throw new FaceCaptureError(
         'no-face',
         'Nenhum rosto foi encontrado na imagem selecionada.',
@@ -42,8 +40,8 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
     }
 
     const faces: DetectedFace[] = [];
-    for (const [id, rawLandmarks] of landmarkSets.entries()) {
-      const landmarks = rawLandmarks as FaceLandmark[];
+    for (const [id, nativeFace] of nativeFaces.entries()) {
+      const landmarks = nativeFace.landmarks as FaceLandmark[];
       const evaluated = await evaluateFaceQuality(
         qualitySampleUri,
         normalized.width,
@@ -58,6 +56,7 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
           evaluated.bounds,
           evaluated.rollDegrees,
           evaluated.quality,
+          nativeFace.boundingBox,
         ),
       );
     }

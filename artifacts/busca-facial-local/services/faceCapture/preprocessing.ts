@@ -1,13 +1,10 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
-import type { FaceCaptureError } from './types';
+import type { FaceCaptureError, NormalizedImage } from './types';
 import { FaceCaptureError as FaceCaptureFailure } from './types';
 import { faceCapture } from '@/constants/faceCapture';
 
-export interface NormalizedImage {
-  uri: string;
-  width: number;
-  height: number;
-  temporaryUris: string[];
+function getPhysicalOrientation(width: number, height: number): NormalizedImage['orientation'] {
+  return height >= width ? 'portrait' : 'landscape-left';
 }
 
 export async function normalizeImage(sourceUri: string): Promise<NormalizedImage> {
@@ -28,6 +25,7 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
         uri: oriented.uri,
         width: oriented.width,
         height: oriented.height,
+        orientation: getPhysicalOrientation(oriented.width, oriented.height),
         temporaryUris,
       };
     }
@@ -54,6 +52,7 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
       uri: resized.uri,
       width: resized.width,
       height: resized.height,
+      orientation: getPhysicalOrientation(resized.width, resized.height),
       temporaryUris,
     };
   } catch (error) {
@@ -62,7 +61,7 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
   }
 }
 
-export async function createQualitySample(normalizedUri: string): Promise<NormalizedImage> {
+export async function createAnalysisSample(normalizedUri: string): Promise<NormalizedImage> {
   try {
     const sample = await manipulateAsync(
       normalizedUri,
@@ -76,6 +75,7 @@ export async function createQualitySample(normalizedUri: string): Promise<Normal
       uri: sample.uri,
       width: sample.width,
       height: sample.height,
+      orientation: getPhysicalOrientation(sample.width, sample.height),
       temporaryUris: [sample.uri],
     };
   } catch (error) {
