@@ -20,7 +20,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layout } from '@/constants/layout';
 import { useColors } from '@/hooks/useColors';
+import { useFaceCapture } from '@/hooks/useFaceCapture';
 import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
+import { FaceCaptureFeedback } from '@/components/FaceCaptureFeedback';
+import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
 import {
   persistLocalIndex,
   readLocalGallery,
@@ -29,6 +32,7 @@ import {
   type LocalPhoto,
   type PhotoMatch,
 } from '@/services/localFaceSearch';
+import type { DetectedFace, FaceCaptureError } from '@/services/faceCapture';
 
 type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results';
 
@@ -379,14 +383,30 @@ function Home({
 
 function SelectPhoto({
   selectedImage,
+  alignedImageUri,
+  faces,
+  selectedFaceId,
+  imageWidth,
+  imageHeight,
+  captureError,
+  captureProcessing,
   onPickLibrary,
   onTakePhoto,
+  onSelectFace,
   onSearch,
   onBack,
 }: {
   selectedImage: string | null;
+  alignedImageUri: string | null;
+  faces: DetectedFace[];
+  selectedFaceId: number | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  captureError: FaceCaptureError | null;
+  captureProcessing: boolean;
   onPickLibrary: () => void;
   onTakePhoto: () => void;
+  onSelectFace: (faceId: number) => void;
   onSearch: () => void;
   onBack: () => void;
 }) {
@@ -420,17 +440,30 @@ function SelectPhoto({
           {selectedImage ? (
             <>
               <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
-              <View style={styles.cropOverlay}>
-                <View style={styles.cropCornerTopLeft} />
-                <View style={styles.cropCornerTopRight} />
-                <View style={styles.cropCornerBottomLeft} />
-                <View style={styles.cropCornerBottomRight} />
-                <View style={styles.cropFaceRing} />
-              </View>
-              <View style={styles.cropHint}>
-                <Feather name="move" size={13} color={colors.foreground} />
-                <Text style={styles.cropHintText}>Ajuste o enquadramento</Text>
-              </View>
+              {faces.length === 0 ? (
+                <>
+                  <View style={styles.cropOverlay}>
+                    <View style={styles.cropCornerTopLeft} />
+                    <View style={styles.cropCornerTopRight} />
+                    <View style={styles.cropCornerBottomLeft} />
+                    <View style={styles.cropCornerBottomRight} />
+                    <View style={styles.cropFaceRing} />
+                  </View>
+                  <View style={styles.cropHint}>
+                    <Feather name="move" size={13} color={colors.foreground} />
+                    <Text style={styles.cropHintText}>Detectando o rosto</Text>
+                  </View>
+                </>
+              ) : null}
+              {imageWidth && imageHeight ? (
+                <FaceSelectionOverlay
+                  faces={faces}
+                  selectedFaceId={selectedFaceId}
+                  imageWidth={imageWidth}
+                  imageHeight={imageHeight}
+                  onSelect={onSelectFace}
+                />
+              ) : null}
             </>
           ) : (
             <View style={styles.emptyCrop}>
@@ -446,6 +479,27 @@ function SelectPhoto({
             </View>
           )}
         </View>
+
+        <FaceCaptureFeedback
+          isProcessing={captureProcessing}
+          error={captureError}
+          faceCount={faces.length}
+          hasAlignedFace={Boolean(alignedImageUri)}
+        />
+
+        {alignedImageUri ? (
+          <View style={[styles.alignedPreview, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.alignedPreviewCopy}>
+              <Text style={[styles.alignedPreviewTitle, { color: colors.foreground }]}>
+                Recorte alinhado
+              </Text>
+              <Text style={[styles.alignedPreviewBody, { color: colors.mutedForeground }]}>
+                Este recorte será usado na próxima etapa.
+              </Text>
+            </View>
+            <Image source={{ uri: alignedImageUri }} style={styles.alignedPreviewImage} />
+          </View>
+        ) : null}
 
         <Text style={[styles.helperText, { color: colors.mutedForeground }]}>
           Para melhores resultados, use uma foto nítida e com boa iluminação.
@@ -479,10 +533,10 @@ function SelectPhoto({
         </View>
 
         <PrimaryButton
-          label="Buscar este rosto na galeria"
+          label={alignedImageUri ? 'Buscar este rosto na galeria' : 'Aguardando rosto válido'}
           icon="search"
           onPress={onSearch}
-          disabled={!selectedImage}
+          disabled={!selectedImage || !alignedImageUri || captureProcessing}
           testID="search-face"
         />
         <View style={styles.localNotice}>
@@ -705,6 +759,19 @@ export default function HomeScreen() {
   const [rewardCountdown, setRewardCountdown] = useState(3);
   const [progress, setProgress] = useState(0);
   const colors = useColors();
+  const {
+    faces,
+    selectedFaceId,
+    setSelectedFaceId,
+    alignedFace,
+    isProcessing: captureProcessing,
+    error: captureError,
+    analyze: analyzeFace,
+    align: alignFace,
+    reset: resetCapture,
+    imageWidth,
+    imageHeight,
+  } = useFaceCapture();
 
   useEffect(() => {
     void AsyncStorage.getItem('visage.onboarding.complete').then((value) => {
@@ -767,7 +834,10 @@ export default function HomeScreen() {
       quality: 0.9,
     });
     if (!selection.canceled && selection.assets[0]?.uri) {
-      setSelectedImage(selection.assets[0].uri);
+      const uri = selection.assets[0].uri;
+      await resetCapture();
+      setSelectedImage(uri);
+      void analyzeFace(uri);
     }
   };
 
@@ -782,7 +852,10 @@ export default function HomeScreen() {
       quality: 0.9,
     });
     if (!selection.canceled && selection.assets[0]?.uri) {
-      setSelectedImage(selection.assets[0].uri);
+      const uri = selection.assets[0].uri;
+      await resetCapture();
+      setSelectedImage(uri);
+      void analyzeFace(uri);
     }
   };
 
@@ -791,6 +864,12 @@ export default function HomeScreen() {
   const beginSearch = async () => {
     if (!selectedImage) {
       return;
+    }
+    if (!alignedFace) {
+      const aligned = await alignFace();
+      if (!aligned) {
+        return;
+      }
     }
     const network = await NetInfo.fetch();
     if (network.isConnected === false) {
@@ -817,6 +896,7 @@ export default function HomeScreen() {
   };
 
   const goHome = () => {
+    void resetCapture();
     setSelectedImage(null);
     setScreen('home');
   };
@@ -829,8 +909,19 @@ export default function HomeScreen() {
         return (
           <SelectPhoto
             selectedImage={selectedImage}
+            alignedImageUri={alignedFace?.uri ?? null}
+            faces={faces}
+            selectedFaceId={selectedFaceId}
+            imageWidth={imageWidth}
+            imageHeight={imageHeight}
+            captureError={captureError}
+            captureProcessing={captureProcessing}
             onPickLibrary={pickFromLibrary}
             onTakePhoto={takePhoto}
+            onSelectFace={(faceId) => {
+              setSelectedFaceId(faceId);
+              void alignFace(faceId);
+            }}
             onSearch={beginSearch}
             onBack={() => setScreen('home')}
           />
@@ -843,7 +934,19 @@ export default function HomeScreen() {
       default:
         return <Home onSelect={openSearch} onSettings={() => undefined} />;
     }
-  }, [screen, selectedImage, progress, results]);
+  }, [
+    screen,
+    selectedImage,
+    alignedFace?.uri,
+    faces,
+    selectedFaceId,
+    imageWidth,
+    imageHeight,
+    captureError,
+    captureProcessing,
+    progress,
+    results,
+  ]);
 
   return (
     <>
@@ -949,6 +1052,11 @@ const styles = StyleSheet.create({
   emptyCropTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15, textAlign: 'center' },
   emptyCropBody: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 7 },
   helperText: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18, textAlign: 'center', paddingHorizontal: 23, marginTop: 14 },
+  alignedPreview: { minHeight: 86, borderRadius: 17, borderWidth: 1, padding: 11, marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 11 },
+  alignedPreviewCopy: { flex: 1 },
+  alignedPreviewTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
+  alignedPreviewBody: { fontFamily: 'Inter_400Regular', fontSize: 10, lineHeight: 14, marginTop: 4 },
+  alignedPreviewImage: { width: 64, height: 64, borderRadius: 14, resizeMode: 'cover' },
   sourceButtons: { flexDirection: 'row', gap: 12, marginTop: 25, marginBottom: 17 },
   sourceButton: { flex: 1, minHeight: 52, borderRadius: 16, borderWidth: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   sourceButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },

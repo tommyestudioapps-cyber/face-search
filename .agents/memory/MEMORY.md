@@ -1,0 +1,1 @@
+- [Captura facial nativa](face-capture-native.md) — o modelo precisa entrar nos assets Android e a resposta do MediaPipe agrupa vários rostos dentro de um único frame.

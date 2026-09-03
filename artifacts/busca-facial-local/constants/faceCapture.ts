@@ -1,0 +1,18 @@
+export const faceCapture = {
+  modelAssetName: 'face-landmarker.task',
+  maxInputDimension: 1600,
+  qualitySampleDimension: 256,
+  alignedFaceSize: 224,
+  maxFaces: 10,
+  minDetectionConfidence: 0.6,
+  minPresenceConfidence: 0.6,
+  minTrackingConfidence: 0.5,
+  minFaceWidthRatio: 0.08,
+  minFaceHeightRatio: 0.08,
+  maxRollDegrees: 35,
+  minBrightness: 35,
+  maxBrightness: 225,
+  minSharpness: 8,
+  cropWidthMultiplier: 1.8,
+  cropHeightMultiplier: 1.55,
+} as const;

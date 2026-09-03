@@ -31,7 +31,14 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Permita que o Busca Facial Local use a câmera para capturar um rosto."
+        }
+      ],
+      "./plugins/withFaceLandmarkerModel"
     ],
     "experiments": {
       "typedRoutes": true,
