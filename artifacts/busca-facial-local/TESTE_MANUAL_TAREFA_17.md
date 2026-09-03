@@ -86,3 +86,24 @@ Quando houver acesso ao dispositivo:
 5. Confirmar que a UI não permanece em `landmarks-incomplete` e chega a
    `aligning` ou `completed`.
 6. Anexar o resultado real a este registro.
+
+## Rechecagem da tarefa 22 — 03/09/2026
+
+A verificação foi repetida neste workspace antes de tentar confirmar as duas
+capturas reais:
+
+| Verificação | Resultado |
+| --- | --- |
+| `adb` | Não instalado/disponível |
+| Dispositivo Android detectável | Nenhum |
+| EAS CLI no shell do workspace | Não disponível |
+| APK local para instalação | Não encontrado |
+| Workflow Expo | Em execução, mas somente como preview; não é um APK nativo |
+| Captura real sem nariz | Não reproduzida |
+| Captura real sem boca | Não reproduzida |
+| Estado `aligning`/`completed` em execução nativa | Não observado |
+
+Não foi possível instalar um APK, identificar fabricante/modelo ou versão do
+Android, nem observar o MediaPipe em um aparelho real. Esta tarefa permanece
+bloqueada até a tarefa de desbloqueio do APK preview fornecer um artefato
+instalável e um aparelho/emulador Android acessível.
