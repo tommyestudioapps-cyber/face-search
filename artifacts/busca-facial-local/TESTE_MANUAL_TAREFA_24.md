@@ -46,9 +46,9 @@ Executadas no pacote `@workspace/busca-facial-local`:
 
 | Verificação | Resultado |
 | --- | --- |
-| `test:face-capture` | 22 aprovados, 0 falhas |
+| `test:face-capture` | 25 aprovados, 0 falhas |
 | `test:face-overlay` | 2 aprovados, 0 falhas |
-| `test:face-search` | 5 aprovados, 0 falhas |
+| `test:face-search` | 6 aprovados, 0 falhas |
 | `typecheck` | Aprovado |
 | Inspeção SQL da limpeza/estatísticas | 6 verificações aprovadas |
 | Workflow Expo | Metro iniciado sem erros; preview de development build |
