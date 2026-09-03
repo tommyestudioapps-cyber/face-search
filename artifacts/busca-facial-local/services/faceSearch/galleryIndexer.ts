@@ -3,10 +3,10 @@ import * as MediaLibrary from 'expo-media-library';
 import { faceSearch } from '@/constants/faceSearch';
 import {
   alignSelectedFace,
+  cleanupTempFiles,
   detectFaces,
   getSelectableFaces,
   releaseFaceDetectionSession,
-  releaseTemporaryUris,
 } from '../faceCapture';
 import {
   FaceCaptureError,
@@ -232,7 +232,7 @@ async function indexAsset(
           }
         } finally {
           if (alignedFace) {
-            await releaseTemporaryUris([alignedFace.uri]);
+            await cleanupTempFiles([alignedFace.uri]);
           }
         }
       }

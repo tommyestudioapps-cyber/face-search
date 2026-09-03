@@ -3,6 +3,7 @@ import test from 'node:test';
 import * as jpeg from 'jpeg-js';
 import { getFaceOverlayLayout } from '../../../components/faceOverlayLayout.ts';
 import {
+  getExifTransform,
   getNormalizedImageDimensions,
   normalizeFaceBoundsForExif,
   readJpegMetadata,
@@ -27,6 +28,17 @@ function withExifOrientation(jpegBytes, orientation) {
   payload.copy(app1, 4);
   return Buffer.concat([jpegBytes.subarray(0, 2), app1, jpegBytes.subarray(2)]);
 }
+
+test('mapeia as oito orientações EXIF para operações explícitas de pixels', () => {
+  assert.deepEqual(getExifTransform(1), { rotationDegrees: 0, flips: [] });
+  assert.deepEqual(getExifTransform(2), { rotationDegrees: 0, flips: ['horizontal'] });
+  assert.deepEqual(getExifTransform(3), { rotationDegrees: 180, flips: [] });
+  assert.deepEqual(getExifTransform(4), { rotationDegrees: 0, flips: ['vertical'] });
+  assert.deepEqual(getExifTransform(5), { rotationDegrees: 270, flips: ['horizontal'] });
+  assert.deepEqual(getExifTransform(6), { rotationDegrees: 90, flips: [] });
+  assert.deepEqual(getExifTransform(7), { rotationDegrees: 90, flips: ['horizontal'] });
+  assert.deepEqual(getExifTransform(8), { rotationDegrees: 270, flips: [] });
+});
 
 function createImageFixture(width, height, orientation) {
   const data = Buffer.alloc(width * height * 4);

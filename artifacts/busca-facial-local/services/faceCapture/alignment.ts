@@ -144,14 +144,22 @@ function getCrop(
     1,
     maxSide,
   );
-  const originX = clamp(anchor.x - side / 2, 0, rotatedWidth - side);
-  const originY = clamp(anchor.y - side / 2, 0, rotatedHeight - side);
+  // Quantize the crop once, after clamping its size. Using the same integer
+  // side for both axes prevents a one-pixel skew at image edges and keeps the
+  // final 224x224 face crop proportional for tilted faces.
+  const cropSide = Math.max(1, Math.floor(side));
+  const originX = Math.floor(
+    clamp(anchor.x - cropSide / 2, 0, rotatedWidth - cropSide),
+  );
+  const originY = Math.floor(
+    clamp(anchor.y - cropSide / 2, 0, rotatedHeight - cropSide),
+  );
 
   return {
-    originX: Math.floor(originX),
-    originY: Math.floor(originY),
-    width: Math.max(1, Math.floor(Math.min(side, rotatedWidth - Math.floor(originX)))),
-    height: Math.max(1, Math.floor(Math.min(side, rotatedHeight - Math.floor(originY)))),
+    originX,
+    originY,
+    width: cropSide,
+    height: cropSide,
   };
 }
 

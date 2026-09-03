@@ -1,9 +1,15 @@
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import {
+  FlipType,
+  manipulateAsync,
+  SaveFormat,
+} from 'expo-image-manipulator';
+import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import type { FaceCaptureError, NormalizedImage } from './types';
 import { FaceCaptureError as FaceCaptureFailure } from './types';
 import { faceCapture } from '@/constants/faceCapture';
 import {
+  getExifTransform,
   getNormalizedImageDimensions,
   getPhysicalOrientation,
   readJpegMetadata,
@@ -27,12 +33,37 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
 
   try {
     const sourceMetadata = await readSourceJpegMetadata(sourceUri);
-    // Rendering a new bitmap is intentional: Android and iOS then hand the
-    // detector pixels whose visual orientation no longer depends on EXIF.
-    const oriented = await manipulateAsync(sourceUri, [{ rotate: 0 }], {
+    const exifOrientation = sourceMetadata?.orientation ?? 1;
+    const exifTransform = getExifTransform(exifOrientation);
+    const transformActions = [
+      ...exifTransform.flips.map((flip) => ({
+        flip:
+          flip === 'horizontal' ? FlipType.Horizontal : FlipType.Vertical,
+      })),
+      ...(exifTransform.rotationDegrees
+        ? [{ rotate: exifTransform.rotationDegrees }]
+        : []),
+    ];
+
+    // Always render a new bitmap. This bakes EXIF rotation and mirroring into
+    // pixels before MediaPipe sees them, including Android camera/gallery
+    // providers that expose content:// URIs with inconsistent EXIF handling.
+    const oriented = await manipulateAsync(
+      sourceUri,
+      transformActions.length > 0 ? transformActions : [{ rotate: 0 }],
+      {
       compress: 0.92,
       format: SaveFormat.JPEG,
-    });
+      },
+    );
+    if (__DEV__) {
+      console.log('[FaceCapture] EXIF orientation applied', {
+        platform: Platform.OS,
+        exifOrientation,
+        rotationDegrees: exifTransform.rotationDegrees,
+        flips: exifTransform.flips,
+      });
+    }
     if (oriented.width <= 0 || oriented.height <= 0) {
       throw new FaceCaptureFailure('invalid-image', 'A imagem normalizada não possui dimensões válidas.');
     }

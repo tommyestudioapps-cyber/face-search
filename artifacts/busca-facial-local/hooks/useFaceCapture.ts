@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   alignSelectedFace,
+  cleanupTempFiles,
   detectFaces,
   getFaceQualityError,
   getSelectableFaces,
   releaseFaceDetectionSession,
-  releaseTemporaryUris,
   type AlignedFace,
   type DetectedFace,
   type FaceCaptureError,
@@ -33,9 +33,7 @@ export function useFaceCapture() {
     const previous = alignedFaceRef.current;
     alignedFaceRef.current = null;
     setAlignedFace(null);
-    if (previous) {
-      await releaseTemporaryUris([previous.uri]);
-    }
+    if (previous) await cleanupTempFiles([previous.uri]);
   }, []);
 
   const setAlignedFaceResult = useCallback(
@@ -44,7 +42,7 @@ export function useFaceCapture() {
       alignedFaceRef.current = next;
       setAlignedFace(next);
       if (previous && previous.uri !== next?.uri) {
-        await releaseTemporaryUris([previous.uri]);
+        await cleanupTempFiles([previous.uri]);
       }
     },
     [],
@@ -158,7 +156,7 @@ export function useFaceCapture() {
     try {
       const result = await alignSelectedFace(sessionRef.current, faceId);
       if (requestId.current !== currentRequest) {
-        await releaseTemporaryUris([result.uri]);
+        await cleanupTempFiles([result.uri]);
         return null;
       }
       await setAlignedFaceResult(result);
@@ -181,7 +179,7 @@ export function useFaceCapture() {
     return () => {
       void releaseFaceDetectionSession(sessionRef.current);
       if (alignedFaceRef.current) {
-        void releaseTemporaryUris([alignedFaceRef.current.uri]);
+        void cleanupTempFiles([alignedFaceRef.current.uri]);
       }
     };
   }, []);

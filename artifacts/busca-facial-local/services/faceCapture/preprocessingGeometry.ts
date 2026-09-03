@@ -13,8 +13,45 @@ export interface ImageDimensions {
   height: number;
 }
 
+export type ExifFlip = 'horizontal' | 'vertical';
+
+export interface ExifTransform {
+  rotationDegrees: 0 | 90 | 180 | 270;
+  flips: ExifFlip[];
+}
+
 function isExifOrientation(value: number): value is ExifOrientation {
   return Number.isInteger(value) && value >= 1 && value <= 8;
+}
+
+/**
+ * Returns the pixel operations needed to bake the EXIF orientation into a
+ * newly rendered bitmap. Mirrored orientations are common with front-facing
+ * Android cameras; keeping them explicit avoids device-specific decoder
+ * behavior across Samsung, Xiaomi and Motorola gallery providers.
+ */
+export function getExifTransform(
+  orientation: ExifOrientation = 1,
+): ExifTransform {
+  switch (orientation) {
+    case 2:
+      return { rotationDegrees: 0, flips: ['horizontal'] };
+    case 3:
+      return { rotationDegrees: 180, flips: [] };
+    case 4:
+      return { rotationDegrees: 0, flips: ['vertical'] };
+    case 5:
+      return { rotationDegrees: 270, flips: ['horizontal'] };
+    case 6:
+      return { rotationDegrees: 90, flips: [] };
+    case 7:
+      return { rotationDegrees: 90, flips: ['horizontal'] };
+    case 8:
+      return { rotationDegrees: 270, flips: [] };
+    case 1:
+    default:
+      return { rotationDegrees: 0, flips: [] };
+  }
 }
 
 function readUint16(bytes: Uint8Array, offset: number, littleEndian: boolean): number {

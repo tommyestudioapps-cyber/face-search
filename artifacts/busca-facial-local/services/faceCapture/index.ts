@@ -71,7 +71,10 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
       temporaryUris: [...normalized.temporaryUris],
     };
   } catch (error) {
-    await releaseTemporaryUris([...normalized.temporaryUris, ...(qualitySampleUri ? [qualitySampleUri] : [])]);
+    await cleanupTempFiles([
+      ...normalized.temporaryUris,
+      ...(qualitySampleUri ? [qualitySampleUri] : []),
+    ]);
     if (error instanceof FaceCaptureError) {
       throw error;
     }
@@ -79,7 +82,7 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
     throw new FaceCaptureError('processing-failed', message);
   } finally {
     if (qualitySampleUri) {
-      await releaseTemporaryUris([qualitySampleUri]);
+      await cleanupTempFiles([qualitySampleUri]);
     }
   }
 }
@@ -144,10 +147,10 @@ export async function releaseFaceDetectionSession(
   if (!session) {
     return;
   }
-  await releaseTemporaryUris(session.temporaryUris);
+  await cleanupTempFiles(session.temporaryUris);
 }
 
-export async function releaseTemporaryUris(uris: string[]): Promise<void> {
+export async function cleanupTempFiles(uris: string[]): Promise<void> {
   const uniqueUris = [...new Set(uris)].filter(Boolean);
   await Promise.all(
     uniqueUris.map(async (uri) => {
@@ -158,6 +161,14 @@ export async function releaseTemporaryUris(uris: string[]): Promise<void> {
       }
     }),
   );
+}
+
+/**
+ * Backwards-compatible name for callers that release a detection session.
+ * All temporary-file deletion is implemented by cleanupTempFiles.
+ */
+export async function releaseTemporaryUris(uris: string[]): Promise<void> {
+  await cleanupTempFiles(uris);
 }
 
 export { faceCapture };
