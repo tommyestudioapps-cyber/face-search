@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   averageLandmarks,
+  calculateFacePose,
   getAlignmentLandmarks,
   getLandmark,
+  isFacePoseWithinLimits,
 } from '../landmarkGeometry.ts';
 
 function point(x, y, z = 0) {
@@ -60,4 +62,63 @@ test('ignora landmarks com coordenadas não finitas', () => {
 
   assert.equal(getLandmark(1, landmarks), null);
   assert.equal(averageLandmarks([1], landmarks), null);
+});
+
+test('calcula uma pose frontal estável com os landmarks disponíveis', () => {
+  const pose = calculateFacePose(createFace());
+
+  assert.equal(pose.rollDegrees, 0);
+  assert.ok(pose.yawDegrees !== null);
+  assert.ok(Math.abs(pose.yawDegrees) < 10);
+  assert.ok(pose.pitchDegrees !== null);
+  assert.ok(Math.abs(pose.pitchDegrees) < 10);
+});
+
+test('não rejeita a pose quando nariz ou boca são opcionais', () => {
+  const withoutNose = createFace();
+  delete withoutNose[1];
+  const withoutMouth = createFace();
+  delete withoutMouth[61];
+  delete withoutMouth[291];
+  const limits = {
+    maxYawDegrees: 35,
+    maxPitchDegrees: 30,
+    maxRollDegrees: 35,
+  };
+
+  const noseMissingPose = calculateFacePose(withoutNose);
+  const mouthMissingPose = calculateFacePose(withoutMouth);
+
+  assert.equal(noseMissingPose.yawDegrees, null);
+  assert.equal(noseMissingPose.pitchDegrees, null);
+  assert.equal(isFacePoseWithinLimits(noseMissingPose, limits), true);
+  assert.equal(mouthMissingPose.pitchDegrees, null);
+  assert.equal(isFacePoseWithinLimits(mouthMissingPose, limits), true);
+});
+
+test('aplica os limites de yaw, pitch e roll inclusive nos extremos', () => {
+  const limits = {
+    maxYawDegrees: 35,
+    maxPitchDegrees: 30,
+    maxRollDegrees: 35,
+  };
+  const atLimits = {
+    yawDegrees: 35,
+    pitchDegrees: -30,
+    rollDegrees: -35,
+  };
+
+  assert.equal(isFacePoseWithinLimits(atLimits, limits), true);
+  assert.equal(
+    isFacePoseWithinLimits({ ...atLimits, yawDegrees: 35.01 }, limits),
+    false,
+  );
+  assert.equal(
+    isFacePoseWithinLimits({ ...atLimits, pitchDegrees: -30.01 }, limits),
+    false,
+  );
+  assert.equal(
+    isFacePoseWithinLimits({ ...atLimits, rollDegrees: -35.01 }, limits),
+    false,
+  );
 });

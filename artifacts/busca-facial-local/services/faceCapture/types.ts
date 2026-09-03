@@ -82,6 +82,8 @@ export interface FaceQuality {
   confidenceAccepted: boolean;
   brightness: number | null;
   sharpness: number | null;
+  yawDegrees: number | null;
+  pitchDegrees: number | null;
   rollDegrees: number;
   reason: 'accepted' | FaceQualityIssue;
   issues: FaceQualityIssue[];

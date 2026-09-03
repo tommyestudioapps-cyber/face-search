@@ -12,9 +12,12 @@ import type {
 import { FaceCaptureError } from './types';
 import {
   averageLandmarks,
+  calculateFacePose,
+  calculateRollDegrees,
   getAlignmentLandmarks,
   getLandmark,
   hasRequiredLandmarks,
+  isFacePoseWithinLimits,
 } from './landmarkGeometry';
 
 interface DecodedImage {
@@ -25,20 +28,32 @@ interface DecodedImage {
 
 export {
   averageLandmarks,
+  calculateFacePose,
+  calculateRollDegrees,
   getAlignmentLandmarks,
   getLandmark,
   hasRequiredLandmarks,
+  isFacePoseWithinLimits,
 } from './landmarkGeometry';
 
 export function calculateFaceBounds(landmarks: FaceLandmark[]): FaceBounds {
-  if (landmarks.length === 0) {
+  const usableLandmarks = landmarks.filter(
+    (landmark): landmark is FaceLandmark =>
+      landmark !== null &&
+      landmark !== undefined &&
+      Number.isFinite(landmark.x) &&
+      Number.isFinite(landmark.y) &&
+      Number.isFinite(landmark.z),
+  );
+
+  if (usableLandmarks.length === 0) {
     return { minX: 0, minY: 0, maxX: 0, maxY: 0, width: 0, height: 0 };
   }
 
-  const minX = Math.min(...landmarks.map((point) => point.x));
-  const minY = Math.min(...landmarks.map((point) => point.y));
-  const maxX = Math.max(...landmarks.map((point) => point.x));
-  const maxY = Math.max(...landmarks.map((point) => point.y));
+  const minX = Math.min(...usableLandmarks.map((point) => point.x));
+  const minY = Math.min(...usableLandmarks.map((point) => point.y));
+  const maxX = Math.max(...usableLandmarks.map((point) => point.x));
+  const maxY = Math.max(...usableLandmarks.map((point) => point.y));
 
   return {
     minX,
@@ -48,14 +63,6 @@ export function calculateFaceBounds(landmarks: FaceLandmark[]): FaceBounds {
     width: Math.max(0, maxX - minX),
     height: Math.max(0, maxY - minY),
   };
-}
-
-export function calculateRollDegrees(landmarks: FaceLandmark[]): number {
-  const { leftEye, rightEye } = getAlignmentLandmarks(landmarks);
-  if (!leftEye || !rightEye) {
-    return 0;
-  }
-  return (Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
 }
 
 async function decodeImage(uri: string): Promise<DecodedImage> {
@@ -118,9 +125,16 @@ export async function evaluateFaceQuality(
   landmarks: FaceLandmark[],
   detectorConfidenceAccepted: boolean,
   confidence: number | null = null,
-): Promise<{ bounds: FaceBounds; rollDegrees: number; quality: FaceQuality }> {
+): Promise<{
+  bounds: FaceBounds;
+  yawDegrees: number | null;
+  pitchDegrees: number | null;
+  rollDegrees: number;
+  quality: FaceQuality;
+}> {
   const bounds = calculateFaceBounds(landmarks);
-  const rollDegrees = calculateRollDegrees(landmarks);
+  const pose = calculateFacePose(landmarks);
+  const { rollDegrees } = pose;
   const landmarksAccepted = hasRequiredLandmarks(landmarks, faceCapture.minLandmarkCount);
   const faceInFrameAccepted =
     bounds.minX >= 0 && bounds.minY >= 0 && bounds.maxX <= 1 && bounds.maxY <= 1;
@@ -128,7 +142,7 @@ export async function evaluateFaceQuality(
     bounds.width >= faceCapture.minFaceWidthRatio &&
     bounds.height >= faceCapture.minFaceHeightRatio &&
     bounds.width * bounds.height >= faceCapture.minFaceAreaRatio;
-  const rotationAccepted = Math.abs(rollDegrees) <= faceCapture.maxRollDegrees;
+  const rotationAccepted = isFacePoseWithinLimits(pose, faceCapture);
   const confidenceAccepted =
     confidence === null
       ? detectorConfidenceAccepted
@@ -157,6 +171,8 @@ export async function evaluateFaceQuality(
 
   return {
     bounds,
+    yawDegrees: pose.yawDegrees,
+    pitchDegrees: pose.pitchDegrees,
     rollDegrees,
     quality: {
       accepted:
@@ -176,6 +192,8 @@ export async function evaluateFaceQuality(
       confidenceAccepted,
       brightness: pixels.brightness,
       sharpness: pixels.sharpness,
+      yawDegrees: pose.yawDegrees,
+      pitchDegrees: pose.pitchDegrees,
       rollDegrees,
       reason,
       issues,
