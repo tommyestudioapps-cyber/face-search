@@ -1,0 +1,105 @@
+import {
+  faceSearchRepository,
+} from './repository';
+import {
+  indexGallery as runGalleryIndex,
+  startGalleryIndex as startGalleryIndexTask,
+  type GalleryIndexOptions,
+  type GalleryIndexResult,
+  type GalleryIndexTask,
+} from './galleryIndexer';
+import {
+  loadRecognitionModel,
+  releaseRecognitionModel,
+} from './model';
+import { searchAlignedFace } from './search';
+import type {
+  FaceIndexProgress,
+  FaceSearchSummary,
+  IndexedPhoto,
+} from './types';
+import type { AlignedFace } from '../faceCapture/types';
+
+let latestProgress: FaceIndexProgress = {
+  status: 'idle',
+  processedAssets: 0,
+  totalAssets: null,
+  indexedFaces: 0,
+  skippedAssets: 0,
+  currentAssetId: null,
+  error: null,
+};
+
+const progressListeners = new Set<(progress: FaceIndexProgress) => void>();
+
+function publishProgress(progress: FaceIndexProgress): void {
+  latestProgress = progress;
+  for (const listener of progressListeners) {
+    listener(progress);
+  }
+}
+
+function withProgress(
+  options: GalleryIndexOptions = {},
+): GalleryIndexOptions {
+  return {
+    ...options,
+    onProgress: (progress) => {
+      publishProgress(progress);
+      options.onProgress?.(progress);
+    },
+  };
+}
+
+export async function initializeFaceSearch(): Promise<void> {
+  await faceSearchRepository.initialize();
+  await loadRecognitionModel();
+}
+
+export async function disposeFaceSearch(): Promise<void> {
+  releaseRecognitionModel();
+  await faceSearchRepository.close();
+}
+
+export function getFaceIndexProgress(): FaceIndexProgress {
+  return latestProgress;
+}
+
+export function subscribeToFaceIndexProgress(
+  listener: (progress: FaceIndexProgress) => void,
+): () => void {
+  progressListeners.add(listener);
+  listener(latestProgress);
+  return () => {
+    progressListeners.delete(listener);
+  };
+}
+
+export function startGalleryIndexing(
+  options: Omit<GalleryIndexOptions, 'onProgress'> & {
+    onProgress?: GalleryIndexOptions['onProgress'];
+  } = {},
+): GalleryIndexTask {
+  return startGalleryIndexTask(withProgress(options));
+}
+
+export async function indexGallery(
+  options: GalleryIndexOptions = {},
+): Promise<GalleryIndexResult> {
+  return runGalleryIndex(withProgress(options));
+}
+
+export async function searchFace(
+  alignedFace: AlignedFace,
+): Promise<FaceSearchSummary> {
+  return searchAlignedFace(alignedFace);
+}
+
+export async function readIndexedPhotos(): Promise<IndexedPhoto[]> {
+  await faceSearchRepository.initialize();
+  return faceSearchRepository.getIndexedPhotos();
+}
+
+export * from './types';
+export * from './galleryIndexer';
+export { searchAlignedFace };

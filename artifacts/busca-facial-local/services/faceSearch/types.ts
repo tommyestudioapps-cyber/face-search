@@ -60,6 +60,8 @@ export type FaceMatchClassification = 'approved' | 'review' | 'rejected';
 export interface FaceSearchResult {
   assetId: string;
   uri: string;
+  filename: string | null;
+  creationTime: number | null;
   faceId: string;
   faceIndex: number;
   similarity: number;
