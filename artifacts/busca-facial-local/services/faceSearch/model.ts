@@ -10,6 +10,7 @@ import {
   type FaceSearchInputTensor,
   type FaceSearchModelMetadata,
 } from './types';
+import { normalizeL2 } from './searchMath';
 
 declare const require: (moduleName: string) => number;
 
@@ -115,30 +116,14 @@ export async function loadRecognitionModel(): Promise<TfliteModel> {
 }
 
 function normalizeEmbedding(values: Float32Array): Float32Array {
-  let squaredNorm = 0;
-  for (const value of values) {
-    if (!Number.isFinite(value)) {
-      throw new FaceRecognitionError(
-        'invalid-output',
-        'O modelo produziu um embedding inválido.',
-      );
-    }
-    squaredNorm += value * value;
-  }
-
-  const norm = Math.sqrt(squaredNorm);
-  if (!Number.isFinite(norm) || norm <= Number.EPSILON) {
+  try {
+    return normalizeL2(values);
+  } catch {
     throw new FaceRecognitionError(
       'invalid-output',
-      'O modelo produziu um embedding sem norma válida.',
+      'O modelo produziu um embedding inválido ou sem norma válida.',
     );
   }
-
-  const normalized = new Float32Array(values.length);
-  for (let index = 0; index < values.length; index += 1) {
-    normalized[index] = values[index] / norm;
-  }
-  return normalized;
 }
 
 export async function runFaceEmbedding(
