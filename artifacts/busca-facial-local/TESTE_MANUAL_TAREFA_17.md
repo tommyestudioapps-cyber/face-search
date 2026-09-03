@@ -6,7 +6,7 @@ Confirmar em um APK Android com o perfil `preview` que uma captura real sem
 nariz e outra sem boca não são rejeitadas como `landmarks-incomplete` e chegam
 ao estado `aligning` ou `completed`.
 
-## Resultado desta execução
+## Resultado desta execução — 03/09/2026
 
 **Não reproduzível neste workspace.** A validação física não foi executada e,
 portanto, não há confirmação nativa do comportamento no aparelho.
@@ -29,6 +29,9 @@ portanto, não há confirmação nativa do comportamento no aparelho.
 - `adb` não está instalado/disponível.
 - Java, `javac`, Android SDK (`sdkmanager`/`avdmanager`) e Gradle não estão
   disponíveis para gerar ou instalar um APK localmente.
+- A autenticação EAS foi tentada com `pnpm dlx eas-cli@latest whoami`, mas o
+  serviço respondeu `The bearer token is invalid`; por isso não foi possível
+  iniciar um build remoto com o perfil `preview`.
 - Nenhum workflow móvel estava executando uma instalação nativa; o preview do
   Expo não substitui um APK com os módulos nativos de captura facial.
 
@@ -51,7 +54,7 @@ Resultado: **6 testes aprovados, 0 falhas**, incluindo:
 Esses testes usam landmarks sintéticos e confirmam o mapeamento e a geometria
 do alinhamento, mas não substituem a execução do MediaPipe em Android.
 
-## Rechecagem do ambiente para a tarefa 18 — 03/09/2026
+## Rechecagem do ambiente para a tarefa 20 — 03/09/2026
 
 Os pré-requisitos foram conferidos novamente neste workspace:
 
@@ -62,10 +65,11 @@ Os pré-requisitos foram conferidos novamente neste workspace:
 | APK/AAB instalável no workspace | Não encontrado |
 | `static-build/android` | Contém somente `manifest.json`, não um APK |
 | Perfil `preview` | Configurado em `eas.json` com `buildType: apk`, mas sem artefato gerado |
-| Testes `test:face-capture` | 20 aprovados, 0 falhas |
+| Autenticação EAS | Falhou: bearer token inválido |
+| Testes `test:face-capture` | 22 aprovados, 0 falhas |
 | `typecheck` | Aprovado |
 
-Assim, a tarefa 18 permanece sem confirmação física: não foi possível instalar
+Assim, a tarefa 20 permanece sem confirmação física: não foi possível instalar
 um APK preview, identificar fabricante/modelo ou versão do Android, nem
 reproduzir as duas capturas em um dispositivo real. Os testes automatizados
 continuam confirmando que os cenários sem nariz e sem boca chegam ao alinhamento
