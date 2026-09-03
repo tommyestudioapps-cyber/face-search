@@ -38,7 +38,6 @@ function rotatedDimensions(width: number, height: number, degrees: number) {
 }
 
 function getCrop(
-  face: DetectedFace,
   landmarks: FaceLandmark[],
   imageWidth: number,
   imageHeight: number,
@@ -62,19 +61,91 @@ function getCrop(
   const maxY = Math.max(...points.map((point) => point.y));
   const faceWidth = Math.max(1, maxX - minX);
   const faceHeight = Math.max(1, maxY - minY);
+  const keyLandmarks = getAlignmentLandmarks(landmarks);
+  const transformedKeyLandmarks = {
+    leftEye: keyLandmarks.leftEye
+      ? rotatePoint(
+          { x: keyLandmarks.leftEye.x * imageWidth, y: keyLandmarks.leftEye.y * imageHeight },
+          imageWidth,
+          imageHeight,
+          rotatedWidth,
+          rotatedHeight,
+          rotationDegrees,
+        )
+      : null,
+    rightEye: keyLandmarks.rightEye
+      ? rotatePoint(
+          { x: keyLandmarks.rightEye.x * imageWidth, y: keyLandmarks.rightEye.y * imageHeight },
+          imageWidth,
+          imageHeight,
+          rotatedWidth,
+          rotatedHeight,
+          rotationDegrees,
+        )
+      : null,
+    nose: keyLandmarks.nose
+      ? rotatePoint(
+          { x: keyLandmarks.nose.x * imageWidth, y: keyLandmarks.nose.y * imageHeight },
+          imageWidth,
+          imageHeight,
+          rotatedWidth,
+          rotatedHeight,
+          rotationDegrees,
+        )
+      : null,
+    mouth: keyLandmarks.mouth
+      ? rotatePoint(
+          { x: keyLandmarks.mouth.x * imageWidth, y: keyLandmarks.mouth.y * imageHeight },
+          imageWidth,
+          imageHeight,
+          rotatedWidth,
+          rotatedHeight,
+          rotationDegrees,
+        )
+      : null,
+  };
+  const eyeDistance =
+    transformedKeyLandmarks.leftEye && transformedKeyLandmarks.rightEye
+      ? Math.hypot(
+          transformedKeyLandmarks.rightEye.x - transformedKeyLandmarks.leftEye.x,
+          transformedKeyLandmarks.rightEye.y - transformedKeyLandmarks.leftEye.y,
+        )
+      : 0;
+  const anchorPoints = [
+    transformedKeyLandmarks.leftEye && transformedKeyLandmarks.rightEye
+      ? {
+          x: (transformedKeyLandmarks.leftEye.x + transformedKeyLandmarks.rightEye.x) / 2,
+          y: (transformedKeyLandmarks.leftEye.y + transformedKeyLandmarks.rightEye.y) / 2,
+          weight: 0.35,
+        }
+      : null,
+    transformedKeyLandmarks.nose
+      ? { ...transformedKeyLandmarks.nose, weight: 0.4 }
+      : null,
+    transformedKeyLandmarks.mouth
+      ? { ...transformedKeyLandmarks.mouth, weight: 0.25 }
+      : null,
+  ].filter((point): point is { x: number; y: number; weight: number } => point !== null);
+  const anchorWeight = anchorPoints.reduce((sum, point) => sum + point.weight, 0);
+  const anchor = anchorWeight
+    ? {
+        x: anchorPoints.reduce((sum, point) => sum + point.x * point.weight, 0) / anchorWeight,
+        y: anchorPoints.reduce((sum, point) => sum + point.y * point.weight, 0) / anchorWeight,
+      }
+    : { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
   const maxSide = Math.min(rotatedWidth, rotatedHeight);
   const side = clamp(
     Math.max(
       faceWidth * faceCapture.cropWidthMultiplier,
       faceHeight * faceCapture.cropHeightMultiplier,
+      eyeDistance / faceCapture.targetEyeDistanceRatio,
+      Math.max(faceWidth, faceHeight) * (1 + faceCapture.cropPaddingRatio * 2),
     ),
     1,
     maxSide,
   );
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  const originX = clamp(centerX - side / 2, 0, rotatedWidth - side);
-  const originY = clamp(centerY - side / 2, 0, rotatedHeight - side);
+  const originX = clamp(anchor.x - side / 2, 0, rotatedWidth - side);
+  const originY = clamp(anchor.y - side / 2, 0, rotatedHeight - side);
 
   return {
     originX: Math.floor(originX),
@@ -116,7 +187,6 @@ export async function alignFace(
         ? { width: rotated.width, height: rotated.height }
         : rotatedDimensions(imageWidth, imageHeight, rotationDegrees);
     const crop = getCrop(
-      face,
       face.landmarks,
       imageWidth,
       imageHeight,

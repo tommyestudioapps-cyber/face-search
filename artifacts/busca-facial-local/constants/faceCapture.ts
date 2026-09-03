@@ -22,5 +22,6 @@ export const faceCapture = {
   cropWidthMultiplier: 1.8,
   cropHeightMultiplier: 1.55,
   cropPaddingRatio: 0.2,
+  targetEyeDistanceRatio: 0.38,
   maxProcessingTimeMs: 30_000,
 } as const;

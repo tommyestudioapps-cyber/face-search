@@ -142,7 +142,8 @@ export async function evaluateFaceQuality(
   imageWidth: number,
   imageHeight: number,
   landmarks: FaceLandmark[],
-  confidenceAccepted: boolean,
+  detectorConfidenceAccepted: boolean,
+  confidence: number | null = null,
 ): Promise<{ bounds: FaceBounds; rollDegrees: number; quality: FaceQuality }> {
   const bounds = calculateFaceBounds(landmarks);
   const rollDegrees = calculateRollDegrees(landmarks);
@@ -157,6 +158,10 @@ export async function evaluateFaceQuality(
     bounds.height >= faceCapture.minFaceHeightRatio &&
     bounds.width * bounds.height >= faceCapture.minFaceAreaRatio;
   const rotationAccepted = Math.abs(rollDegrees) <= faceCapture.maxRollDegrees;
+  const confidenceAccepted =
+    confidence === null
+      ? detectorConfidenceAccepted
+      : confidence >= faceCapture.minDetectionConfidence;
   const pixels = await analyzePixels(await decodeImage(sampleUri), bounds);
   const lightingAccepted =
     pixels.brightness !== null &&
