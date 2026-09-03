@@ -1,9 +1,5 @@
-import { Platform } from 'react-native';
-import {
-  openDatabaseAsync,
-  type SQLiteDatabase,
-} from 'expo-sqlite';
-import { faceSearch } from '@/constants/faceSearch';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { faceSearch } from '../../constants/faceSearch';
 import {
   FaceRecognitionError,
   type FaceEmbedding,
@@ -53,8 +49,6 @@ interface IndexedPhotoRow {
 interface ModelVersionRow {
   model_version: string;
 }
-
-let databasePromise: Promise<SQLiteDatabase> | null = null;
 
 function unsupportedOnWeb(): FaceRecognitionError {
   return new FaceRecognitionError(
@@ -263,44 +257,75 @@ async function migrateSchema(database: SQLiteDatabase): Promise<void> {
   }
 }
 
-async function getDatabase(): Promise<SQLiteDatabase> {
-  if (Platform.OS === 'web') {
-    throw unsupportedOnWeb();
-  }
-
-  if (!databasePromise) {
-    databasePromise = openDatabaseAsync(DATABASE_NAME)
-      .then(async (database) => {
-        await migrateSchema(database);
-        return database;
-      })
-      .catch((cause) => {
-        databasePromise = null;
-        if (cause instanceof FaceRecognitionError) {
-          throw cause;
-        }
-        throw storageError('O banco local de reconhecimento não pôde ser inicializado.', cause);
-      });
-  }
-
-  return databasePromise;
-}
-
 export interface IndexedFaceWithPhoto {
   face: IndexedFace;
   photo: IndexedPhoto;
 }
 
+type DatabaseOpener = (databaseName: string) => Promise<SQLiteDatabase>;
+
+export interface FaceSearchRepositoryOptions {
+  openDatabase?: DatabaseOpener;
+  platformOS?: string;
+}
+
 export class FaceSearchRepository {
+  private databasePromise: Promise<SQLiteDatabase> | null = null;
+
+  constructor(
+    private readonly options: FaceSearchRepositoryOptions = {},
+  ) {}
+
+  private async getPlatformOS(): Promise<string> {
+    if (this.options.platformOS) {
+      return this.options.platformOS;
+    }
+
+    const { Platform } = await import('react-native');
+    return Platform.OS;
+  }
+
+  private async openDatabase(databaseName: string): Promise<SQLiteDatabase> {
+    if (this.options.openDatabase) {
+      return this.options.openDatabase(databaseName);
+    }
+
+    const { openDatabaseAsync } = await import('expo-sqlite');
+    return openDatabaseAsync(databaseName);
+  }
+
+  private async getDatabase(): Promise<SQLiteDatabase> {
+    if ((await this.getPlatformOS()) === 'web') {
+      throw unsupportedOnWeb();
+    }
+
+    if (!this.databasePromise) {
+      this.databasePromise = this.openDatabase(DATABASE_NAME)
+        .then(async (database) => {
+          await migrateSchema(database);
+          return database;
+        })
+        .catch((cause) => {
+          this.databasePromise = null;
+          if (cause instanceof FaceRecognitionError) {
+            throw cause;
+          }
+          throw storageError('O banco local de reconhecimento não pôde ser inicializado.', cause);
+        });
+    }
+
+    return this.databasePromise;
+  }
+
   async initialize(): Promise<void> {
-    await getDatabase();
+    await this.getDatabase();
   }
 
   async saveIndexedPhoto(
     photo: IndexedPhoto,
     faces: IndexedFace[],
   ): Promise<void> {
-    const database = await getDatabase();
+    const database = await this.getDatabase();
     const dimensions = serializeDimensions(photo.width, photo.height);
 
     try {
@@ -395,7 +420,7 @@ export class FaceSearchRepository {
   async getIndexedEmbeddings(
     modelVersion?: string,
   ): Promise<IndexedFaceWithPhoto[]> {
-    const database = await getDatabase();
+    const database = await this.getDatabase();
     const rows = modelVersion
       ? await database.getAllAsync<IndexedFaceRow>(
           `
@@ -466,7 +491,7 @@ export class FaceSearchRepository {
   }
 
   async getIndexedPhotos(): Promise<IndexedPhoto[]> {
-    const database = await getDatabase();
+    const database = await this.getDatabase();
     const rows = await database.getAllAsync<IndexedPhotoRow>(
       `
         SELECT
@@ -489,7 +514,7 @@ export class FaceSearchRepository {
   }
 
   async getStoredIndexStats(): Promise<StoredIndexStats> {
-    const database = await getDatabase();
+    const database = await this.getDatabase();
     const photoCount = await database.getFirstAsync<{ count: number }>(
       `
         SELECT COUNT(*) AS count
@@ -516,7 +541,7 @@ export class FaceSearchRepository {
   }
 
   async getStoredModelVersion(): Promise<string | null> {
-    const database = await getDatabase();
+    const database = await this.getDatabase();
     const rows = await database.getAllAsync<ModelVersionRow>(
       `
         SELECT DISTINCT fe.model_version
@@ -552,7 +577,7 @@ export class FaceSearchRepository {
   }
 
   async removeOrphanedPhotos(assetIds: string[]): Promise<number> {
-    const database = await getDatabase();
+    const database = await this.getDatabase();
 
     try {
       return await this.deleteOutsideAssetSet(database, assetIds);
@@ -565,7 +590,7 @@ export class FaceSearchRepository {
   }
 
   async clearIndex(): Promise<void> {
-    const database = await getDatabase();
+    const database = await this.getDatabase();
     try {
       await database.withExclusiveTransactionAsync(async (transaction) => {
         await transaction.runAsync('DELETE FROM face_embeddings');
@@ -577,13 +602,13 @@ export class FaceSearchRepository {
   }
 
   async close(): Promise<void> {
-    if (!databasePromise) {
+    if (!this.databasePromise) {
       return;
     }
 
-    const database = await databasePromise;
+    const database = await this.databasePromise;
     await database.closeAsync();
-    databasePromise = null;
+    this.databasePromise = null;
   }
 
   private async deleteOutsideAssetSet(

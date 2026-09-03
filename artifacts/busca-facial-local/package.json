@@ -10,7 +10,7 @@
     "serve": "node server/serve.js",
     "test:face-capture": "node --experimental-strip-types --test services/faceCapture/__tests__/*.test.mjs",
     "test:face-overlay": "node --experimental-strip-types --test components/__tests__/*.test.mjs",
-    "test:face-search": "node --experimental-strip-types --test services/faceSearch/__tests__/*.test.mjs",
+    "test:face-search": "node --experimental-sqlite --import tsx --test services/faceSearch/__tests__/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
@@ -57,6 +57,7 @@
     "react-native-web": "^0.21.0",
     "react-native-worklets": "0.5.1",
     "typescript": "~5.9.2",
+    "tsx": "catalog:",
     "zod": "catalog:",
     "zod-validation-error": "^3.4.0"
   },
