@@ -1,0 +1,27 @@
+~/.../artifacts/busca-facial-local$ npx eas-cli build -p android --profile preview
+The field "cli.appVersionSource" is not set, but it will be required in the future. Learn more: https://docs.expo.dev/build-reference/app-versions/
+Unable to resolve a valid config plugin for ./plugins/withFaceLandmarkerModel.
+• No "app.plugin.js" file found in ./plugins/withFaceLandmarkerModel: config plugins are typically exported from an "app.plugin.js" file in the package root.
+• main export of ./plugins/withFaceLandmarkerModel does not appear to be a config plugin: the following error was thrown when importing /home/runner/workspace/artifacts/busca-facial-local/plugins/withFaceLandmarkerModel.js: Cannot find module '@expo/config-plugins'
+Require stack:
+- /home/runner/workspace/artifacts/busca-facial-local/plugins/withFaceLandmarkerModel.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@expo/config-plugins/build/utils/plugin-resolver.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@expo/config-plugins/build/plugins/withStaticPlugin.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@expo/config-plugins/build/plugins/withPlugins.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@expo/config-plugins/build/index.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/eas-cli/build/build/android/syncProjectConfiguration.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/eas-cli/build/build/android/build.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/eas-cli/build/build/runBuildAndSubmit.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/eas-cli/build/commands/build/index.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@oclif/core/lib/module-loader.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@oclif/core/lib/help/index.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@oclif/core/lib/errors/handle.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@oclif/core/lib/errors/index.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@oclif/core/lib/config/config.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@oclif/core/lib/config/index.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@oclif/core/lib/command.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/@oclif/core/lib/index.js
+- /home/runner/.npm/_npx/e25a38a8cc65d08e/node_modules/eas-cli/bin/run MODULE_NOT_FOUND
+Verify that ./plugins/withFaceLandmarkerModel includes a config plugin. If it does not, then remove the entry from plugins in your app config file. Learn more: https://docs.expo.dev/guides/config-plugins/
+    Error: build command failed.
+~/.../artifacts/busca-facial-local$ 
