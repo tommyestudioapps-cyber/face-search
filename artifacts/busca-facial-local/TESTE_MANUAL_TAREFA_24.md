@@ -6,7 +6,7 @@ Confirmar que o painel de configurações exibe as estatísticas persistidas,
 solicita confirmação antes da limpeza, remove somente o índice local e mantém
 as fotos originais da galeria.
 
-## Resultado desta execução — 03/09/2026
+## Resultado desta execução — 09/09/2026
 
 **Bloqueado para confirmação física.** A lógica e as verificações estáticas
 passaram, mas não foi possível executar o roteiro em um APK instalado em um
@@ -19,10 +19,11 @@ aparelho Android real.
 | Cancelar no `Alert.alert` | Implementado; o botão Cancelar não chama a limpeza |
 | Confirmar a limpeza | Implementado; estado local volta para 0 após sucesso |
 | Fotos originais da galeria | Preservadas pela implementação; a limpeza só executa SQL no índice |
-| Reabrir e reutilizar SQLite | Não observado em execução nativa |
+| Reabrir e reutilizar SQLite | Não observado em execução nativa; teste automatizado reabriu o mesmo SQLite |
 | APK instalado | Não |
-| Dispositivo Android/ADB | Não disponível |
+| Dispositivo Android/ADB | Não disponível neste ambiente |
 | Logs nativos do SQLite | Não coletados; não houve execução em aparelho |
+| Aparelho/versão Android | Nenhum aparelho conectado; versão não aplicável |
 | Resultado físico | Não reproduzido; requer APK e aparelho Android |
 
 ## Evidências da implementação
@@ -86,3 +87,22 @@ das fotos na galeria do aparelho.
    estão disponíveis.
 7. Fechar e reabrir o app, iniciar uma nova busca e confirmar que o SQLite
    continua utilizável sem recriar ou corromper o índice.
+
+## Atualização da verificação — 09/09/2026
+
+O roteiro físico continua bloqueado neste ambiente. A execução automatizada foi
+repetida no pacote `@workspace/busca-facial-local`:
+
+| Verificação | Resultado |
+| --- | --- |
+| `typecheck` | Aprovado |
+| `test:face-capture` | 25 aprovados, 0 falhas |
+| `test:face-overlay` | 2 aprovados, 0 falhas |
+| `test:face-search` | 6 aprovados, 0 falhas; inclui limpar, reabrir o mesmo SQLite e preservar a galeria |
+| APK preview/development instalado | Não; nenhum `.apk` ou `.aab` disponível no workspace |
+| Aparelho Android real | Não conectado; `adb` não está disponível |
+| Logs nativos | Não coletados, pois não houve instalação nem execução nativa |
+
+Esses resultados confirmam apenas a lógica e o fluxo SQLite em teste Node.
+Ainda falta executar no aparelho os passos de Cancelar, Confirmar, galeria e
+reabertura do app descritos acima.
