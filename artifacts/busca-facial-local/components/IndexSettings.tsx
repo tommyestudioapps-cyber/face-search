@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  ActivityIndicator,
   Modal,
   Pressable,
   StyleSheet,
@@ -10,7 +11,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import type { StoredIndexStats } from '@/services/faceSearch';
+import type {
+  FaceIndexProgress,
+  StoredIndexStats,
+} from '@/services/faceSearch';
+import type {
+  FaceSearchClearState,
+  FaceSearchOperation,
+} from '@/hooks/useFaceSearch';
 import {
   clearIndexWithFeedback,
   createIndexClearAlertOptions,
@@ -25,6 +33,10 @@ interface IndexSettingsProps {
   stats: StoredIndexStats;
   onClose: () => void;
   onClearIndex: () => Promise<void>;
+  operation: FaceSearchOperation;
+  isOperationActive: boolean;
+  clearState: FaceSearchClearState;
+  progress: FaceIndexProgress;
 }
 
 export function IndexSettings({
@@ -32,11 +44,32 @@ export function IndexSettings({
   stats,
   onClose,
   onClearIndex,
+  operation,
+  isOperationActive,
+  clearState,
+  progress,
 }: IndexSettingsProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [isClearing, setIsClearing] = useState(false);
   const [clearError, setClearError] = useState<string | null>(null);
+  const clearBlocked = isClearing || isOperationActive || clearState !== 'idle';
+  const isWaitingForOperation =
+    (isOperationActive && operation !== 'clearing') || clearState === 'waiting';
+  const operationLabel =
+    operation === 'searching'
+      ? 'busca'
+      : operation === 'indexing'
+        ? 'indexação'
+        : operation === 'initializing'
+          ? 'preparação do índice'
+          : 'limpeza';
+  const progressLabel =
+    operation === 'indexing' && progress.totalAssets !== null
+      ? `${progress.processedAssets} de ${progress.totalAssets} fotos processadas`
+      : operation === 'searching'
+        ? 'Os resultados estão sendo preservados.'
+        : 'Aguarde a operação terminar.';
 
   useEffect(() => {
     if (visible) {
@@ -152,6 +185,26 @@ export function IndexSettings({
             </Text>
           </View>
 
+          {isWaitingForOperation ? (
+            <View
+              style={[
+                styles.operationCard,
+                { backgroundColor: colors.background, borderColor: colors.border },
+              ]}
+              accessibilityLiveRegion="polite"
+            >
+              <ActivityIndicator color={colors.primary} size="small" />
+              <View style={styles.operationCopy}>
+                <Text style={[styles.operationTitle, { color: colors.foreground }]}>
+                  Limpeza indisponível durante a {operationLabel}
+                </Text>
+                <Text style={[styles.operationBody, { color: colors.mutedForeground }]}>
+                  {progressLabel} O índice atual não será apagado enquanto ela estiver ativa.
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
           {clearError ? (
             <Text
               style={styles.errorText}
@@ -165,7 +218,7 @@ export function IndexSettings({
 
           <Pressable
             accessibilityRole="button"
-            disabled={isClearing}
+            disabled={clearBlocked}
             onPress={clearIndex}
             style={({ pressed }) => [
               styles.clearButton,
@@ -177,7 +230,11 @@ export function IndexSettings({
           >
             <Feather name="trash-2" size={17} color="#FB7185" />
             <Text style={styles.clearButtonText}>
-              {isClearing ? 'Limpando índice…' : 'Limpar índice local'}
+              {isClearing
+                ? 'Limpando índice…'
+                : isWaitingForOperation
+                  ? 'Aguardando operação…'
+                  : 'Limpar índice local'}
             </Text>
           </Pressable>
         </View>
@@ -270,6 +327,28 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     fontSize: 11,
     lineHeight: 16,
+  },
+  operationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 15,
+    marginTop: 12,
+    padding: 12,
+  },
+  operationCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  operationTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+  },
+  operationBody: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 10,
+    lineHeight: 15,
   },
   errorText: {
     color: '#FB7185',

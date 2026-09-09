@@ -96,5 +96,7 @@ test('mensagem de falha é anunciada como alerta acessível e bloqueia apenas du
 
   assert.match(componentSource, /accessibilityRole="alert"/);
   assert.match(componentSource, /accessibilityLiveRegion="polite"/);
-  assert.match(componentSource, /disabled=\{isClearing\}/);
+  assert.match(componentSource, /disabled=\{clearBlocked\}/);
+  assert.match(componentSource, /isOperationActive/);
+  assert.match(componentSource, /Aguardando operação/);
 });

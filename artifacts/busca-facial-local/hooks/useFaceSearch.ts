@@ -12,8 +12,18 @@ import type {
   GalleryIndexResult,
   GalleryIndexTask,
 } from '@/services/faceSearch/galleryIndexer';
+import { FaceSearchOperationGate } from './faceSearchOperationGate';
 
 type FaceSearchModule = typeof import('@/services/faceSearch');
+
+export type FaceSearchOperation =
+  | 'idle'
+  | 'initializing'
+  | 'indexing'
+  | 'searching'
+  | 'clearing';
+
+export type FaceSearchClearState = 'idle' | 'waiting' | 'clearing';
 
 export type FaceSearchStatus =
   | 'idle'
@@ -29,6 +39,9 @@ export type FaceSearchStatus =
 
 export interface UseFaceSearchResult {
   status: FaceSearchStatus;
+  operation: FaceSearchOperation;
+  isOperationActive: boolean;
+  clearState: FaceSearchClearState;
   progress: FaceIndexProgress;
   results: FaceSearchResult[];
   summary: FaceSearchSummary | null;
@@ -92,6 +105,8 @@ function statusFromProgress(
 
 export function useFaceSearch(): UseFaceSearchResult {
   const [status, setStatus] = useState<FaceSearchStatus>('idle');
+  const [operation, setOperation] = useState<FaceSearchOperation>('idle');
+  const [clearState, setClearState] = useState<FaceSearchClearState>('idle');
   const [progress, setProgress] = useState<FaceIndexProgress>(initialProgress);
   const [results, setResults] = useState<FaceSearchResult[]>([]);
   const [summary, setSummary] = useState<FaceSearchSummary | null>(null);
@@ -104,8 +119,9 @@ export function useFaceSearch(): UseFaceSearchResult {
   const faceSearchModulePromiseRef = useRef<Promise<FaceSearchModule> | null>(null);
   const indexTaskRef = useRef<GalleryIndexTask | null>(null);
   const indexPromiseRef = useRef<Promise<GalleryIndexResult | null> | null>(null);
+  const searchPromiseRef = useRef<Promise<FaceSearchSummary | null> | null>(null);
   const clearPromiseRef = useRef<Promise<void> | null>(null);
-  const activeOperationRef = useRef<Promise<unknown> | null>(null);
+  const operationGateRef = useRef(new FaceSearchOperationGate());
 
   const getFaceSearchModule = useCallback(async (): Promise<FaceSearchModule> => {
     if (Platform.OS === 'web') {
@@ -169,14 +185,6 @@ export function useFaceSearch(): UseFaceSearchResult {
       });
 
     initializationPromiseRef.current = initialization;
-    activeOperationRef.current = initialization;
-    void initialization
-      .finally(() => {
-        if (activeOperationRef.current === initialization) {
-          activeOperationRef.current = null;
-        }
-      })
-      .catch(() => undefined);
     return initialization;
   }, [getFaceSearchModule]);
 
@@ -199,7 +207,10 @@ export function useFaceSearch(): UseFaceSearchResult {
       return indexPromiseRef.current;
     }
 
-    const indexing = (async () => {
+    const indexing = operationGateRef.current.run(async () => {
+      if (mountedRef.current) {
+        setOperation('indexing');
+      }
       await ensureInitialized();
       if (!mountedRef.current) {
         return null;
@@ -241,17 +252,16 @@ export function useFaceSearch(): UseFaceSearchResult {
           indexTaskRef.current = null;
         }
       }
-    })();
+    });
 
     indexPromiseRef.current = indexing;
-    activeOperationRef.current = indexing;
     void indexing
       .finally(() => {
         if (indexPromiseRef.current === indexing) {
           indexPromiseRef.current = null;
         }
-        if (activeOperationRef.current === indexing) {
-          activeOperationRef.current = null;
+        if (mountedRef.current) {
+          setOperation((current) => (current === 'indexing' ? 'idle' : current));
         }
       })
       .catch(() => undefined);
@@ -273,7 +283,15 @@ export function useFaceSearch(): UseFaceSearchResult {
       return clearPromiseRef.current;
     }
 
-    const clearing = (async () => {
+    if (operationGateRef.current.isBusy() && mountedRef.current) {
+      setClearState('waiting');
+    }
+
+    const clearing = operationGateRef.current.clear(async () => {
+      if (mountedRef.current) {
+        setClearState('clearing');
+        setOperation('clearing');
+      }
       const faceSearchModule = await getFaceSearchModule();
       await faceSearchModule.clearStoredIndex();
       if (mountedRef.current) {
@@ -284,13 +302,17 @@ export function useFaceSearch(): UseFaceSearchResult {
         setError(null);
         setStatus('ready');
       }
-    })();
+    });
 
     clearPromiseRef.current = clearing;
     void clearing
       .finally(() => {
         if (clearPromiseRef.current === clearing) {
           clearPromiseRef.current = null;
+        }
+        if (mountedRef.current) {
+          setClearState('idle');
+          setOperation((current) => (current === 'clearing' ? 'idle' : current));
         }
       })
       .catch(() => undefined);
@@ -299,6 +321,9 @@ export function useFaceSearch(): UseFaceSearchResult {
 
   const search = useCallback(
     async (alignedFace: AlignedFace | null): Promise<FaceSearchSummary | null> => {
+      if (searchPromiseRef.current) {
+        return searchPromiseRef.current;
+      }
       if (!alignedFace || !alignedFace.standardized) {
         const nextError = new FaceRecognitionError(
           'invalid-input',
@@ -311,7 +336,10 @@ export function useFaceSearch(): UseFaceSearchResult {
         return null;
       }
 
-      const searching = (async () => {
+      const searching = operationGateRef.current.run(async () => {
+        if (mountedRef.current) {
+          setOperation('searching');
+        }
         await ensureInitialized();
         const activeIndexing = indexPromiseRef.current;
         if (activeIndexing) {
@@ -333,7 +361,7 @@ export function useFaceSearch(): UseFaceSearchResult {
           setStatus(nextSummary.results.length > 0 ? 'completed' : 'empty');
         }
         return nextSummary;
-      })().catch((caught) => {
+      }).catch((caught) => {
         const nextError = toFaceSearchError(
           caught,
           'Não foi possível buscar correspondências no índice local.',
@@ -345,11 +373,14 @@ export function useFaceSearch(): UseFaceSearchResult {
         throw nextError;
       });
 
-      activeOperationRef.current = searching;
+      searchPromiseRef.current = searching;
       void searching
         .finally(() => {
-          if (activeOperationRef.current === searching) {
-            activeOperationRef.current = null;
+          if (searchPromiseRef.current === searching) {
+            searchPromiseRef.current = null;
+          }
+          if (mountedRef.current) {
+            setOperation((current) => (current === 'searching' ? 'idle' : current));
           }
         })
         .catch(() => undefined);
@@ -371,12 +402,24 @@ export function useFaceSearch(): UseFaceSearchResult {
 
   useEffect(() => {
     mountedRef.current = true;
-    void ensureInitialized().catch(() => undefined);
+    const initialization = operationGateRef.current.run(async () => {
+      if (mountedRef.current) {
+        setOperation('initializing');
+      }
+      return ensureInitialized();
+    });
+    void initialization
+      .finally(() => {
+        if (mountedRef.current) {
+          setOperation((current) => (current === 'initializing' ? 'idle' : current));
+        }
+      })
+      .catch(() => undefined);
 
     return () => {
       mountedRef.current = false;
       indexTaskRef.current?.cancel();
-      const pendingOperation = activeOperationRef.current;
+      const pendingOperation = operationGateRef.current.getActiveOperation();
       const releaseResources = () => {
         if (faceSearchModuleRef.current) {
           void faceSearchModuleRef.current.disposeFaceSearch();
@@ -392,6 +435,9 @@ export function useFaceSearch(): UseFaceSearchResult {
 
   return {
     status,
+    operation,
+    isOperationActive: operation !== 'idle',
+    clearState,
     progress,
     results,
     summary,

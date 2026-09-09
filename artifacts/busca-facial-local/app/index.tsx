@@ -788,6 +788,9 @@ export default function HomeScreen() {
   } = useFaceCapture();
   const {
     status: faceSearchStatus,
+    operation: faceSearchOperation,
+    isOperationActive: faceSearchOperationActive,
+    clearState: faceSearchClearState,
     progress: faceSearchProgress,
     results,
     storedIndexStats,
@@ -1004,6 +1007,10 @@ export default function HomeScreen() {
       <IndexSettings
         visible={showIndexSettings}
         stats={storedIndexStats}
+        operation={faceSearchOperation}
+        isOperationActive={faceSearchOperationActive}
+        clearState={faceSearchClearState}
+        progress={faceSearchProgress}
         onClose={() => setShowIndexSettings(false)}
         onClearIndex={clearIndex}
       />
