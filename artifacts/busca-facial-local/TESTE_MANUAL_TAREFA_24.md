@@ -52,6 +52,7 @@ Executadas no pacote `@workspace/busca-facial-local`:
 | `test:face-search` | 6 aprovados, 0 falhas |
 | `typecheck` | Aprovado |
 | Inspeção SQL da limpeza/estatísticas | 6 verificações aprovadas |
+| Prebuild Android | Aprovado; plugins nativos e modelos copiados para os assets Android |
 | Workflow Expo | Metro iniciado sem erros; preview de development build |
 
 Essas verificações não substituem a execução nativa: não confirmam a
@@ -66,6 +67,11 @@ das fotos na galeria do aparelho.
 - `pnpm dlx eas-cli@latest whoami` rejeitou todas as variantes de token EAS disponíveis; não foi possível obter um APK remoto.
 - O workflow disponível é apenas o servidor Metro/preview; ele não equivale a
   um APK com os módulos nativos de SQLite, Media Library e reconhecimento facial.
+- `CI=1 pnpm exec expo prebuild --platform android --no-install` concluiu com sucesso e confirmou os plugins nativos.
+- O prebuild copiou `face-landmarker.task` e `face-recognition.tflite` para
+  `android/app/src/main/assets`.
+- A tentativa de `android/gradlew :app:assembleRelease --no-daemon` foi bloqueada
+  antes da compilação porque `JAVA_HOME` não está definido e não há `java` no PATH.
 
 ## Roteiro para repetir em um aparelho Android
 
