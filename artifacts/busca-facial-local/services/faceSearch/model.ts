@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { Asset } from 'expo-asset';
 import {
   loadTensorflowModel,
   type TfliteModel,
@@ -88,10 +89,21 @@ export async function loadRecognitionModel(): Promise<TfliteModel> {
   }
 
   if (!loadingPromise) {
-    loadingPromise = loadTensorflowModel(
-      require('../../assets/models/face-recognition.tflite'),
-      [],
-    )
+    loadingPromise = (async () => {
+      const modelAsset = Asset.fromModule(
+        require('../../assets/models/face-recognition.tflite'),
+      );
+      await modelAsset.downloadAsync();
+
+      if (!modelAsset.localUri) {
+        throw new FaceRecognitionError(
+          'model-unavailable',
+          'O modelo de reconhecimento não possui um arquivo local no APK.',
+        );
+      }
+
+      return loadTensorflowModel({ url: modelAsset.localUri }, []);
+    })()
       .then(validateModel)
       .then((model) => {
         loadedModel = model;

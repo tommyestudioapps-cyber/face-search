@@ -66,6 +66,7 @@
   "dependencies": {
     "@react-native-community/netinfo": "11.4.1",
     "expo-dev-client": "~6.0.21",
+    "expo-asset": "~12.0.13",
     "expo-file-system": "~19.0.24",
     "expo-image-manipulator": "~14.0.8",
     "expo-media-library": "~18.2.1",
