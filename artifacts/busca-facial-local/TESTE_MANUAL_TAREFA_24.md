@@ -114,6 +114,7 @@ repetida no pacote `@workspace/busca-facial-local`:
 | `typecheck` | Aprovado |
 | `test:face-capture` | 25 aprovados, 0 falhas |
 | `test:face-overlay` | 2 aprovados, 0 falhas |
+| `test:face-settings` | 3 aprovados, 0 falhas |
 | `test:face-search` | 6 aprovados, 0 falhas; inclui limpar, reabrir o mesmo SQLite e preservar a galeria |
 | APK preview/development instalado | Não; nenhum `.apk` ou `.aab` disponível no workspace |
 | Aparelho Android real | Não conectado; `adb` não está disponível |
