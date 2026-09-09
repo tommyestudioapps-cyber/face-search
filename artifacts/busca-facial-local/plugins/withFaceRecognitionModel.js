@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { withDangerousMod } = require('@expo/config-plugins');
+const { withDangerousMod } = require('expo/config-plugins');
 
 const MODEL_FILENAME = 'face-recognition.tflite';
 const MODEL_DIRECTORY = ['assets', 'models'];
