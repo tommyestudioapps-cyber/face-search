@@ -106,3 +106,24 @@ repetida no pacote `@workspace/busca-facial-local`:
 Esses resultados confirmam apenas a lógica e o fluxo SQLite em teste Node.
 Ainda falta executar no aparelho os passos de Cancelar, Confirmar, galeria e
 reabertura do app descritos acima.
+
+## Nova tentativa de preparação — 09/09/2026
+
+Foi feita uma nova tentativa de preparar a validação nesta execução:
+
+| Verificação | Resultado |
+| --- | --- |
+| `typecheck` | Aprovado |
+| `test:face-capture` | 25 aprovados, 0 falhas |
+| `test:face-overlay` | 2 aprovados, 0 falhas |
+| `test:face-search` | 6 aprovados, 0 falhas |
+| `expo prebuild --platform android --no-install` | Aprovado |
+| Assets nativos do prebuild | `face-landmarker.task` e `face-recognition.tflite` presentes |
+| `expo install --check` | Bloqueado pelo token Expo inválido (`The bearer token is invalid`) |
+| `adb`, Java, Gradle e Android SDK | Indisponíveis neste ambiente |
+| APK/AAB para instalação | Não encontrado |
+
+O prebuild confirmou a configuração nativa, mas não gera um APK instalável nem
+conecta um aparelho. Portanto, esta tentativa também não executou o roteiro
+físico e não altera os resultados de **APK instalado**, **dispositivo Android**,
+**logs nativos** ou **resultado físico** acima.
