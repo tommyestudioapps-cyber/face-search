@@ -104,6 +104,7 @@ export function useFaceSearch(): UseFaceSearchResult {
   const faceSearchModulePromiseRef = useRef<Promise<FaceSearchModule> | null>(null);
   const indexTaskRef = useRef<GalleryIndexTask | null>(null);
   const indexPromiseRef = useRef<Promise<GalleryIndexResult | null> | null>(null);
+  const clearPromiseRef = useRef<Promise<void> | null>(null);
   const activeOperationRef = useRef<Promise<unknown> | null>(null);
 
   const getFaceSearchModule = useCallback(async (): Promise<FaceSearchModule> => {
@@ -267,17 +268,33 @@ export function useFaceSearch(): UseFaceSearchResult {
     indexTaskRef.current.cancel();
   }, []);
 
-  const clearIndex = useCallback(async (): Promise<void> => {
-    const faceSearchModule = await getFaceSearchModule();
-    await faceSearchModule.clearStoredIndex();
-    if (mountedRef.current) {
-      setStoredIndexStats(initialStoredIndexStats);
-      setProgress({ ...initialProgress });
-      setSummary(null);
-      setResults([]);
-      setError(null);
-      setStatus('ready');
+  const clearIndex = useCallback((): Promise<void> => {
+    if (clearPromiseRef.current) {
+      return clearPromiseRef.current;
     }
+
+    const clearing = (async () => {
+      const faceSearchModule = await getFaceSearchModule();
+      await faceSearchModule.clearStoredIndex();
+      if (mountedRef.current) {
+        setStoredIndexStats(initialStoredIndexStats);
+        setProgress({ ...initialProgress });
+        setSummary(null);
+        setResults([]);
+        setError(null);
+        setStatus('ready');
+      }
+    })();
+
+    clearPromiseRef.current = clearing;
+    void clearing
+      .finally(() => {
+        if (clearPromiseRef.current === clearing) {
+          clearPromiseRef.current = null;
+        }
+      })
+      .catch(() => undefined);
+    return clearing;
   }, [getFaceSearchModule]);
 
   const search = useCallback(

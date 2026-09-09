@@ -12,8 +12,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import type { StoredIndexStats } from '@/services/faceSearch';
 import {
+  clearIndexWithFeedback,
   createIndexClearAlertOptions,
   INDEX_CLEAR_ALERT_MESSAGE,
+  INDEX_CLEAR_ERROR_MESSAGE,
   INDEX_CLEAR_ALERT_TITLE,
   INDEX_SETTINGS_TEST_IDS,
 } from './indexSettingsFlow';
@@ -51,15 +53,16 @@ export function IndexSettings({
       INDEX_CLEAR_ALERT_TITLE,
       INDEX_CLEAR_ALERT_MESSAGE,
       createIndexClearAlertOptions(() => {
-        setIsClearing(true);
-        setClearError(null);
-        void onClearIndex()
-          .catch(() => {
-            setClearError('Não foi possível limpar o índice local.');
-          })
-          .finally(() => {
+        void clearIndexWithFeedback(onClearIndex, {
+          onStart: () => {
+            setIsClearing(true);
+            setClearError(null);
+          },
+          onError: setClearError,
+          onFinish: () => {
             setIsClearing(false);
-          });
+          },
+        });
       }),
     );
   };
@@ -150,7 +153,12 @@ export function IndexSettings({
           </View>
 
           {clearError ? (
-            <Text style={styles.errorText} accessibilityRole="alert">
+            <Text
+              style={styles.errorText}
+              accessibilityRole="alert"
+              accessibilityLabel={INDEX_CLEAR_ERROR_MESSAGE}
+              accessibilityLiveRegion="polite"
+            >
               {clearError}
             </Text>
           ) : null}
