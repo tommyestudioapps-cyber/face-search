@@ -11,6 +11,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import type { StoredIndexStats } from '@/services/faceSearch';
+import {
+  createIndexClearAlertOptions,
+  INDEX_CLEAR_ALERT_MESSAGE,
+  INDEX_CLEAR_ALERT_TITLE,
+  INDEX_SETTINGS_TEST_IDS,
+} from './indexSettingsFlow';
 
 interface IndexSettingsProps {
   visible: boolean;
@@ -42,29 +48,19 @@ export function IndexSettings({
     }
 
     Alert.alert(
-      'Limpar índice local?',
-      'Isso apagará as fotos e rostos processados do índice deste aparelho. As fotos originais da sua galeria não serão apagadas.',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-        {
-          text: 'Limpar índice',
-          style: 'destructive',
-          onPress: () => {
-            setIsClearing(true);
-            setClearError(null);
-            void onClearIndex()
-              .catch(() => {
-                setClearError('Não foi possível limpar o índice local.');
-              })
-              .finally(() => {
-                setIsClearing(false);
-              });
-          },
-        },
-      ],
+      INDEX_CLEAR_ALERT_TITLE,
+      INDEX_CLEAR_ALERT_MESSAGE,
+      createIndexClearAlertOptions(() => {
+        setIsClearing(true);
+        setClearError(null);
+        void onClearIndex()
+          .catch(() => {
+            setClearError('Não foi possível limpar o índice local.');
+          })
+          .finally(() => {
+            setIsClearing(false);
+          });
+      }),
     );
   };
 
@@ -105,7 +101,7 @@ export function IndexSettings({
               accessibilityRole="button"
               hitSlop={12}
               onPress={onClose}
-              testID="close-index-settings"
+              testID={INDEX_SETTINGS_TEST_IDS.close}
             >
               <Feather name="x" size={21} color={colors.mutedForeground} />
             </Pressable>
@@ -169,7 +165,7 @@ export function IndexSettings({
               isClearing ? styles.disabled : null,
               pressed ? styles.pressed : null,
             ]}
-            testID="clear-local-index"
+            testID={INDEX_SETTINGS_TEST_IDS.clear}
           >
             <Feather name="trash-2" size={17} color="#FB7185" />
             <Text style={styles.clearButtonText}>

@@ -77,16 +77,32 @@ das fotos na galeria do aparelho.
 ## Roteiro para repetir em um aparelho Android
 
 1. Instalar um APK `preview` ou `development` com os modelos nativos.
-2. Abrir a Home e tocar no botão de configurações.
-3. Registrar os valores de fotos e rostos indexados.
-4. Tocar em **Limpar índice local**, escolher **Cancelar** e confirmar que os
+2. Abrir a Home e tocar no botão `settings-button`.
+3. Registrar os valores de fotos e rostos indexados no painel.
+4. Tocar em `clear-local-index`, escolher **Cancelar** e confirmar que os
    valores permanecem iguais.
 5. Abrir o alerta novamente, escolher **Limpar índice** e confirmar que ambas as
    estatísticas retornam a zero.
 6. Abrir a galeria do aparelho e confirmar que as fotos usadas no índice ainda
    estão disponíveis.
-7. Fechar e reabrir o app, iniciar uma nova busca e confirmar que o SQLite
+7. Usar `close-index-settings`, fechar e reabrir o app, iniciar uma nova busca e confirmar que o SQLite
    continua utilizável sem recriar ou corromper o índice.
+
+## Contrato automatizado do fluxo
+
+O teste `components/__tests__/indexSettingsFlow.test.mjs` valida o contrato das
+ações do `Alert.alert` usado por `components/IndexSettings.tsx`:
+
+- **Cancelar** não chama a função de limpeza;
+- **Limpar índice** usa a ação destrutiva e chama a confirmação uma vez;
+- os identificadores `clear-local-index` e `close-index-settings` permanecem
+  estáveis para o roteiro Android.
+
+O ciclo persistente é coberto por
+`services/faceSearch/__tests__/repository.integration.test.mjs`, usando
+`FaceSearchRepository`, `face-search.sqlite`, `clearIndex()`, fechamento e
+reabertura do mesmo banco. O teste também confirma que a fonte do repositório
+não importa `expo-media-library` nem chama `deleteAssetsAsync`.
 
 ## Atualização da verificação — 09/09/2026
 
