@@ -3,3 +3,4 @@
 - [Build Android neste ambiente](android-build-environment.md) — o APK remoto depende de um token EAS válido; o build local pode exceder a cota ao instalar o NDK.
 - [Auditoria de dependências Expo](security-audit.md) — `image-size` permanece sem patch publicado e `esbuild` depende da compatibilidade do plugin de logging.
 - [Plugins de configuração Expo 54](expo-config-plugins.md) — use `expo/config-plugins`; a dependência direta `@expo/config-plugins` é rejeitada pelo diagnóstico do SDK.
+- [Carregamento TFLite no Android](tflite-asset-loading.md) — no APK release, resolva o asset via `expo-asset` e passe um `localUri` `file://` ao fast-tflite.
