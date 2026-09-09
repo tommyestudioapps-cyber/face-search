@@ -1,0 +1,1 @@
+artifacts/busca-facial-local/builds/busca-facial-local-preview-3e860.apk filter=lfs diff=lfs merge=lfs -text
