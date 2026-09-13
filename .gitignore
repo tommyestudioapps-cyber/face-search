@@ -5,6 +5,10 @@ dist
 tmp
 out-tsc
 *.tsbuildinfo
+**/builds/
+**/static-build/
+*.apk
+*.aab
 .expo
 .expo-shared
 
