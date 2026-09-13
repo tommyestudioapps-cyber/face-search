@@ -1,0 +1,62 @@
+[CONTEXTO]
+A lista de "dependencies" que você me reportou não inclui vários pacotes
+que o código-fonte importa claramente (expo-router, @tanstack/react-query,
+react-native-gesture-handler, expo-haptics, expo-image-picker, etc).
+Preciso descobrir se existe outro package.json em uso ou se essas
+dependências realmente faltam no projeto.
+
+NÃO altere arquivos. NÃO instale nada. NÃO rode build.
+
+[TAREFA — 4 verificações]
+
+── VERIFICAÇÃO 1: Listar TODOS os package.json ──
+Procure recursivamente por "package.json" em todo o projeto,
+EXCLUINDO node_modules. Reporte:
+  • Caminho completo de cada um
+  • Para cada um, o campo "name" (ou "workspace" se for monorepo)
+
+── VERIFICAÇÃO 2: Identificar o package.json ativo ──
+Abra app/_layout.tsx e confirme:
+  • O import "expo-router" é resolvido a partir de qual package.json?
+  • Rode: npm ls expo-router --depth=0
+    Cole a saída completa.
+  • Rode: npm ls @tanstack/react-query --depth=0
+    Cole a saída completa.
+
+── VERIFICAÇÃO 3: Workspace root ──
+Se existe mais de um package.json:
+  • Cole o conteúdo COMPLETO do package.json da raiz
+    (aquele mais acima na árvore de diretórios).
+  • Reporte os campos: name, private, workspaces.
+  • Reporte TODAS as dependencies e devDependencies completas.
+
+── VERIFICAÇÃO 4: Confirmar pacotes individualmente ──
+Para cada pacote abaixo, rode `npm ls <pacote> --depth=0` e reporte
+se está instalado, versão, e se aparece como "missing" ou "deduped":
+
+  expo-router
+  @tanstack/react-query
+  react-native-gesture-handler
+  react-native-keyboard-controller
+  react-native-safe-area-context
+  @expo-google-fonts/inter
+  expo-splash-screen
+  expo-haptics
+  expo-image-picker
+  expo-linear-gradient
+  @react-native-async-storage/async-storage
+  @expo/vector-icons
+  expo-web-browser
+
+[NÃO FAÇA]
+- Não instale nenhum dos pacotes faltantes.
+- Não rode expo install.
+- Não modifique nenhum package.json.
+- Não rode build, prebuild, ou qualquer coisa que gere código.
+- Não crie arquivos.
+
+[VERIFICAÇÃO — responda com 4 blocos]
+BLOCO 1 — Lista de todos os package.json encontrados (com nome)
+BLOCO 2 — Saída de npm ls expo-router e npm ls @tanstack/react-query
+BLOCO 3 — Conteúdo do package.json raiz (se houver mais de um)
+BLOCO 4 — Tabela: pacote | instalado? | versão | missing?
