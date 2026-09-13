@@ -1,0 +1,53 @@
+[CONTEXTO]
+Estamos preparando um dev build. Antes de buildar, preciso verificar 3
+pontos que podem causar falha silenciosa em runtime. NÃO altere nenhum
+arquivo nesta tarefa — apenas reporte o que encontrar.
+
+[TAREFA — 4 verificações]
+
+── VERIFICAÇÃO 1: Versões e compatibilidade de New Arch ──
+Leia o package.json e reporte:
+  • react-native-mediapipe → versão exata
+  • react-native-fast-tflite → versão exata
+  • react-native-vision-camera → versão exata
+  • react-native → versão exata
+  • expo → versão exata
+
+Para cada uma das 3 primeiras libs, verifique o README ou CHANGELOG
+dentro de node_modules/<lib>/ e reporte:
+  • "Suporta New Arch: SIM / NÃO / DESCONHECIDO"
+  • Se "SIM", a partir de qual versão
+
+── VERIFICAÇÃO 2: Plugins customizados ──
+Localize e cole o conteúdo COMPLETO de:
+  • plugins/withFaceLandmarkerModel.js (ou .ts)
+  • plugins/withFaceRecognitionModel.js (ou .ts)
+
+Se algum não existir, reporte: "PLUGIN AUSENTE: <nome>".
+
+── VERIFICAÇÃO 3: react-native-mediapipe e config plugin ──
+Verifique dentro de node_modules/react-native-mediapipe/:
+  • Existe um arquivo app.plugin.js na raiz do pacote?
+  • Existe uma pasta plugin/ ou config-plugin/?
+  • O README menciona adicionar alguma entrada em "plugins" no app.json?
+  • Reporte trechos relevantes do README (até 30 linhas).
+
+── VERIFICAÇÃO 4: Modelos TFLite esperados ──
+Os plugins customizados provavelmente empacotam modelos. Localize:
+  • assets/models/face-recognition.tflite (já sabemos: 4,99 MB)
+  • Procure por qualquer outro .tflite em assets/models/
+  • Procure por qualquer .task, .tflite ou .binarypb em assets/
+Reporte todos os arquivos encontrados com tamanho em MB.
+
+[NÃO FAÇA]
+- Não altere nenhum arquivo (app.json, eas.json, plugins, código).
+- Não instale dependências.
+- Não rode build.
+- Não modifique versões.
+- Não crie arquivos novos.
+
+[VERIFICAÇÃO — responda com 4 blocos]
+BLOCO 1 — Versões e compatibilidade New Arch
+BLOCO 2 — Conteúdo dos 2 plugins customizados
+BLOCO 3 — Análise do react-native-mediapipe
+BLOCO 4 — Lista de arquivos .tflite/.task encontrados
