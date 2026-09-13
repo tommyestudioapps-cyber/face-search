@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "7w61ps_hR17HO38x8gXDa"
+uri = "file://exports/busca-facial-local-source.zip"
+type = "unspecified"
+title = "Código-fonte limpo — Busca Facial Local"
+description = "Pacote com somente o código versionado do app e os modelos necessários. Não inclui .git, APK, AAB, node_modules, caches ou builds gerados."
+logical_id = "27363ca3-0eb3-4339-9431-106bc016dc48"
+content_hash = "sha256:5bf0772437e657c5ddcd2b0c95fa63ffcfc7b9a740b9d4f78849d356559faca7"
+size = 9769587
+mtime_ms = 1789310074071
+storage_uri = "gcs://replit-rams-assets-reed/rams/assets/repl:2a4d4a8e-7c22-4ff1-a93e-6196ada332df/27363ca3-0eb3-4339-9431-106bc016dc48/f76b4be3-ed93-42fe-9c1f-efa99d4ee9c4"
+storage_version_token = "1789310091188751"
+content_type = "application/octet-stream"
