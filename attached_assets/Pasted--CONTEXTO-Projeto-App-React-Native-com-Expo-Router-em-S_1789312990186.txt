@@ -1,0 +1,148 @@
+[CONTEXTO]
+Projeto: App React Native com Expo Router em SDK gerenciado.
+Usa 4 módulos nativos que NÃO funcionam em Expo Go:
+- react-native-mediapipe (detecção facial)
+- react-native-fast-tflite (embeddings)
+- expo-sqlite
+- expo-media-library
+
+O app só está sendo testado em Expo Go até agora, e por isso os módulos
+nativos não rodam. Precisamos preparar o projeto para gerar uma DEV BUILD
+via EAS Build. Nesta tarefa ainda NÃO vamos buildar — apenas preparar a
+base. O build será executado depois pelo próprio usuário.
+
+Execute as 4 tarefas abaixo em ordem. Antes de cada tarefa, escreva no
+console um cabeçalho: "── TAREFA X: <nome>".
+
+────────────────────────────────────────────────
+TAREFA 1 — Inspecionar a configuração do Expo
+────────────────────────────────────────────────
+1.1. Localize o arquivo de configuração do Expo. Pode ser:
+     - app.json (estático)
+     - app.config.js (dinâmico)
+     - app.config.ts (dinâmico TypeScript)
+     Se mais de um existir, me avise IMEDIATAMENTE e pare.
+
+1.2. Me informe qual arquivo foi encontrado.
+
+1.3. Cole o conteúdo COMPLETO do arquivo, sem alterar nada.
+
+1.4. Reporte o valor (ou "AUSENTE") de cada chave:
+     • expo.name
+     • expo.slug
+     • expo.version
+     • expo.scheme
+     • expo.android.package
+     • expo.ios.bundleIdentifier
+     • expo.plugins (liste todos, um por linha)
+
+1.5. NÃO altere este arquivo. NÃO adicione plugins. NÃO mude nomes.
+
+────────────────────────────────────────────────
+TAREFA 2 — Criar ou verificar eas.json
+────────────────────────────────────────────────
+2.1. Verifique se o arquivo eas.json existe na raiz do projeto.
+
+2.2. Se existir, apenas cole o conteúdo completo e NÃO altere.
+
+2.3. Se NÃO existir, crie na raiz do projeto com EXATAMENTE este conteúdo
+     (sem adicionar comentários, sem reformatar):
+
+{
+  "cli": {
+    "version": ">= 5.9.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
+
+────────────────────────────────────────────────
+TAREFA 3 — Instalar expo-dev-client
+────────────────────────────────────────────────
+3.1. Rode EXATAMENTE este comando:
+     npx expo install expo-dev-client
+
+3.2. NÃO use npm install, NÃO use yarn add, NÃO use pnpm add.
+
+3.3. Ao final, me informe a versão que foi instalada (aparece em
+     package.json, seção dependencies).
+
+────────────────────────────────────────────────
+TAREFA 4 — Verificar o arquivo do modelo TFLite
+────────────────────────────────────────────────
+4.1. Verifique se o arquivo existe:
+     assets/models/face-recognition.tflite
+
+4.2. Se existir, rode um comando para obter o tamanho em bytes, por exemplo:
+     ls -l assets/models/face-recognition.tflite
+     E reporte tamanho em bytes E em MB (duas casas decimais).
+
+4.3. Se NÃO existir, apenas reporte: "MODELO AUSENTE". Não tente baixar,
+     não tente criar, não substitua por outro arquivo.
+
+────────────────────────────────────────────────
+[NÃO FAÇA]
+────────────────────────────────────────────────
+- NÃO rode eas build.
+- NÃO rode eas login.
+- NÃO rode eas init.
+- NÃO instale nenhuma dependência além de expo-dev-client.
+- NÃO modifique app.json / app.config.js / app.config.ts.
+- NÃO adicione nenhum plugin em app.json.
+- NÃO modifique código-fonte (components, hooks, services, utils).
+- NÃO renomeie arquivos existentes.
+- NÃO apague nada.
+
+────────────────────────────────────────────────
+[VERIFICAÇÃO — responda ao final]
+────────────────────────────────────────────────
+Me devolva um relatório com EXATAMENTE estes 5 blocos:
+
+BLOCO 1 — Arquivo de configuração
+- Nome do arquivo encontrado: [...]
+- Conteúdo completo: [cole aqui]
+- Chaves:
+    expo.name                = [...]
+    expo.slug                = [...]
+    expo.version             = [...]
+    expo.scheme              = [...]
+    expo.android.package     = [...]
+    expo.ios.bundleIdentifier= [...]
+    expo.plugins             = [liste todos]
+
+BLOCO 2 — eas.json
+- Status: [já existia / criei agora]
+- Conteúdo completo: [cole aqui]
+
+BLOCO 3 — expo-dev-client
+- Versão instalada: [...]
+
+BLOCO 4 — Modelo TFLite
+- Status: [existe / AUSENTE]
+- Tamanho: [...] bytes ([...] MB) — ou "N/A"
+
+BLOCO 5 — Próximos comandos para o usuário
+Liste os comandos que o USUÁRIO (não você) deve rodar no terminal local
+para: (a) autenticar no EAS, (b) disparar o build de desenvolvimento
+para Android, (c) instalar o APK no dispositivo. NÃO execute esses
+comandos — apenas liste-os.
