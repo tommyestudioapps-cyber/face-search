@@ -7,7 +7,6 @@ out-tsc
 *.tsbuildinfo
 **/builds/
 **/static-build/
-exports/
 *.apk
 *.aab
 .expo
