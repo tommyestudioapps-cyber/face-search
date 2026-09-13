@@ -1,0 +1,61 @@
+[CONTEXTO]
+Estamos caçando uma falha silenciosa em runtime. O README do
+react-native-mediapipe exige duas configurações que podem estar ausentes:
+(1) o plugin 'react-native-worklets-core/plugin' no babel.config.js e
+(2) a dependência react-native-worklets-core instalada. Também precisamos
+verificar a configuração do Metro (para .task/.tflite) e o minSdkVersion
+do Android.
+
+NÃO altere nenhum arquivo nesta tarefa. Apenas reporte o que encontrar.
+
+[TAREFA — 5 verificações]
+
+── VERIFICAÇÃO 1: babel.config.js ──
+Localize babel.config.js (ou .babelrc, .babelrc.js) na raiz do projeto.
+  • Cole o conteúdo COMPLETO do arquivo.
+  • Se não existir, reporte: "babel.config.js AUSENTE".
+  • Confirme explicitamente: o array de plugins contém a string
+    'react-native-worklets-core/plugin'? SIM ou NÃO.
+
+── VERIFICAÇÃO 2: react-native-worklets-core ──
+  • Está listado em package.json → dependencies?
+  • Está listado em package.json → devDependencies?
+  • Existe a pasta node_modules/react-native-worklets-core/?
+  • Se existir, qual a versão instalada (leia o package.json dela)?
+
+── VERIFICAÇÃO 3: metro.config.js ──
+Localize metro.config.js na raiz do projeto.
+  • Cole o conteúdo COMPLETO.
+  • Se não existir, reporte: "metro.config.js AUSENTE".
+  • O arquivo menciona extensões .tflite, .task ou assetExts? SIM ou NÃO.
+
+── VERIFICAÇÃO 4: minSdkVersion ──
+Verifique o valor de minSdkVersion em QUALQUER um destes locais,
+na ordem (pare no primeiro que encontrar):
+  1. android/build.gradle (se a pasta android/ existir)
+  2. android/app/build.gradle
+  3. app.json → expo.android.minSdkVersion
+  4. package.json → expo.android.minSdkVersion
+Reporte:
+  • Onde encontrou: [...]
+  • Valor: [...]
+  • Se não encontrou em nenhum, reporte: "NÃO DEFINIDO — usará padrão do Expo"
+
+── VERIFICAÇÃO 5: Versões exatas das 3 libs de inferência ──
+Cole o conteúdo COMPLETO da seção "dependencies" de package.json,
+sem filtrar. Preciso ver tudo junto para checar conflitos de versão
+(especialmente react-native-worklets-core, react-native-vision-camera
+e react-native-reanimated).
+
+[NÃO FAÇA]
+- Não altere babel.config.js, metro.config.js, package.json ou gradle.
+- Não instale nenhuma dependência (nem react-native-worklets-core).
+- Não rode build, não rode expo prebuild, não rode nada que gere código.
+- Não crie arquivos novos.
+
+[VERIFICAÇÃO — responda com 5 blocos]
+BLOCO 1 — babel.config.js (conteúdo + presença do plugin)
+BLOCO 2 — react-native-worklets-core (instalado? versão?)
+BLOCO 3 — metro.config.js (conteúdo + assetExts)
+BLOCO 4 — minSdkVersion (onde + valor)
+BLOCO 5 — dependencies completas de package.json
