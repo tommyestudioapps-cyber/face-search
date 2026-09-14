@@ -20,3 +20,9 @@ Este workspace pode executar o prebuild Android e validar plugins/assets, mas n�
 **Why:** O servidor Metro e o development URL não incluem os módulos nativos em um APK instalado, e a compilação Gradle falha antes de iniciar quando Java não está disponível.
 
 **How to apply:** Use o prebuild para validar a configuração e a presença dos modelos, mas trate a execução do roteiro físico como bloqueada até haver um APK gerado por EAS ou outro ambiente Android e um aparelho conectado.
+
+Para builds Android remotos deste app via Expo, o projeto precisa estar associado a um repositório GitHub com o código na branch usada pelo build e o diretório-base do monorepo informado; um repositório vazio ou apenas a conexão GitHub do workspace não basta.
+
+**Why:** O serviço remoto recusou o build até a associação do repositório ao projeto Expo, mesmo depois de o código ter sido publicado no GitHub.
+
+**How to apply:** Verifique a associação GitHub no projeto Expo antes de iniciar o build remoto e use `artifacts/busca-facial-local` como diretório-base.
