@@ -26,3 +26,9 @@ Para builds Android remotos deste app via Expo, o projeto precisa estar associad
 **Why:** O serviço remoto recusou o build até a associação do repositório ao projeto Expo, mesmo depois de o código ter sido publicado no GitHub.
 
 **How to apply:** Verifique a associação GitHub no projeto Expo antes de iniciar o build remoto e use `artifacts/busca-facial-local` como diretório-base.
+
+Depois de executar o prebuild, o manifesto Expo pode receber versões nativas adicionais; o lockfile precisa ser regenerado antes do build remoto com instalação congelada.
+
+**Why:** O builder rejeitou a instalação porque o manifesto e o importer do lockfile divergiam em Expo e React.
+
+**How to apply:** Rode uma sincronização de lockfile e valide com `pnpm install --frozen-lockfile --lockfile-only` antes de reenviar o commit ao repositório do build.
