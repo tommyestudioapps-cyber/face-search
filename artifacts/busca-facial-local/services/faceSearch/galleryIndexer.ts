@@ -29,6 +29,12 @@ import {
   releaseRecognitionModel,
   runFaceEmbedding,
 } from './model';
+import {
+  shouldLogPhoto,
+  logIndexProgress,
+  logPhotoTiming,
+  yieldToEventLoop,
+} from '../observability/logger';
 
 export interface GalleryIndexOptions {
   onProgress?: (progress: FaceIndexProgress) => void;
@@ -191,12 +197,18 @@ async function indexAsset(
     return { indexed: false, skipped: false, faceCount: 0 };
   }
 
+  const startedAt = Date.now();
+  let detectMs = 0;
+  let embedMs = 0;
+
   let session: FaceDetectionSession | null = null;
   const indexedFaces: IndexedFace[] = [];
 
   try {
     try {
+      const t0 = Date.now();
       session = await detectFaces(asset.uri);
+      detectMs += Date.now() - t0;
     } catch (error) {
       if (error instanceof FaceCaptureError && error.code === 'no-face') {
         session = null;
@@ -215,7 +227,9 @@ async function indexAsset(
         try {
           alignedFace = await alignSelectedFace(session, detectedFace.id);
           const inputTensor = await preprocessAlignedFace(alignedFace);
+          const t0 = Date.now();
           const embedding = await runFaceEmbedding(inputTensor);
+          embedMs += Date.now() - t0;
 
           indexedFaces.push({
             id: `${asset.id}:${detectedFace.id}`,
@@ -243,6 +257,17 @@ async function indexAsset(
       createIndexedPhoto(asset, indexedFaces.length),
       indexedFaces,
     );
+
+    if (shouldLogPhoto()) {
+      logPhotoTiming({
+        assetId: asset.id,
+        totalMs: Date.now() - startedAt,
+        detectMs,
+        embedMs,
+        faceCount: indexedFaces.length,
+        skipped: false,
+      });
+    }
 
     return {
       indexed: true,
@@ -311,6 +336,7 @@ export async function indexGallery(
   }
 
   activeIndexing = true;
+  const indexStartedAt = Date.now();
   try {
     if (Platform.OS === 'web') {
       throw new FaceRecognitionError(
@@ -381,6 +407,15 @@ export async function indexGallery(
           currentAssetId: null,
         };
         options.onProgress?.(progress);
+        if (progress.processedAssets % 20 === 0) {
+          logIndexProgress(
+            progress.processedAssets,
+            totalAssets,
+            Date.now() - indexStartedAt,
+          );
+        }
+
+        await yieldToEventLoop();
       }
 
       cursor = page.endCursor;

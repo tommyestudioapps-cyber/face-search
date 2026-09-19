@@ -35,7 +35,14 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
     const qualitySample = await createAnalysisSample(normalized.uri);
     qualitySampleUri = qualitySample.uri;
     const qualityImage = await decodeImage(qualitySample.uri);
+    const detectStartedAt = Date.now();
     const result = await detectFacesWithMediaPipe(normalized.uri);
+    if (__DEV__) {
+      console.log(
+        `[Detect] nativo ${Date.now() - detectStartedAt}ms | ` +
+          `faces=${result.faces.length}`,
+      );
+    }
     const nativeFaces = result.faces;
 
     if (nativeFaces.length === 0) {
