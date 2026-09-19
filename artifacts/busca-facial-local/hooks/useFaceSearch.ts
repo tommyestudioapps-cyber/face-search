@@ -51,6 +51,7 @@ export interface UseFaceSearchResult {
   isLoadingIndexedPhotos: boolean;
   refreshIndexedPhotos: () => Promise<void>;
   error: FaceRecognitionError | null;
+  setActiveAlignedFace: (face: AlignedFace | null) => void;
   startIndexing: () => Promise<GalleryIndexResult | null>;
   cancelIndexing: () => void;
   clearIndex: () => Promise<void>;
@@ -120,6 +121,7 @@ export function useFaceSearch(): UseFaceSearchResult {
   const [isLoadingIndexedPhotos, setIsLoadingIndexedPhotos] = useState(false);
   const [error, setError] = useState<FaceRecognitionError | null>(null);
   const mountedRef = useRef(true);
+  const activeAlignedFaceRef = useRef<AlignedFace | null>(null);
   const initializationPromiseRef = useRef<Promise<void> | null>(null);
   const faceSearchModuleRef = useRef<FaceSearchModule | null>(null);
   const faceSearchModulePromiseRef = useRef<Promise<FaceSearchModule> | null>(null);
@@ -209,6 +211,10 @@ export function useFaceSearch(): UseFaceSearchResult {
     }
   }, []);
 
+  const setActiveAlignedFace = useCallback((face: AlignedFace | null) => {
+    activeAlignedFaceRef.current = face;
+  }, []);
+
   const startIndexing = useCallback(async (): Promise<GalleryIndexResult | null> => {
     if (indexPromiseRef.current) {
       return indexPromiseRef.current;
@@ -242,6 +248,28 @@ export function useFaceSearch(): UseFaceSearchResult {
             console.log(
               `[Stats] pós-indexação status=${result.status} fotos=${nextStats.indexedPhotos} rostos=${nextStats.indexedFaces}`,
             );
+          }
+        }
+        const activeFace = activeAlignedFaceRef.current;
+        if (activeFace && activeFace.standardized) {
+          if (__DEV__) {
+            console.log('[Search] rodando search pós-indexação');
+          }
+          try {
+            const nextSummary = await faceSearchModule.searchFace(activeFace);
+            if (mountedRef.current) {
+              setSummary(nextSummary);
+              setResults(nextSummary.results);
+              if (__DEV__) {
+                console.log(
+                  `[Search] resultados=${nextSummary.results.length}`,
+                );
+              }
+            }
+          } catch (searchError) {
+            if (__DEV__) {
+              console.log('[Search] falhou pós-indexação', searchError);
+            }
           }
         }
         return result;
@@ -496,6 +524,7 @@ export function useFaceSearch(): UseFaceSearchResult {
     isLoadingIndexedPhotos,
     refreshIndexedPhotos,
     error,
+    setActiveAlignedFace,
     startIndexing,
     cancelIndexing,
     clearIndex,

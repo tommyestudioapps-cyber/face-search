@@ -267,20 +267,18 @@ function Home({
   onSelect,
   onSettings,
   onOpenIndexed,
-  onOpenIndexedFaces,
   onContinueFace,
   hasActiveFace,
-  indexedPhotoCount,
-  indexedFaceCount,
+  matchCount,
+  onOpenMatches,
 }: {
   onSelect: () => void;
   onSettings: () => void;
   onOpenIndexed: () => void;
-  onOpenIndexedFaces: () => void;
   onContinueFace: () => void;
   hasActiveFace: boolean;
-  indexedPhotoCount: number;
-  indexedFaceCount: number;
+  matchCount: number;
+  onOpenMatches: () => void;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -366,10 +364,9 @@ function Home({
           ) : null}
 
           <IndexStatsCards
-            photoCount={indexedPhotoCount}
-            faceCount={indexedFaceCount}
-            onPressPhotos={onOpenIndexed}
-            onPressFaces={onOpenIndexedFaces}
+            matchCount={matchCount}
+            hasQuery={Boolean(hasActiveFace)}
+            onPressMatches={onOpenMatches}
           />
 
           <View style={[styles.privacyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -410,14 +407,12 @@ function SelectPhoto({
   captureError,
   captureProcessing,
   captureStatus,
-  indexedPhotoCount,
-  indexedFaceCount,
+  matchCount,
   onPickLibrary,
   onTakePhoto,
   onSelectFace,
   onSearch,
-  onOpenIndexed,
-  onOpenIndexedFaces,
+  onOpenMatches,
   onBack,
 }: {
   selectedImage: string | null;
@@ -430,14 +425,12 @@ function SelectPhoto({
   captureError: FaceCaptureError | null;
   captureProcessing: boolean;
   captureStatus: FaceCaptureStatus;
-  indexedPhotoCount: number;
-  indexedFaceCount: number;
+  matchCount: number;
   onPickLibrary: () => void;
   onTakePhoto: () => void;
   onSelectFace: (faceId: number) => void;
   onSearch: () => void;
-  onOpenIndexed: () => void;
-  onOpenIndexedFaces: () => void;
+  onOpenMatches: () => void;
   onBack: () => void;
 }) {
   const colors = useColors();
@@ -521,14 +514,15 @@ function SelectPhoto({
           hasAlignedFace={Boolean(alignedImageUri)}
         />
 
-        <View style={styles.selectStatsWrap}>
-          <IndexStatsCards
-            photoCount={indexedPhotoCount}
-            faceCount={indexedFaceCount}
-            onPressPhotos={onOpenIndexed}
-            onPressFaces={onOpenIndexedFaces}
-          />
-        </View>
+        {alignedImageUri ? (
+          <View style={styles.selectStatsWrap}>
+            <IndexStatsCards
+              matchCount={matchCount}
+              hasQuery={true}
+              onPressMatches={onOpenMatches}
+            />
+          </View>
+        ) : null}
 
         {alignedImageUri ? (
           <View style={[styles.alignedPreview, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -846,6 +840,7 @@ export default function HomeScreen() {
     clearState: faceSearchClearState,
     progress: faceSearchProgress,
     results,
+    summary,
     storedIndexStats,
     indexedPhotos,
     isLoadingIndexedPhotos,
@@ -854,6 +849,7 @@ export default function HomeScreen() {
     cancelIndexing,
     clearIndex,
     indexAndSearch,
+    setActiveAlignedFace,
   } = useFaceSearch();
 
   useEffect(() => {
@@ -953,6 +949,9 @@ export default function HomeScreen() {
   };
 
   const continueFaceSearch = () => {
+    if (alignedFace && alignedFace.standardized) {
+      setActiveAlignedFace(alignedFace);
+    }
     if (__DEV__) {
       console.log('[Face] continuando busca com rosto existente');
     }
@@ -960,6 +959,9 @@ export default function HomeScreen() {
   };
 
   const beginSearch = async () => {
+    if (alignedFace && alignedFace.standardized) {
+      setActiveAlignedFace(alignedFace);
+    }
     if (
       !selectedImage ||
       !alignedFace ||
@@ -972,6 +974,9 @@ export default function HomeScreen() {
   };
 
   const startAnalysis = async () => {
+    if (alignedFace && alignedFace.standardized) {
+      setActiveAlignedFace(alignedFace);
+    }
     if (
       !selectedImage ||
       !alignedFace ||
@@ -990,6 +995,13 @@ export default function HomeScreen() {
     } catch {
       // The progress component presents the friendly error and recovery action.
     }
+  };
+
+  const openMatches = () => {
+    if (__DEV__) {
+      console.log(`[Matches] abrindo ${results.length} resultados`);
+    }
+    setScreen('results');
   };
 
   const goHome = () => {
@@ -1026,8 +1038,7 @@ export default function HomeScreen() {
             captureError={captureError}
             captureProcessing={captureProcessing}
             captureStatus={captureStatus}
-            indexedPhotoCount={storedIndexStats.indexedPhotos}
-            indexedFaceCount={storedIndexStats.indexedFaces}
+            matchCount={results.length}
             onPickLibrary={pickFromLibrary}
             onTakePhoto={takePhoto}
             onSelectFace={(faceId) => {
@@ -1035,8 +1046,7 @@ export default function HomeScreen() {
               void alignFace(faceId);
             }}
             onSearch={beginSearch}
-            onOpenIndexed={openIndexed}
-            onOpenIndexedFaces={openIndexedFaces}
+            onOpenMatches={openMatches}
             onBack={leaveSelection}
           />
         );
@@ -1078,11 +1088,10 @@ export default function HomeScreen() {
             onSelect={openSearch}
             onSettings={() => setShowIndexSettings(true)}
             onOpenIndexed={openIndexed}
-            onOpenIndexedFaces={openIndexedFaces}
             onContinueFace={continueFaceSearch}
             hasActiveFace={Boolean(alignedFace)}
-            indexedPhotoCount={storedIndexStats.indexedPhotos}
-            indexedFaceCount={storedIndexStats.indexedFaces}
+            matchCount={results.length}
+            onOpenMatches={openMatches}
           />
         );
     }
@@ -1107,8 +1116,8 @@ export default function HomeScreen() {
     isLoadingIndexedPhotos,
     refreshIndexedPhotos,
     openIndexed,
-    openIndexedFaces,
     continueFaceSearch,
+    openMatches,
     cancelIndexing,
     results,
   ]);

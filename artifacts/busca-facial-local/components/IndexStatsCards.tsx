@@ -4,125 +4,81 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 
 interface IndexStatsCardsProps {
-  photoCount: number;
-  faceCount: number;
-  onPressPhotos: () => void;
-  onPressFaces: () => void;
-}
-
-function IconCircle({
-  name,
-  color,
-  backgroundColor,
-}: {
-  name: keyof typeof Feather.glyphMap;
-  color: string;
-  backgroundColor: string;
-}) {
-  return (
-    <View style={[styles.iconCircle, { backgroundColor }]}>
-      <Feather name={name} size={20} color={color} />
-    </View>
-  );
+  matchCount: number;
+  hasQuery: boolean;
+  onPressMatches: () => void;
 }
 
 export function IndexStatsCards({
-  photoCount,
-  faceCount,
-  onPressPhotos,
-  onPressFaces,
+  matchCount,
+  hasQuery,
+  onPressMatches,
 }: IndexStatsCardsProps) {
   const colors = useColors();
 
-  return (
-    <View style={styles.row}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Ver ${photoCount} fotos indexadas`}
-        onPress={onPressPhotos}
-        testID="index-stats-photos"
-        style={({ pressed }) => [
-          styles.card,
-          styles.cardActionable,
-          { backgroundColor: colors.card },
-          pressed ? styles.cardPressed : null,
-        ]}
-      >
-        <View style={styles.cardTop}>
-          <IconCircle
-            name="image"
-            color={colors.primary}
-            backgroundColor={colors.accent}
-          />
-          <Feather name="arrow-up-right" size={15} color={colors.primary} />
-        </View>
-        <Text style={[styles.value, { color: colors.foreground }]}>
-          {String(photoCount)}
-        </Text>
-        <Text style={[styles.label, { color: colors.mutedForeground }]}>
-          fotos indexadas
-        </Text>
-      </Pressable>
+  if (!hasQuery) {
+    return null;
+  }
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Ver ${faceCount} rostos indexados`}
-        onPress={onPressFaces}
-        testID="index-stats-faces"
-        style={({ pressed }) => [
-          styles.card,
-          styles.cardActionable,
-          { backgroundColor: colors.card },
-          pressed ? styles.cardPressed : null,
-        ]}
-      >
-        <View style={styles.cardTop}>
-          <IconCircle
-            name="users"
-            color="#34D399"
-            backgroundColor="#123429"
-          />
-          <Feather name="arrow-up-right" size={15} color="#34D399" />
-        </View>
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Ver ${matchCount} fotos com o rosto buscado`}
+      onPress={onPressMatches}
+      testID="view-matches"
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: colors.card, borderColor: colors.border },
+        pressed ? styles.pressed : null,
+      ]}
+    >
+      <View style={[styles.iconWrap, { backgroundColor: colors.accent }]}>
+        <Feather name="user-check" size={20} color={colors.primary} />
+      </View>
+      <View style={styles.copy}>
         <Text style={[styles.value, { color: colors.foreground }]}>
-          {String(faceCount)}
+          {matchCount}
         </Text>
         <Text style={[styles.label, { color: colors.mutedForeground }]}>
-          rostos indexados
+          {matchCount === 1
+            ? 'foto com este rosto'
+            : 'fotos com este rosto'}
         </Text>
-      </Pressable>
-    </View>
+      </View>
+      <Feather name="arrow-right" size={18} color={colors.primary} />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 12 },
-  card: { flex: 1, minHeight: 121, borderRadius: 19, padding: 14 },
-  cardActionable: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  cardPressed: {
-    opacity: 0.75,
-    transform: [{ scale: 0.98 }],
-  },
-  cardTop: {
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 17,
+    padding: 14,
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
+  pressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.985 }],
+  },
+  iconWrap: {
+    width: 42,
+    height: 42,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  copy: { flex: 1 },
   value: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: 'Inter_700Bold',
-    marginTop: 11,
-    letterSpacing: -0.7,
+    letterSpacing: -0.5,
   },
-  label: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
+  label: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    marginTop: 2,
+  },
 });
