@@ -1,0 +1,165 @@
+Contexto: Fase 3B. Ativar GPU delegate no MediaPipe com fallback
+automático para CPU. A Fase 3A já adicionou timeout com withTimeout,
+e o diagnóstico confirmou:
+- Delegate.CPU = 0, Delegate.GPU = 1 (enum do pacote, confirmado
+  em TS, Kotlin e Swift).
+- O código Kotlin do pacote tem comentário explícito de que GPU
+  precisa rodar na thread que inicializou o módulo — daí a
+  necessidade de fallback.
+- O arquivo usa require() dinâmico para o módulo nativo, de propósito.
+  Portanto NÃO vamos importar Delegate do pacote (isso forçaria
+  carregamento em import-time). Vamos usar const local.
+
+Esta etapa toca UM arquivo:
+- artifacts/busca-facial-local/services/faceCapture/nativeAdapter.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Adicionar const local Delegate e classe de timeout
+
+Logo após os imports e antes da interface NativeMediaPipeRuntime,
+adicionar:
+
+  const Delegate = {
+    CPU: 0,
+    GPU: 1,
+  } as const;
+
+  type DelegateValue = (typeof Delegate)[keyof typeof Delegate];
+
+  class DetectionTimeoutError extends FaceCaptureError {
+    constructor() {
+      super(
+        'processing-failed',
+        'A detecção facial demorou demais para responder.',
+      );
+    }
+  }
+
+Nota: a classe DetectionTimeoutError existe só para permitir que o
+fallback diferencie "GPU falhou rápido" de "GPU travou e o timeout
+disparou". Não renomeia FaceCaptureError.
+
+Passo 2 — Atualizar o tipo da interface
+
+Na interface NativeMediaPipeRuntime, trocar:
+  delegate: number;
+por:
+  delegate: DelegateValue;
+
+Passo 3 — Trocar o onTimeout do withTimeout para usar a classe nova
+
+No withTimeout chamado dentro de detectFacesWithMediaPipe, onde hoje
+está:
+  () =>
+    new FaceCaptureError(
+      'processing-failed',
+      'A detecção facial demorou demais para responder.',
+    ),
+substituir por:
+  () => new DetectionTimeoutError(),
+
+Passo 4 — Extrair helper detectWithDelegate
+
+Antes de detectFacesWithMediaPipe, adicionar função interna:
+
+  async function detectWithDelegate(
+    runtime: NativeMediaPipeRuntime,
+    imagePath: string,
+    delegate: DelegateValue,
+  ): Promise<NativeResultBundle> {
+    return withTimeout(
+      runtime.faceLandmarkDetectionOnImage(
+        imagePath,
+        faceCapture.modelAssetName,
+        {
+          numFaces: faceCapture.maxFaces,
+          minFaceDetectionConfidence: faceCapture.minDetectionConfidence,
+          minFacePresenceConfidence: faceCapture.minPresenceConfidence,
+          minTrackingConfidence: faceCapture.minTrackingConfidence,
+          delegate,
+        },
+      ),
+      NATIVE_DETECTION_TIMEOUT_MS,
+      () => new DetectionTimeoutError(),
+    );
+  }
+
+Passo 5 — Reescrever o corpo de detectFacesWithMediaPipe
+
+Substituir o bloco try/catch atual por:
+
+  try {
+    let result: NativeResultBundle;
+    try {
+      result = await detectWithDelegate(runtime, imagePath, Delegate.GPU);
+    } catch (gpuError) {
+      if (gpuError instanceof DetectionTimeoutError) {
+        // O nativo ainda pode estar rodando em background; não
+        // disparamos uma segunda detecção só para cair em CPU.
+        throw gpuError;
+      }
+      if (__DEV__) {
+        console.log('[FaceCapture] GPU delegate falhou, usando CPU', {
+          error:
+            gpuError instanceof Error ? gpuError.message : String(gpuError),
+        });
+      }
+      result = await detectWithDelegate(runtime, imagePath, Delegate.CPU);
+    }
+    return mapNativeResult(result);
+  } catch (error) {
+    if (error instanceof FaceCaptureError) {
+      throw error;
+    }
+    throw mapNativeError(error);
+  }
+
+Regras:
+- Não alterar as outras funções do arquivo (getRuntime, mapNativeError,
+  imports, etc).
+- Não alterar a assinatura pública de detectFacesWithMediaPipe.
+- Não alterar o parâmetro delegate da chamada dentro de
+  detectWithDelegate — ele já é parametrizado.
+- Não remover o import de FaceCaptureError (usado em vários lugares).
+
+Passo 6 — Validação
+
+6.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa.
+
+6.2 a 6.6 Rode os cinco runners de teste, na ordem já usada nas
+fases anteriores (face-capture, face-search, face-overlay,
+face-settings, face-coordination). Cole as saídas completas.
+
+Passo 7 — Relatório
+
+7.1 Cole o diff unified completo de nativeAdapter.ts.
+
+7.2 Confirme explicitamente:
+  - a const local Delegate existe com CPU=0 e GPU=1;
+  - a classe DetectionTimeoutError estende FaceCaptureError;
+  - a interface usa DelegateValue no campo delegate;
+  - detectWithDelegate existe e recebe delegate como parâmetro;
+  - o try externo tenta GPU primeiro;
+  - o catch distingue DetectionTimeoutError (relança) de outros
+    erros (faz fallback);
+  - o fallback usa Delegate.CPU;
+  - __DEV__ é usado para o log, e o log só ocorre no fallback;
+  - apenas nativeAdapter.ts foi alterado.
+
+Passo 8 — Verificação de git (sem alterar nada)
+
+8.1 Rode `git log --oneline -5` e cole a saída.
+8.2 Rode `git status` e cole a saída.
+8.3 Se o working tree estiver limpo, apenas reporte qual commit
+    contém a Fase 3B. Não execute git add nem git commit.
+
+Regras finais:
+- Não faça commit manual.
+- Não altere nenhum arquivo fora de nativeAdapter.ts.
+- Não importe Delegate do pacote react-native-mediapipe (o arquivo
+  usa require() dinâmico de propósito).
+- Não mexa em FaceCaptureError (definida em types.ts).
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.

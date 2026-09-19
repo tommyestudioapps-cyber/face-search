@@ -6,6 +6,22 @@ import type { NativeDetectionResult, NativeResultBundle } from './types';
 
 const NATIVE_DETECTION_TIMEOUT_MS = 30_000;
 
+const Delegate = {
+  CPU: 0,
+  GPU: 1,
+} as const;
+
+type DelegateValue = (typeof Delegate)[keyof typeof Delegate];
+
+class DetectionTimeoutError extends FaceCaptureError {
+  constructor() {
+    super(
+      'processing-failed',
+      'A detecção facial demorou demais para responder.',
+    );
+  }
+}
+
 export type {
   NativeDetectedFace,
   NativeDetectionResult,
@@ -22,7 +38,7 @@ interface NativeMediaPipeRuntime {
       minFaceDetectionConfidence: number;
       minFacePresenceConfidence: number;
       minTrackingConfidence: number;
-      delegate: number;
+      delegate: DelegateValue;
     },
   ) => Promise<NativeResultBundle>;
 }
@@ -69,6 +85,28 @@ function withTimeout<T>(
   });
 }
 
+async function detectWithDelegate(
+  runtime: NativeMediaPipeRuntime,
+  imagePath: string,
+  delegate: DelegateValue,
+): Promise<NativeResultBundle> {
+  return withTimeout(
+    runtime.faceLandmarkDetectionOnImage(
+      imagePath,
+      faceCapture.modelAssetName,
+      {
+        numFaces: faceCapture.maxFaces,
+        minFaceDetectionConfidence: faceCapture.minDetectionConfidence,
+        minFacePresenceConfidence: faceCapture.minPresenceConfidence,
+        minTrackingConfidence: faceCapture.minTrackingConfidence,
+        delegate,
+      },
+    ),
+    NATIVE_DETECTION_TIMEOUT_MS,
+    () => new DetectionTimeoutError(),
+  );
+}
+
 function mapNativeError(error: unknown): FaceCaptureError {
   const details = getNativeErrorDetails(error);
   return new FaceCaptureError(details.code, details.message);
@@ -84,25 +122,23 @@ export async function detectFacesWithMediaPipe(
   const runtime = getRuntime();
 
   try {
-    const result = await withTimeout(
-      runtime.faceLandmarkDetectionOnImage(
-        imagePath,
-        faceCapture.modelAssetName,
-        {
-          numFaces: faceCapture.maxFaces,
-          minFaceDetectionConfidence: faceCapture.minDetectionConfidence,
-          minFacePresenceConfidence: faceCapture.minPresenceConfidence,
-          minTrackingConfidence: faceCapture.minTrackingConfidence,
-          delegate: 0,
-        },
-      ),
-      NATIVE_DETECTION_TIMEOUT_MS,
-      () =>
-        new FaceCaptureError(
-          'processing-failed',
-          'A detecção facial demorou demais para responder.',
-        ),
-    );
+    let result: NativeResultBundle;
+    try {
+      result = await detectWithDelegate(runtime, imagePath, Delegate.GPU);
+    } catch (gpuError) {
+      if (gpuError instanceof DetectionTimeoutError) {
+        // O nativo ainda pode estar rodando em background; não
+        // disparamos uma segunda detecção só para cair em CPU.
+        throw gpuError;
+      }
+      if (__DEV__) {
+        console.log('[FaceCapture] GPU delegate falhou, usando CPU', {
+          error:
+            gpuError instanceof Error ? gpuError.message : String(gpuError),
+        });
+      }
+      result = await detectWithDelegate(runtime, imagePath, Delegate.CPU);
+    }
 
     return mapNativeResult(result);
   } catch (error) {
