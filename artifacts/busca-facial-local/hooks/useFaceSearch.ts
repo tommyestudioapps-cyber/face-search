@@ -52,6 +52,7 @@ export interface UseFaceSearchResult {
   refreshIndexedPhotos: () => Promise<void>;
   error: FaceRecognitionError | null;
   setActiveAlignedFace: (face: AlignedFace | null) => void;
+  rehydrateSession: (alignedFace: AlignedFace) => Promise<void>;
   startIndexing: (
     albumId?: string | null,
   ) => Promise<GalleryIndexResult | null>;
@@ -217,6 +218,28 @@ export function useFaceSearch(): UseFaceSearchResult {
   const setActiveAlignedFace = useCallback((face: AlignedFace | null) => {
     activeAlignedFaceRef.current = face;
   }, []);
+
+  const rehydrateSession = useCallback(async (alignedFace: AlignedFace) => {
+    activeAlignedFaceRef.current = alignedFace;
+    try {
+      await ensureInitialized();
+      const faceSearchModule = await getFaceSearchModule();
+      const nextSummary = await faceSearchModule.searchFace(alignedFace);
+      if (mountedRef.current) {
+        setSummary(nextSummary);
+        setResults(nextSummary.results);
+        if (__DEV__) {
+          console.log(
+            `[Rehydrate] resultados=${nextSummary.results.length}`,
+          );
+        }
+      }
+    } catch (error) {
+      if (__DEV__) {
+        console.log('[Rehydrate] falhou', error);
+      }
+    }
+  }, [ensureInitialized, getFaceSearchModule]);
 
   const startIndexing = useCallback(async (
     albumId?: string | null,
@@ -534,6 +557,7 @@ export function useFaceSearch(): UseFaceSearchResult {
     refreshIndexedPhotos,
     error,
     setActiveAlignedFace,
+    rehydrateSession,
     startIndexing,
     cancelIndexing,
     clearIndex,

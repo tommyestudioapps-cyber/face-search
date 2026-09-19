@@ -12,6 +12,12 @@ import {
   type FaceDetectionSession,
   type FaceCaptureStatus,
 } from '@/services/faceCapture';
+import {
+  clearPersistedSession,
+  loadPersistedSession,
+  persistSession,
+  type PersistedSession,
+} from '@/services/faceCapture/sessionPersistence';
 
 export function useFaceCapture() {
   const [faces, setFaces] = useState<DetectedFace[]>([]);
@@ -24,6 +30,8 @@ export function useFaceCapture() {
   const requestId = useRef(0);
   const sessionRef = useRef<FaceDetectionSession | null>(null);
   const alignedFaceRef = useRef<AlignedFace | null>(null);
+  const sourceUriRef = useRef<string | null>(null);
+  const persistedSessionUriRef = useRef<string | null>(null);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -33,7 +41,9 @@ export function useFaceCapture() {
     const previous = alignedFaceRef.current;
     alignedFaceRef.current = null;
     setAlignedFace(null);
-    if (previous) await cleanupTempFiles([previous.uri]);
+    if (previous && previous.uri !== persistedSessionUriRef.current) {
+      await cleanupTempFiles([previous.uri]);
+    }
   }, []);
 
   const setAlignedFaceResult = useCallback(
@@ -41,7 +51,15 @@ export function useFaceCapture() {
       const previous = alignedFaceRef.current;
       alignedFaceRef.current = next;
       setAlignedFace(next);
-      if (previous && previous.uri !== next?.uri) {
+      if (next) {
+        const sourceUri = sourceUriRef.current ?? next.sourceUri ?? '';
+        void persistSession(next, sourceUri);
+      }
+      if (
+        previous &&
+        previous.uri !== next?.uri &&
+        previous.uri !== persistedSessionUriRef.current
+      ) {
         await cleanupTempFiles([previous.uri]);
       }
     },
@@ -60,7 +78,7 @@ export function useFaceCapture() {
     } as FaceCaptureError;
   }, []);
 
-  const reset = useCallback(async () => {
+  const reset = useCallback(async (options?: { preserveSession?: boolean }) => {
     requestId.current += 1;
     setIsProcessing(false);
     setFaces([]);
@@ -72,6 +90,11 @@ export function useFaceCapture() {
     sessionRef.current = null;
     setSession(null);
     await releaseFaceDetectionSession(previous);
+    if (!options?.preserveSession) {
+      await clearPersistedSession();
+      persistedSessionUriRef.current = null;
+      sourceUriRef.current = null;
+    }
   }, [clearAlignedFace]);
 
   const cancel = useCallback(async () => {
@@ -86,9 +109,13 @@ export function useFaceCapture() {
     sessionRef.current = null;
     setSession(null);
     await releaseFaceDetectionSession(previous);
+    await clearPersistedSession();
+    persistedSessionUriRef.current = null;
+    sourceUriRef.current = null;
   }, [clearAlignedFace]);
 
   const analyze = useCallback(async (uri: string) => {
+    sourceUriRef.current = uri;
     const currentRequest = requestId.current + 1;
     requestId.current = currentRequest;
     setIsProcessing(true);
@@ -165,10 +192,25 @@ export function useFaceCapture() {
     }
   }, [selectedFaceId, setAlignedFaceResult, toCaptureError]);
 
+  const restoreFromSession = useCallback(async (): Promise<PersistedSession | null> => {
+    const persisted = await loadPersistedSession();
+    if (!persisted) {
+      return null;
+    }
+    alignedFaceRef.current = persisted.alignedFace;
+    persistedSessionUriRef.current = persisted.alignedFace.uri;
+    sourceUriRef.current = persisted.sourceUri;
+    setAlignedFace(persisted.alignedFace);
+    return persisted;
+  }, []);
+
   useEffect(() => {
     return () => {
       void releaseFaceDetectionSession(sessionRef.current);
-      if (alignedFaceRef.current) {
+      if (
+        alignedFaceRef.current &&
+        alignedFaceRef.current.uri !== persistedSessionUriRef.current
+      ) {
         void cleanupTempFiles([alignedFaceRef.current.uri]);
       }
     };
@@ -189,5 +231,6 @@ export function useFaceCapture() {
     align,
     cancel,
     reset,
+    restoreFromSession,
   };
 }

@@ -20,6 +20,7 @@ import { layout } from '@/constants/layout';
 import { useColors } from '@/hooks/useColors';
 import { useFaceCapture } from '@/hooks/useFaceCapture';
 import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
+import { clearPersistedSession } from '@/services/faceCapture/sessionPersistence';
 import { FaceCaptureFeedback } from '@/components/FaceCaptureFeedback';
 import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
 import { FaceSearchProgress } from '@/components/FaceSearchProgress';
@@ -869,6 +870,7 @@ export default function HomeScreen() {
     imageWidth,
     imageHeight,
     normalizedImageUri,
+    restoreFromSession,
   } = useFaceCapture();
   const {
     status: faceSearchStatus,
@@ -887,6 +889,7 @@ export default function HomeScreen() {
     clearIndex,
     indexAndSearch,
     setActiveAlignedFace,
+    rehydrateSession,
   } = useFaceSearch();
 
   useEffect(() => {
@@ -910,6 +913,26 @@ export default function HomeScreen() {
         // ignore parse error
       }
     });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const session = await restoreFromSession();
+      if (cancelled || !session) return;
+      if (__DEV__) {
+        console.log(
+          `[Boot] restaurando sessão de ${new Date(session.savedAt).toISOString()}`,
+        );
+      }
+      setSelectedImage(session.sourceUri);
+      setActiveAlignedFace(session.alignedFace);
+      await rehydrateSession(session.alignedFace);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -949,6 +972,7 @@ export default function HomeScreen() {
     });
     if (!selection.canceled && selection.assets[0]?.uri) {
       const uri = selection.assets[0].uri;
+      await clearPersistedSession();
       await resetCapture();
       setSelectedImage(uri);
       void analyzeFace(uri);
@@ -967,6 +991,7 @@ export default function HomeScreen() {
     });
     if (!selection.canceled && selection.assets[0]?.uri) {
       const uri = selection.assets[0].uri;
+      await clearPersistedSession();
       await resetCapture();
       setSelectedImage(uri);
       void analyzeFace(uri);
@@ -1068,19 +1093,20 @@ export default function HomeScreen() {
   };
 
   const goHome = () => {
-    void resetCapture();
+    void resetCapture({ preserveSession: true });
     setSelectedImage(null);
     setScreen('home');
   };
 
   const leaveSelection = () => {
-    void resetCapture();
+    void resetCapture({ preserveSession: true });
     setSelectedImage(null);
     setScreen('home');
   };
 
   const dismissSearchProgress = () => {
     cancelIndexing();
+    void resetCapture({ preserveSession: true });
     setScreen('select');
   };
 
