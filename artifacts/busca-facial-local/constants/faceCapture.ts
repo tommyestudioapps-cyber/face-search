@@ -9,6 +9,7 @@ export const faceCapture = {
   minDetectionConfidence: 0.6,
   minPresenceConfidence: 0.6,
   minTrackingConfidence: 0.5,
+  preferredDelegate: 'CPU' as 'CPU' | 'GPU',
   minLandmarkCount: 100,
   minFaceWidthRatio: 0.08,
   minFaceHeightRatio: 0.08,

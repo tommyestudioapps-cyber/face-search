@@ -1,0 +1,98 @@
+Contexto: Fase 9C. Logs de device real mostraram que GPU delegate
+'funciona' mas é extremamente lento: 6230ms em foto 629x629 no Oppo
+A78 (Mali-G52 MC2). Nenhum fallback ocorre — GPU aceita mas não
+acelera. Hipotese: overhead CPU↔GPU ou recompilacao de shaders.
+Vamos testar CPU puro, sem tentar GPU, para medir a diferenca real.
+
+Esta etapa toca DOIS arquivos:
+- artifacts/busca-facial-local/constants/faceCapture.ts
+- artifacts/busca-facial-local/services/faceCapture/nativeAdapter.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — constants/faceCapture.ts: nova constante
+
+Adicionar, logo apos a linha de minTrackingConfidence:
+
+  preferredDelegate: 'CPU' as 'CPU' | 'GPU',
+
+Nao alterar nenhuma outra constante.
+
+Passo 2 — nativeAdapter.ts: usar preferredDelegate
+
+2.1 No corpo de detectFacesWithMediaPipe, substituir o bloco
+try/catch atual por:
+
+  try {
+    let result: NativeResultBundle;
+    const preferred = faceCapture.preferredDelegate;
+    const primaryDelegate = preferred === 'CPU' ? Delegate.CPU : Delegate.GPU;
+    const fallbackDelegate = preferred === 'CPU' ? Delegate.GPU : Delegate.CPU;
+
+    const primaryStart = Date.now();
+    try {
+      result = await detectWithDelegate(runtime, imagePath, primaryDelegate);
+      logDelegateAttempt(preferred, Date.now() - primaryStart, true);
+    } catch (primaryError) {
+      logDelegateAttempt(preferred, Date.now() - primaryStart, false);
+      if (primaryError instanceof DetectionTimeoutError) {
+        throw primaryError;
+      }
+      if (__DEV__) {
+        console.log(
+          `[FaceCapture] ${preferred} falhou, tentando ${preferred === 'CPU' ? 'GPU' : 'CPU'}`,
+          {
+            error:
+              primaryError instanceof Error
+                ? primaryError.message
+                : String(primaryError),
+          },
+        );
+      }
+      const fallback = preferred === 'CPU' ? 'GPU' : 'CPU';
+      const fallbackStart = Date.now();
+      result = await detectWithDelegate(runtime, imagePath, fallbackDelegate);
+      logDelegateAttempt(fallback, Date.now() - fallbackStart, true);
+    }
+
+    return mapNativeResult(result);
+  } catch (error) {
+    if (error instanceof FaceCaptureError) {
+      throw error;
+    }
+    throw mapNativeError(error);
+  }
+
+2.2 Nao alterar mais nada em nativeAdapter.ts. A funcao
+detectWithDelegate continua igual. A constante
+NATIVE_DETECTION_TIMEOUT_MS continua igual.
+
+Passo 3 — Validacao
+
+3.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saida.
+
+3.2 Rode os cinco runners na ordem habitual e cole as saidas.
+
+Passo 4 — Relatorio
+
+4.1 Cole o diff unified dos dois arquivos.
+
+4.2 Confirme:
+  - faceCapture.preferredDelegate existe e o valor e 'CPU';
+  - detectFacesWithMediaPipe usa primaryDelegate e fallbackDelegate
+    derivados de preferredDelegate;
+  - logDelegateAttempt continua sendo chamado nas duas tentativas;
+  - a logica de timeout continua igual;
+  - nenhum outro arquivo foi tocado.
+
+Passo 5 — Git
+
+5.1 Rode `git log --oneline -3`.
+5.2 Rode `git status`.
+
+Regras finais:
+- Nao faca commit manual.
+- Nao altere nenhum arquivo fora dos dois listados.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrucao.

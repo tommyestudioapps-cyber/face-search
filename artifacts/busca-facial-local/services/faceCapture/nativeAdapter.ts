@@ -124,26 +124,34 @@ export async function detectFacesWithMediaPipe(
 
   try {
     let result: NativeResultBundle;
-    const gpuStart = Date.now();
+    const preferred = faceCapture.preferredDelegate;
+    const primaryDelegate = preferred === 'CPU' ? Delegate.CPU : Delegate.GPU;
+    const fallbackDelegate = preferred === 'CPU' ? Delegate.GPU : Delegate.CPU;
+
+    const primaryStart = Date.now();
     try {
-      result = await detectWithDelegate(runtime, imagePath, Delegate.GPU);
-      logDelegateAttempt('GPU', Date.now() - gpuStart, true);
-    } catch (gpuError) {
-      logDelegateAttempt('GPU', Date.now() - gpuStart, false);
-      if (gpuError instanceof DetectionTimeoutError) {
-        // O nativo ainda pode estar rodando em background; não
-        // disparamos uma segunda detecção só para cair em CPU.
-        throw gpuError;
+      result = await detectWithDelegate(runtime, imagePath, primaryDelegate);
+      logDelegateAttempt(preferred, Date.now() - primaryStart, true);
+    } catch (primaryError) {
+      logDelegateAttempt(preferred, Date.now() - primaryStart, false);
+      if (primaryError instanceof DetectionTimeoutError) {
+        throw primaryError;
       }
       if (__DEV__) {
-        console.log('[FaceCapture] GPU delegate falhou, usando CPU', {
-          error:
-            gpuError instanceof Error ? gpuError.message : String(gpuError),
-        });
+        console.log(
+          `[FaceCapture] ${preferred} falhou, tentando ${preferred === 'CPU' ? 'GPU' : 'CPU'}`,
+          {
+            error:
+              primaryError instanceof Error
+                ? primaryError.message
+                : String(primaryError),
+          },
+        );
       }
-      const cpuStart = Date.now();
-      result = await detectWithDelegate(runtime, imagePath, Delegate.CPU);
-      logDelegateAttempt('CPU', Date.now() - cpuStart, true);
+      const fallback = preferred === 'CPU' ? 'GPU' : 'CPU';
+      const fallbackStart = Date.now();
+      result = await detectWithDelegate(runtime, imagePath, fallbackDelegate);
+      logDelegateAttempt(fallback, Date.now() - fallbackStart, true);
     }
 
     return mapNativeResult(result);
