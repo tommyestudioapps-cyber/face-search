@@ -3,6 +3,7 @@ import { faceCapture } from '@/constants/faceCapture';
 import { FaceCaptureError } from './types';
 import { getNativeErrorDetails, mapNativeResult } from './nativeAdapterCore';
 import type { NativeDetectionResult, NativeResultBundle } from './types';
+import { logDelegateAttempt } from '../observability/logger';
 
 const NATIVE_DETECTION_TIMEOUT_MS = 30_000;
 
@@ -123,9 +124,12 @@ export async function detectFacesWithMediaPipe(
 
   try {
     let result: NativeResultBundle;
+    const gpuStart = Date.now();
     try {
       result = await detectWithDelegate(runtime, imagePath, Delegate.GPU);
+      logDelegateAttempt('GPU', Date.now() - gpuStart, true);
     } catch (gpuError) {
+      logDelegateAttempt('GPU', Date.now() - gpuStart, false);
       if (gpuError instanceof DetectionTimeoutError) {
         // O nativo ainda pode estar rodando em background; não
         // disparamos uma segunda detecção só para cair em CPU.
@@ -137,7 +141,9 @@ export async function detectFacesWithMediaPipe(
             gpuError instanceof Error ? gpuError.message : String(gpuError),
         });
       }
+      const cpuStart = Date.now();
       result = await detectWithDelegate(runtime, imagePath, Delegate.CPU);
+      logDelegateAttempt('CPU', Date.now() - cpuStart, true);
     }
 
     return mapNativeResult(result);

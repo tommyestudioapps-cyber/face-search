@@ -1,0 +1,127 @@
+Contexto: Fase 9B. Investigação do custo real por delegate no
+MediaPipe. Logs de device real mostraram que:
+- Foto de 537x537 leva 6701ms no [Detect] nativo.
+- Foto grande redimensionada para 800px não mudou o tempo.
+- A Fase 9A (redução de maxInputDimension) não teve efeito visível
+  neste teste porque a foto já era menor que o limite antigo.
+- Não aparece a mensagem 'GPU delegate falhou, usando CPU'.
+- Hipótese: o custo é fixo por chamada (init de modelo ou tentativa
+  de GPU que falha silenciosamente), não proporcional a pixels.
+
+Objetivo: medir separadamente o custo de GPU (que pode estar
+falhando) versus o custo de CPU puro. Vamos adicionar timing
+granular DENTRO de detectWithDelegate e logar cada passada.
+
+Esta etapa toca DOIS arquivos:
+- artifacts/busca-facial-local/services/faceCapture/nativeAdapter.ts
+- artifacts/busca-facial-local/services/observability/logger.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — logger.ts: nova função
+
+Adicionar ao final de services/observability/logger.ts:
+
+  export function logDelegateAttempt(
+    delegate: 'GPU' | 'CPU',
+    durationMs: number,
+    succeeded: boolean,
+  ): void {
+    if (!__DEV__) return;
+    console.log(
+      `[Delegate] ${delegate} ${succeeded ? 'ok' : 'falhou'} ${Math.round(durationMs)}ms`,
+    );
+  }
+
+Passo 2 — nativeAdapter.ts: instrumentar cada passada
+
+2.1 Adicionar import no topo (junto dos outros imports):
+
+  import { logDelegateAttempt } from '../observability/logger';
+
+2.2 No corpo de detectFacesWithMediaPipe, onde hoje está:
+
+  try {
+    let result: NativeResultBundle;
+    try {
+      result = await detectWithDelegate(runtime, imagePath, Delegate.GPU);
+    } catch (gpuError) {
+      if (gpuError instanceof DetectionTimeoutError) {
+        throw gpuError;
+      }
+      if (__DEV__) {
+        console.log('[FaceCapture] GPU delegate falhou, usando CPU', {
+          error:
+            gpuError instanceof Error ? gpuError.message : String(gpuError),
+        });
+      }
+      result = await detectWithDelegate(runtime, imagePath, Delegate.CPU);
+    }
+    return mapNativeResult(result);
+  } catch (error) {
+    if (error instanceof FaceCaptureError) {
+      throw error;
+    }
+    throw mapNativeError(error);
+  }
+
+Substituir por:
+
+  try {
+    let result: NativeResultBundle;
+    const gpuStart = Date.now();
+    try {
+      result = await detectWithDelegate(runtime, imagePath, Delegate.GPU);
+      logDelegateAttempt('GPU', Date.now() - gpuStart, true);
+    } catch (gpuError) {
+      logDelegateAttempt('GPU', Date.now() - gpuStart, false);
+      if (gpuError instanceof DetectionTimeoutError) {
+        throw gpuError;
+      }
+      if (__DEV__) {
+        console.log('[FaceCapture] GPU delegate falhou, usando CPU', {
+          error:
+            gpuError instanceof Error ? gpuError.message : String(gpuError),
+        });
+      }
+      const cpuStart = Date.now();
+      result = await detectWithDelegate(runtime, imagePath, Delegate.CPU);
+      logDelegateAttempt('CPU', Date.now() - cpuStart, true);
+    }
+    return mapNativeResult(result);
+  } catch (error) {
+    if (error instanceof FaceCaptureError) {
+      throw error;
+    }
+    throw mapNativeError(error);
+  }
+
+Não alterar mais nada em nativeAdapter.ts.
+
+Passo 3 — Validação
+
+3.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída.
+
+3.2 Rode os cinco runners na ordem habitual e cole as saídas.
+
+Passo 4 — Relatório
+
+4.1 Cole o diff unified dos dois arquivos alterados.
+
+4.2 Confirme:
+  - logDelegateAttempt existe em logger.ts;
+  - nativeAdapter.ts loga cada tentativa (GPU e, se cair, CPU);
+  - a lógica de fallback continua igual;
+  - nenhum outro arquivo foi tocado.
+
+Passo 5 — Git
+
+5.1 Rode `git log --oneline -3`.
+5.2 Rode `git status`.
+
+Regras finais:
+- Não faça commit manual.
+- Não altere nenhum arquivo fora dos dois listados.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.

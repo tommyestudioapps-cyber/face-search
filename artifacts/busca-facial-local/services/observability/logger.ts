@@ -56,3 +56,14 @@ export function logPhotoTiming(timing: PhotoTiming): void {
 export async function yieldToEventLoop(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+export function logDelegateAttempt(
+  delegate: 'GPU' | 'CPU',
+  durationMs: number,
+  succeeded: boolean,
+): void {
+  if (!__DEV__) return;
+  console.log(
+    `[Delegate] ${delegate} ${succeeded ? 'ok' : 'falhou'} ${Math.round(durationMs)}ms`,
+  );
+}
