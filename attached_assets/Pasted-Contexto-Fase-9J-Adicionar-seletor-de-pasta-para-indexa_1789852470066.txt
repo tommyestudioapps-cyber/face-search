@@ -1,0 +1,570 @@
+Contexto: Fase 9J. Adicionar seletor de pasta para indexação. O
+usuário precisa poder escolher indexar apenas "Câmera" ou "WhatsApp"
+em vez de toda a galeria (5.289 fotos). Sem isso, os testes são
+loteria (as fotos iniciais podem não ter rostos). A escolha persiste
+em AsyncStorage.
+
+Esta etapa toca QUATRO arquivos:
+- artifacts/busca-facial-local/services/faceSearch/galleryIndexer.ts
+- artifacts/busca-facial-local/hooks/useFaceSearch.ts
+- NOVO: artifacts/busca-facial-local/components/AlbumPicker.tsx
+- artifacts/busca-facial-local/app/index.tsx
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — galleryIndexer.ts: aceitar albumId
+
+1.1 Em GalleryIndexOptions, adicionar:
+
+  albumId?: string | null;
+
+1.2 Em indexGallery, logo após a linha
+`const cancellation = options.cancellation ?? new GalleryIndexCancellation();`,
+adicionar:
+
+  const albumId = options.albumId ?? null;
+  if (__DEV__) {
+    console.log(`[Index] albumId=${albumId ?? 'todo o dispositivo'}`);
+  }
+
+1.3 Onde hoje está a chamada:
+
+  const page = await MediaLibrary.getAssetsAsync({
+    first: faceSearch.indexing.batchSize,
+    after: cursor,
+    mediaType: MediaLibrary.MediaType.photo,
+    sortBy: [MediaLibrary.SortBy.modificationTime],
+  });
+
+Substituir por:
+
+  const page = await MediaLibrary.getAssetsAsync({
+    first: faceSearch.indexing.batchSize,
+    after: cursor,
+    mediaType: MediaLibrary.MediaType.photo,
+    sortBy: [MediaLibrary.SortBy.modificationTime],
+    ...(albumId ? { album: albumId } : {}),
+  });
+
+Não alterar mais nada em galleryIndexer.ts.
+
+Passo 2 — useFaceSearch.ts: propagar albumId
+
+2.1 Na interface UseFaceSearchResult, alterar a assinatura:
+
+  startIndexing: (albumId?: string | null) => Promise<GalleryIndexResult | null>;
+
+2.2 Em startIndexing, alterar a assinatura:
+
+  const startIndexing = useCallback(async (
+    albumId?: string | null,
+  ): Promise<GalleryIndexResult | null> => {
+
+2.3 Onde hoje está:
+
+  const task = faceSearchModule.startGalleryIndexing({
+    onProgress: handleProgress,
+  });
+
+Substituir por:
+
+  const task = faceSearchModule.startGalleryIndexing({
+    onProgress: handleProgress,
+    albumId: albumId ?? null,
+  });
+
+Não alterar mais nada.
+
+Passo 3 — NOVO components/AlbumPicker.tsx
+
+Criar o arquivo com este conteúdo exato:
+
+  import { Feather } from '@expo/vector-icons';
+  import React, { useEffect, useState } from 'react';
+  import {
+    ActivityIndicator,
+    Modal,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+  } from 'react-native';
+  import { useSafeAreaInsets } from 'react-native-safe-area-context';
+  import * as MediaLibrary from 'expo-media-library';
+  import { useColors } from '@/hooks/useColors';
+
+  export interface AlbumOption {
+    id: string | null;
+    title: string;
+    count: number | null;
+  }
+
+  interface AlbumPickerProps {
+    visible: boolean;
+    selectedAlbumId: string | null;
+    onSelect: (album: AlbumOption) => void;
+    onClose: () => void;
+  }
+
+  const ALL_DEVICE_ID = '__all__';
+
+  export function AlbumPicker({
+    visible,
+    selectedAlbumId,
+    onSelect,
+    onClose,
+  }: AlbumPickerProps) {
+    const colors = useColors();
+    const insets = useSafeAreaInsets();
+    const [albums, setAlbums] = useState<AlbumOption[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+      if (!visible) return;
+
+      let cancelled = false;
+      setIsLoading(true);
+      setError(null);
+
+      (async () => {
+        try {
+          const permission = await MediaLibrary.getPermissionsAsync(false, ['photo']);
+          if (!permission.granted) {
+            const requested = await MediaLibrary.requestPermissionsAsync(false, ['photo']);
+            if (!requested.granted) {
+              throw new Error('Permissão de galeria negada');
+            }
+          }
+
+          const [albumsList, totalAssets] = await Promise.all([
+            MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true }),
+            MediaLibrary.getAssetsAsync({
+              first: 1,
+              mediaType: MediaLibrary.MediaType.photo,
+            }),
+          ]);
+
+          if (cancelled) return;
+
+          const options: AlbumOption[] = [
+            {
+              id: null,
+              title: 'Todo o dispositivo',
+              count: totalAssets.totalCount,
+            },
+            ...albumsList
+              .filter((album) => album.assetCount > 0)
+              .sort((a, b) => b.assetCount - a.assetCount)
+              .map((album) => ({
+                id: album.id,
+                title: album.title,
+                count: album.assetCount,
+              })),
+          ];
+
+          setAlbums(options);
+        } catch (err) {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : 'Erro ao carregar pastas');
+          }
+        } finally {
+          if (!cancelled) {
+            setIsLoading(false);
+          }
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [visible]);
+
+    const handleSelect = (album: AlbumOption) => {
+      onSelect(album);
+      onClose();
+    };
+
+    return (
+      <Modal
+        transparent
+        animationType="slide"
+        visible={visible}
+        onRequestClose={onClose}
+      >
+        <View style={styles.backdrop}>
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                paddingBottom: insets.bottom + 18,
+                maxHeight: '80%',
+              },
+            ]}
+          >
+            <View style={styles.header}>
+              <View style={styles.headerCopy}>
+                <Text style={[styles.title, { color: colors.foreground }]}>
+                  Escolher pasta
+                </Text>
+                <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+                  Selecione onde buscar o rosto
+                </Text>
+              </View>
+              <Pressable onPress={onClose} hitSlop={12} testID="album-picker-close">
+                <Feather name="x" size={21} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+
+            {isLoading ? (
+              <View style={styles.centered}>
+                <ActivityIndicator color={colors.primary} size="small" />
+                <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
+                  Carregando pastas…
+                </Text>
+              </View>
+            ) : error ? (
+              <View style={styles.centered}>
+                <Feather name="alert-circle" size={22} color="#FB7185" />
+                <Text style={[styles.errorText, { color: colors.foreground }]}>
+                  {error}
+                </Text>
+              </View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {albums.map((album) => {
+                  const isSelected =
+                    (album.id ?? ALL_DEVICE_ID) ===
+                    (selectedAlbumId ?? ALL_DEVICE_ID);
+                  return (
+                    <Pressable
+                      key={album.id ?? ALL_DEVICE_ID}
+                      onPress={() => handleSelect(album)}
+                      style={({ pressed }) => [
+                        styles.row,
+                        { borderColor: colors.border },
+                        pressed ? styles.pressed : null,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.rowIcon,
+                          {
+                            backgroundColor: isSelected
+                              ? colors.accent
+                              : colors.background,
+                          },
+                        ]}
+                      >
+                        <Feather
+                          name={album.id ? 'folder' : 'globe'}
+                          size={18}
+                          color={isSelected ? colors.primary : colors.mutedForeground}
+                        />
+                      </View>
+                      <View style={styles.rowCopy}>
+                        <Text style={[styles.rowTitle, { color: colors.foreground }]}>
+                          {album.title}
+                        </Text>
+                        {album.count !== null ? (
+                          <Text
+                            style={[styles.rowCount, { color: colors.mutedForeground }]}
+                          >
+                            {album.count} {album.count === 1 ? 'foto' : 'fotos'}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {isSelected ? (
+                        <Feather name="check" size={20} color={colors.primary} />
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  const styles = StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: 'rgba(2,4,12,0.75)',
+      padding: 14,
+    },
+    sheet: {
+      borderWidth: 1,
+      borderRadius: 27,
+      padding: 22,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+    },
+    headerCopy: { flex: 1 },
+    title: {
+      fontFamily: 'Inter_700Bold',
+      fontSize: 19,
+      letterSpacing: -0.4,
+    },
+    subtitle: {
+      fontFamily: 'Inter_400Regular',
+      fontSize: 11,
+      marginTop: 4,
+    },
+    centered: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 40,
+      gap: 10,
+    },
+    loadingText: {
+      fontFamily: 'Inter_400Regular',
+      fontSize: 12,
+    },
+    errorText: {
+      fontFamily: 'Inter_500Medium',
+      fontSize: 13,
+      textAlign: 'center',
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    pressed: { opacity: 0.7 },
+    rowIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rowCopy: { flex: 1 },
+    rowTitle: {
+      fontFamily: 'Inter_500Medium',
+      fontSize: 14,
+    },
+    rowCount: {
+      fontFamily: 'Inter_400Regular',
+      fontSize: 11,
+      marginTop: 2,
+    },
+  });
+
+Passo 4 — app/index.tsx: integrar
+
+4.1 Adicionar imports:
+
+  import AsyncStorage from '@react-native-async-storage/async-storage';
+  import {
+    AlbumPicker,
+    type AlbumOption,
+  } from '@/components/AlbumPicker';
+
+(O AsyncStorage provavelmente já está importado no arquivo.)
+
+4.2 Constante da chave de storage. Adicionar no topo do arquivo,
+após os imports:
+
+  const ALBUM_STORAGE_KEY = 'visage.index.album';
+
+4.3 No HomeScreen, adicionar states:
+
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
+  const [selectedAlbumTitle, setSelectedAlbumTitle] = useState<string>('Todo o dispositivo');
+  const [showAlbumPicker, setShowAlbumPicker] = useState(false);
+
+4.4 Carregar álbum salvo no mount. Adicionar em useEffect
+existente (o que faz AsyncStorage.getItem('visage.onboarding.complete')):
+
+  void AsyncStorage.getItem(ALBUM_STORAGE_KEY).then((value) => {
+    if (!value) return;
+    try {
+      const parsed = JSON.parse(value) as { id: string | null; title: string };
+      if (parsed.id) {
+        setSelectedAlbumId(parsed.id);
+        setSelectedAlbumTitle(parsed.title);
+      }
+    } catch {
+      // ignore parse error
+    }
+  });
+
+4.5 Adicionar handler para selecionar álbum:
+
+  const handleSelectAlbum = (album: AlbumOption) => {
+    setSelectedAlbumId(album.id);
+    setSelectedAlbumTitle(album.title);
+    void AsyncStorage.setItem(
+      ALBUM_STORAGE_KEY,
+      JSON.stringify({ id: album.id, title: album.title }),
+    );
+    if (__DEV__) {
+      console.log(
+        `[Album] selecionado id=${album.id ?? 'all'} title=${album.title}`,
+      );
+    }
+  };
+
+4.6 Passar o albumId para startIndexing. Localizar onde
+indexAndSearch é chamado em startAnalysis. Onde hoje está:
+
+  const searchSummary = await indexAndSearch(alignedFace);
+
+Precisa ir ao hook e propagar albumId. Duas opções:
+(a) Passar albumId para indexAndSearch
+(b) Fazer setActiveAlignedFace + chamar startIndexing(albumId) + search
+
+Vamos com (a). No hook, alterar a assinatura de indexAndSearch
+para aceitar albumId opcional:
+
+Na interface UseFaceSearchResult:
+  indexAndSearch: (
+    alignedFace: AlignedFace | null,
+    albumId?: string | null,
+  ) => Promise<FaceSearchSummary | null>;
+
+E no corpo:
+  const indexAndSearch = useCallback(
+    async (
+      alignedFace: AlignedFace | null,
+      albumId?: string | null,
+    ): Promise<FaceSearchSummary | null> => {
+      const indexResult = await startIndexing(albumId);
+      if (!indexResult || indexResult.status !== 'completed') {
+        return null;
+      }
+      return search(alignedFace);
+    },
+    [search, startIndexing],
+  );
+
+4.7 Em app/index.tsx, alterar a chamada em startAnalysis. Onde
+hoje está:
+
+  const searchSummary = await indexAndSearch(alignedFace);
+
+Substituir por:
+
+  const searchSummary = await indexAndSearch(alignedFace, selectedAlbumId);
+
+4.8 Adicionar o botão de pasta na tela 2. Na assinatura de
+SelectPhoto, adicionar duas props:
+
+  albumLabel: string;
+  onPressAlbum: () => void;
+
+Adicionar em SelectPhoto, imediatamente ANTES do PrimaryButton
+"Buscar este rosto na galeria", o seguinte:
+
+  <Pressable
+    accessibilityRole="button"
+    accessibilityLabel={`Pasta de busca: ${albumLabel}`}
+    onPress={onPressAlbum}
+    testID="open-album-picker"
+    style={({ pressed }) => [
+      styles.albumButton,
+      { backgroundColor: colors.card, borderColor: colors.border },
+      pressed ? styles.pressed : null,
+    ]}
+  >
+    <Feather name="folder" size={17} color={colors.primary} />
+    <View style={styles.albumCopy}>
+      <Text style={[styles.albumLabel, { color: colors.mutedForeground }]}>
+        Buscar em
+      </Text>
+      <Text style={[styles.albumValue, { color: colors.foreground }]}>
+        {albumLabel}
+      </Text>
+    </View>
+    <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+  </Pressable>
+
+4.9 Adicionar os estilos:
+
+  albumButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 15,
+    padding: 13,
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  albumCopy: { flex: 1 },
+  albumLabel: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 10,
+    letterSpacing: 0.4,
+  },
+  albumValue: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
+    marginTop: 2,
+  },
+
+4.10 Passar as props para o SelectPhoto na chamada do switch:
+
+  albumLabel={selectedAlbumTitle}
+  onPressAlbum={() => setShowAlbumPicker(true)}
+
+4.11 Renderizar o AlbumPicker no final do componente HomeScreen,
+junto dos outros modais:
+
+  <AlbumPicker
+    visible={showAlbumPicker}
+    selectedAlbumId={selectedAlbumId}
+    onSelect={handleSelectAlbum}
+    onClose={() => setShowAlbumPicker(false)}
+  />
+
+Passo 5 — Atualizar as dependências do useMemo de `content` para
+incluir selectedAlbumTitle, selectedAlbumId, setShowAlbumPicker e
+handleSelectAlbum (se o linter reclamar).
+
+Passo 6 — Validação
+
+6.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída.
+
+6.2 Rode os cinco runners na ordem habitual e cole as saídas.
+
+Passo 7 — Relatório
+
+7.1 Cole o diff unified dos arquivos alterados.
+
+7.2 Confirme:
+  - GalleryIndexOptions tem albumId opcional;
+  - getAssetsAsync inclui o filtro album quando há albumId;
+  - useFaceSearch.startIndexing aceita albumId;
+  - useFaceSearch.indexAndSearch aceita albumId;
+  - AlbumPicker.tsx existe com lista de álbuns;
+  - app/index.tsx tem states selectedAlbumId, selectedAlbumTitle,
+    showAlbumPicker;
+  - existe botão de pasta na tela 2 acima do PrimaryButton;
+  - AlbumPicker é renderizado no final do HomeScreen;
+  - a escolha é persistida em AsyncStorage;
+  - nenhum arquivo fora dos quatro listados foi alterado.
+
+Passo 8 — Git
+
+8.1 Rode `git log --oneline -3`.
+8.2 Rode `git status`.
+
+Regras:
+- Não faça commit manual.
+- Não altere nenhum outro arquivo.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.
