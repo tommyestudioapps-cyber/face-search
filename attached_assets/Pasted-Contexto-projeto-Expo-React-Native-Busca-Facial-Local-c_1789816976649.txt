@@ -1,0 +1,48 @@
+Contexto: projeto Expo/React Native "Busca Facial Local" com pipeline
+100% local de captura, detecção MediaPipe, alinhamento facial e
+embeddings TFLite.
+
+Esta é uma etapa de DIAGNÓSTICO. Não altere nenhum arquivo do projeto.
+Não crie arquivos novos. Não instale dependências. Apenas leia e
+responda.
+
+Responda em seções numeradas, exatamente nesta ordem:
+
+1. Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+   e cole a saída completa, sem resumir.
+
+2. Liste os arquivos dentro de services/faceCapture/ e, para cada um,
+   uma linha dizendo sua responsabilidade principal. Não invente
+   arquivos que não existam.
+
+3. Liste os arquivos dentro de services/faceSearch/ e, para cada um,
+   uma linha dizendo sua responsabilidade principal.
+
+4. Abra services/faceCapture/index.ts e mostre o trecho exato onde
+   `evaluateFaceQuality` é chamada dentro de `detectFaces`. Explique
+   o que está sendo passado nos parâmetros `detectorConfidenceAccepted`
+   e `confidence`, citando o código.
+
+5. Abra services/faceCapture/quality.ts e mostre o trecho exato onde
+   `confidenceAccepted` é calculado. Com base no que foi mostrado no
+   item 4, diga se esse valor pode ser `false` na prática, ou se ele é
+   sempre `true`.
+
+6. Abra services/faceCapture/alignmentGeometry.ts e mostre o trecho
+   onde `points` é construído dentro de `calculateAlignmentCrop`.
+   Diga se existe guarda para o caso de `points.length === 0`.
+
+7. Procure em todo o projeto por chamadas a `manipulateAsync` e liste
+   cada arquivo e linha onde aparece. Depois informe a versão de
+   `expo-image-manipulator` declarada em package.json.
+
+8. Liste todos os arquivos de teste (spec, test, __tests__) que
+   existam hoje para services/faceCapture/ e services/faceSearch/.
+   Se não houver nenhum, diga claramente "nenhum teste encontrado".
+
+Regras:
+- Não proponha correções nesta etapa.
+- Não escreva código novo.
+- Não modifique arquivos.
+- Se algo não existir, diga que não existe em vez de inventar.
+- Aguarde minha próxima instrução antes de qualquer alteração.
