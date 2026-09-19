@@ -1,0 +1,84 @@
+Contexto: Fase 9H. Bug confirmado em device: após cancelar a
+indexação e voltar para a Home, os cards de estatísticas continuam
+mostrando valores desatualizados. Causa: useFaceSearch.startIndexing
+só chama getStoredIndexStats quando result.status === 'completed'.
+Quando o status é 'cancelled', as fotos JÁ foram salvas em SQLite por
+cada saveIndexedPhoto, mas a UI não relê.
+
+Esta etapa toca UM arquivo:
+- artifacts/busca-facial-local/hooks/useFaceSearch.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Localizar, dentro de startIndexing, o bloco atual:
+
+  try {
+    const result = await task.promise;
+    if (result.status === 'completed') {
+      const nextStats = await faceSearchModule.getStoredIndexStats();
+      if (mountedRef.current) {
+        setStoredIndexStats(nextStats);
+      }
+    }
+    if (mountedRef.current) {
+      setStatus(result.status === 'completed' ? 'ready' : 'cancelled');
+    }
+    return result;
+  } catch (caught) {
+    // bloco existente, não alterar
+  } finally {
+    // bloco existente, não alterar
+  }
+
+Substituir APENAS o conteúdo do try (mantendo catch e finally como
+estão) por:
+
+  try {
+    const result = await task.promise;
+    const nextStats = await faceSearchModule.getStoredIndexStats();
+    if (mountedRef.current) {
+      setStoredIndexStats(nextStats);
+      setStatus(result.status === 'completed' ? 'ready' : 'cancelled');
+      if (__DEV__) {
+        console.log(
+          `[Stats] pós-indexação status=${result.status} fotos=${nextStats.indexedPhotos} rostos=${nextStats.indexedFaces}`,
+        );
+      }
+    }
+    return result;
+  }
+
+Passo 2 — Não alterar o catch nem o finally do bloco.
+
+Passo 3 — Validação
+
+3.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída.
+
+3.2 Rode `pnpm --filter @workspace/busca-facial-local run test:face-coordination`
+    e cole a saída.
+
+3.3 Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+    e cole a saída.
+
+Passo 4 — Relatório
+
+4.1 Cole o diff de hooks/useFaceSearch.ts.
+
+4.2 Confirme:
+  - getStoredIndexStats é chamado sempre após task.promise;
+  - setStoredIndexStats é chamado mesmo em status 'cancelled';
+  - o log [Stats] pós-indexação foi adicionado com status, fotos e rostos;
+  - o catch e o finally não foram alterados;
+  - nenhum outro arquivo foi tocado.
+
+Passo 5 — Git
+
+5.1 Rode `git log --oneline -3`.
+5.2 Rode `git status`.
+
+Regras:
+- Não faça commit manual.
+- Não altere nenhum outro arquivo.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.
