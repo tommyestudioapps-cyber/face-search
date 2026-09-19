@@ -87,6 +87,11 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
 
     const largestDimension = Math.max(oriented.width, oriented.height);
     if (largestDimension <= faceCapture.maxInputDimension) {
+      if (__DEV__) {
+        console.log(
+          `[Normalize] ${oriented.width}x${oriented.height} mantida (abaixo do limite)`,
+        );
+      }
       return {
         uri: oriented.uri,
         width: oriented.width,
@@ -112,6 +117,11 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
         format: SaveFormat.JPEG,
       },
     );
+    if (__DEV__) {
+      console.log(
+        `[Normalize] ${oriented.width}x${oriented.height} → ${resized.width}x${resized.height}`,
+      );
+    }
 
     temporaryUris.push(resized.uri);
     return {

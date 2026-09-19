@@ -1,6 +1,6 @@
 export const faceCapture = {
   modelAssetName: 'face-landmarker.task',
-  maxInputDimension: 1600,
+  maxInputDimension: 800,
   minInputDimension: 160,
   qualitySampleDimension: 256,
   alignedFaceSize: 224,

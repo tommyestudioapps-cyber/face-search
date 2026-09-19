@@ -1,0 +1,86 @@
+Contexto: Fase 9A. Logs de device real mostraram que a detecção
+MediaPipe consome ~6.600ms por foto no Oppo A78, mesmo com GPU
+delegate configurado. Diagnóstico: o nativo tenta GPU, falha
+silenciosamente por restrição de thread e cai para CPU sem avisar o
+JS. O gargalo principal é decode + conversão de bitmap de fotos
+grandes (até 1600px no lado maior). Vamos reduzir a resolução de
+entrada para 800px, o que reduz a área para 25% e impacta
+proporcionalmente todas as fases do pipeline (decode, detecção,
+quality, align).
+
+Esta etapa toca UM arquivo:
+- artifacts/busca-facial-local/constants/faceCapture.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Alterar a constante
+
+Em constants/faceCapture.ts, alterar:
+
+  maxInputDimension: 1600,
+
+Para:
+
+  maxInputDimension: 800,
+
+Não alterar nenhuma outra constante. Não alterar minInputDimension
+nem qualitySampleDimension nem alignedFaceSize.
+
+Passo 2 — Adicionar log DEV em normalizeImage
+
+No arquivo services/faceCapture/preprocessing.ts, dentro de
+normalizeImage, no ramo em que a imagem é redimensionada (após o
+`const resized = await manipulateAsync(...)`), adicionar:
+
+  if (__DEV__) {
+    console.log(
+      `[Normalize] ${oriented.width}x${oriented.height} → ${resized.width}x${resized.height}`,
+    );
+  }
+
+E também no ramo onde a imagem JÁ cabe em maxInputDimension (antes
+do `return { uri: oriented.uri, ... }`), adicionar:
+
+  if (__DEV__) {
+    console.log(
+      `[Normalize] ${oriented.width}x${oriented.height} mantida (abaixo do limite)`,
+    );
+  }
+
+Não alterar a lógica de redimensionamento. Não alterar mais nada
+em preprocessing.ts.
+
+Passo 3 — Validação
+
+3.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa.
+
+3.2 Rode os cinco runners na ordem habitual e cole as saídas:
+    test:face-capture
+    test:face-search
+    test:face-overlay
+    test:face-settings
+    test:face-coordination
+
+Passo 4 — Relatório
+
+4.1 Cole o diff unified dos dois arquivos alterados.
+
+4.2 Confirme explicitamente:
+  - maxInputDimension agora é 800;
+  - os dois logs de [Normalize] foram adicionados em preprocessing.ts;
+  - nenhuma outra constante foi alterada em faceCapture.ts;
+  - nenhuma lógica de resize foi alterada;
+  - nenhum outro arquivo foi tocado.
+
+Passo 5 — Git
+
+5.1 Rode `git log --oneline -3` e cole.
+5.2 Rode `git status` e cole.
+
+Regras finais:
+- Não faça commit manual.
+- Não altere nativeAdapter.ts nem alignment.ts.
+- Não altere nenhum outro arquivo.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.
