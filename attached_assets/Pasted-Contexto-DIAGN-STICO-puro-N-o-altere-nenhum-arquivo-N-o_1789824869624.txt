@@ -1,0 +1,65 @@
+Contexto: DIAGNÓSTICO puro. Não altere nenhum arquivo. Não faça
+commit, add, stash, checkout, reset, restore nem clean. Apenas leia
+e reporte.
+
+Objetivo: preparar a Fase 3B, que vai ativar GPU delegate no
+MediaPipe com fallback para CPU. Hoje services/faceCapture/nativeAdapter.ts
+passa `delegate: 0` fixo e sem comentário. Preciso saber qual é o
+valor correto para GPU e para CPU no pacote react-native-mediapipe
+na versão instalada.
+
+Reporte em seções numeradas, colando trechos completos:
+
+1. Versão exata instalada de react-native-mediapipe:
+   - `cat node_modules/react-native-mediapipe/package.json | grep version`
+   - `cat artifacts/busca-facial-local/node_modules/react-native-mediapipe/package.json | grep version`
+     (se o caminho existir; senão, diga "não existe neste caminho")
+
+2. Liste os arquivos de declaração de tipos do pacote:
+   - `find node_modules/react-native-mediapipe -name "*.d.ts" 2>/dev/null`
+   - Se o pacote estiver em outro caminho (ex: via pnpm store), use
+     `find . -path "*react-native-mediapipe*" -name "*.d.ts" 2>/dev/null`
+   Cole a lista completa.
+
+3. Cole o conteúdo do(s) arquivo(s) .d.ts que declararem a assinatura
+   de `faceLandmarkDetectionOnImage` ou o tipo das opções. Quero ver
+   especialmente:
+   - o tipo do parâmetro `options`
+   - o tipo do campo `delegate`
+   - qualquer enum, constante ou union type relacionada a delegate
+
+4. Se existir um arquivo .d.ts que declare um enum ou constantes como
+   `Delegate`, `DelegateType`, `GPU`, `CPU`, `NPU` ou similares, cole
+   a definição completa.
+
+5. Procure no código do pacote por strings "GPU", "CPU", "delegate",
+   "DELEGATE_GPU", "DELEGATE_CPU", "kGpu", "kCpu" (case-insensitive):
+   - `grep -rin "delegate\|DELEGATE_\|kGpu\|kCpu\|GPU\|CPU" node_modules/react-native-mediapipe/ 2>/dev/null | head -50`
+     (ajuste o caminho conforme o item 1)
+   Cole a saída. Se for muito longa, filtre para .d.ts, .ts, .h e .mm.
+
+6. Se existir um README.md ou similar no pacote:
+   - `cat node_modules/react-native-mediapipe/README.md 2>/dev/null | head -100`
+   Cole a saída. Se não existir, diga "não existe".
+
+7. Confirme o estado atual de nativeAdapter.ts:
+   - cole o bloco completo da chamada a
+     runtime.faceLandmarkDetectionOnImage, com o objeto de opções
+     completo, exatamente como está hoje
+
+8. Liste qualquer outro arquivo do projeto que mencione "delegate":
+   - `grep -rn "delegate" artifacts/busca-facial-local/services/ 2>/dev/null`
+   Cole a saída completa.
+
+9. Se encontrar valores candidatos para GPU e CPU (ex: 0 e 1, ou
+   constantes nomeadas), cite a fonte exata (arquivo e linha) onde
+   você os encontrou. Se não encontrar, diga "não foi possível
+   determinar" — não invente.
+
+Regras:
+- Apenas leitura. Zero alteração.
+- Não proponha correções nesta etapa.
+- Não execute git add, commit, stash, reset, checkout, restore, clean.
+- Se algo não existir, diga "não existe" ou "não foi possível
+  determinar".
+- Ao final, aguarde instrução.
