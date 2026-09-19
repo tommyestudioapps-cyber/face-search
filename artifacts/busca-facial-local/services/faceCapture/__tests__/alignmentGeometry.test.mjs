@@ -125,30 +125,22 @@ test('mantém o recorte dentro da imagem quando os olhos encostam no canto infer
 });
 
 test('escala proporcionalmente à distância interocular', () => {
-  const smallPair = createEyePair({
-    centerX: 0.46,
-    centerY: 0.42,
-    rollDegrees: 0,
-    eyeHalfDistance: 0.06,
-  });
-  const largePair = createEyePair({
-    centerX: 0.46,
-    centerY: 0.42,
-    rollDegrees: 0,
-    eyeHalfDistance: 0.12,
-  });
-  const smallCrop = calculateAlignmentCrop(
-    smallPair.leftEye,
-    smallPair.rightEye,
+  const maxSide = Math.min(IMAGE_WIDTH, IMAGE_HEIGHT);
+  const base = { centerX: 0.5, centerY: 0.5, rollDegrees: 0 };
+  const small = createEyePair({ ...base, eyeHalfDistance: 0.04 });
+  const large = createEyePair({ ...base, eyeHalfDistance: 0.08 });
+  const cropSmall = calculateAlignmentCrop(
+    small.leftEye,
+    small.rightEye,
     IMAGE_WIDTH,
     IMAGE_HEIGHT,
     0,
     IMAGE_WIDTH,
     IMAGE_HEIGHT,
   );
-  const largeCrop = calculateAlignmentCrop(
-    largePair.leftEye,
-    largePair.rightEye,
+  const cropLarge = calculateAlignmentCrop(
+    large.leftEye,
+    large.rightEye,
     IMAGE_WIDTH,
     IMAGE_HEIGHT,
     0,
@@ -156,9 +148,9 @@ test('escala proporcionalmente à distância interocular', () => {
     IMAGE_HEIGHT,
   );
 
-  assertCropIsSafeAndSquare(smallCrop, IMAGE_WIDTH, IMAGE_HEIGHT);
-  assertCropIsSafeAndSquare(largeCrop, IMAGE_WIDTH, IMAGE_HEIGHT);
-  assert.ok(Math.abs(largeCrop.width - smallCrop.width * 2) <= 1);
+  assert.ok(cropSmall.width < maxSide);
+  assert.ok(cropLarge.width < maxSide);
+  assert.ok(Math.abs(cropLarge.width - 2 * cropSmall.width) <= 1);
 });
 
 test('mantém a distância interocular proporcional ao template após a rotação', () => {

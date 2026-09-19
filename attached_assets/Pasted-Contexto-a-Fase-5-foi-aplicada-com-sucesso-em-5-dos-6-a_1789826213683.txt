@@ -1,0 +1,102 @@
+Contexto: a Fase 5 foi aplicada com sucesso em 5 dos 6 arquivos.
+O teste "escala proporcionalmente à distância interocular" em
+services/faceCapture/__tests__/alignmentGeometry.test.mjs falhou por
+erro de especificação do teste, não por bug de produção.
+
+Causa: os parâmetros eyeHalfDistance = 0.06 e 0.12 produzem crops de
+~457 e ~915 pixels. Como IMAGE_HEIGHT = 900, o segundo crop é
+clipado para maxSide = 900, quebrando a razão 2:1 esperada.
+
+Esta etapa toca UM arquivo:
+- artifacts/busca-facial-local/services/faceCapture/__tests__/alignmentGeometry.test.mjs
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Corrigir o teste "escala proporcionalmente à distância interocular"
+
+Localizar o teste com esse nome e reescrever o corpo para:
+
+  1. Usar eyeHalfDistance = 0.04 e 0.08 (ambos produzem crops bem
+     abaixo de maxSide = 900, evitando o clamp).
+  2. Manter mesma posição central (centerX: 0.5, centerY: 0.5,
+     rollDegrees: 0).
+  3. Calcular os dois crops com a assinatura nova de 7 parâmetros.
+  4. Asserção extra defensiva: confirmar que crop.width é estritamente
+     menor que min(IMAGE_WIDTH, IMAGE_HEIGHT) nos dois casos. Se algum
+     dia os parâmetros mudarem e o clamp voltar a atuar, o teste
+     avisa em vez de passar silenciosamente.
+  5. Asserção principal: |crop2.width - 2 * crop1.width| <= 1.
+
+Estrutura sugerida (adaptar nomes ao estilo do arquivo):
+
+  test('escala proporcionalmente à distância interocular', () => {
+    const maxSide = Math.min(IMAGE_WIDTH, IMAGE_HEIGHT);
+    const base = { centerX: 0.5, centerY: 0.5, rollDegrees: 0 };
+    const small = createEyePair({ ...base, eyeHalfDistance: 0.04 });
+    const large = createEyePair({ ...base, eyeHalfDistance: 0.08 });
+    const cropSmall = calculateAlignmentCrop(
+      small.leftEye,
+      small.rightEye,
+      IMAGE_WIDTH,
+      IMAGE_HEIGHT,
+      0,
+      IMAGE_WIDTH,
+      IMAGE_HEIGHT,
+    );
+    const cropLarge = calculateAlignmentCrop(
+      large.leftEye,
+      large.rightEye,
+      IMAGE_WIDTH,
+      IMAGE_HEIGHT,
+      0,
+      IMAGE_WIDTH,
+      IMAGE_HEIGHT,
+    );
+    assert.ok(cropSmall.width < maxSide);
+    assert.ok(cropLarge.width < maxSide);
+    assert.ok(Math.abs(cropLarge.width - 2 * cropSmall.width) <= 1);
+  });
+
+Não alterar nenhum outro teste deste arquivo.
+Não alterar nenhuma função de produção.
+
+Passo 2 — Validação
+
+2.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída.
+
+2.2 Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+    e cole a saída completa.
+
+2.3 Se passou, rode na ordem:
+    test:face-search
+    test:face-overlay
+    test:face-settings
+    test:face-coordination
+    e cole cada saída completa.
+
+2.4 Se qualquer um falhar, PARE e reporte. Não tente consertar.
+
+Passo 3 — Relatório
+
+3.1 Cole o diff unified de alignmentGeometry.test.mjs.
+
+3.2 Confirme:
+  - só alignmentGeometry.test.mjs foi alterado nesta etapa;
+  - o teste agora usa eyeHalfDistance 0.04 e 0.08;
+  - as duas asserções defensivas (crop < maxSide) existem;
+  - nenhum outro teste foi modificado;
+  - nenhuma função de produção foi tocada.
+
+Passo 4 — Git
+
+4.1 Rode `git log --oneline -3` e cole.
+4.2 Rode `git status` e cole.
+4.3 Se working tree limpo, reporte o commit que contém a Fase 5.
+
+Regras finais:
+- Não toque em nenhum arquivo de produção.
+- Não toque em alignmentGeometry.ts, alignment.ts, captureFlow.test.mjs,
+  nativeAdapterCore.test.mjs, qualityAlignment.test.mjs.
+- Não faça commit manual.
+- Ao final, aguarde instrução.
