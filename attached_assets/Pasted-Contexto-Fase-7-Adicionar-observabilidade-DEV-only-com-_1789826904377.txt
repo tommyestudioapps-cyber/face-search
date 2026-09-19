@@ -1,0 +1,293 @@
+Contexto: Fase 7. Adicionar observabilidade DEV-only com amostragem
+e um yield explícito entre fotos na indexação, para diagnosticar e
+mitigar o crash por OOM observado em device real (~182 fotos). Não
+vamos tocar em código nativo. Não vamos logar cada foto sem controle,
+para não estourar o buffer do WebSocket do Metro.
+
+Esta etapa toca QUATRO arquivos:
+- NOVO: services/observability/logger.ts
+- services/faceSearch/galleryIndexer.ts
+- services/faceCapture/index.ts
+- services/faceSearch/index.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Criar services/observability/logger.ts
+
+Criar arquivo novo com exatamente este conteúdo:
+
+  /**
+   * Observabilidade DEV-only com amostragem. Durante a indexação da
+   * galeria, logar cada foto via WebSocket do Metro pode estourar o
+   * buffer do dev server e derrubar o app. Por isso, amostramos.
+   */
+
+  let photoCount = 0;
+
+  export function shouldLogPhoto(): boolean {
+    if (!__DEV__) return false;
+    photoCount += 1;
+    if (photoCount <= 20) return true;
+    if (photoCount <= 100) return photoCount % 5 === 0;
+    return photoCount % 25 === 0;
+  }
+
+  export function logIndexProgress(
+    processed: number,
+    total: number,
+    elapsedMs: number,
+  ): void {
+    if (!__DEV__) return;
+    const avgMs = processed > 0 ? elapsedMs / processed : 0;
+    console.log(
+      `[Index] ${processed}/${total} fotos | ` +
+        `${Math.round(avgMs)}ms/foto | ` +
+        `decorrido ${Math.round(elapsedMs / 1000)}s`,
+    );
+  }
+
+  export interface PhotoTiming {
+    assetId: string;
+    totalMs: number;
+    detectMs: number;
+    embedMs: number;
+    faceCount: number;
+    skipped: boolean;
+  }
+
+  export function logPhotoTiming(timing: PhotoTiming): void {
+    if (!__DEV__) return;
+    console.log(
+      `[Index:photo] ${timing.assetId} | ` +
+        `total=${Math.round(timing.totalMs)}ms | ` +
+        `detect=${Math.round(timing.detectMs)}ms | ` +
+        `embed=${Math.round(timing.embedMs)}ms | ` +
+        `faces=${timing.faceCount} | ` +
+        `skipped=${timing.skipped}`,
+    );
+  }
+
+  /**
+   * Cede o thread JS para o event loop. Permite que o GC do Hermes e o
+   * Android recuperem memória entre fotos, evitando OOM killer.
+   */
+  export async function yieldToEventLoop(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+Passo 2 — Instrumentar galleryIndexer.ts
+
+2.1 No topo do arquivo, adicionar imports:
+
+  import {
+    shouldLogPhoto,
+    logIndexProgress,
+    logPhotoTiming,
+    yieldToEventLoop,
+  } from '../observability/logger';
+
+2.2 Em indexAsset, envolver as fases com medições. A função
+atualmente tem esta estrutura:
+
+  try {
+    try {
+      session = await detectFaces(asset.uri);
+    } catch ...
+    if (session) {
+      for (const detectedFace of getSelectableFaces(session.faces)) {
+        ...
+      }
+    }
+    throwIfCancelled(cancellation);
+    await faceSearchRepository.saveIndexedPhoto(...);
+    return { indexed: true, skipped: false, faceCount: indexedFaces.length };
+  } finally {
+    await releaseFaceDetectionSession(session);
+  }
+
+Substituir por esta versão, preservando integralmente a lógica:
+
+  const startedAt = Date.now();
+  let detectMs = 0;
+  let embedMs = 0;
+
+  let session: FaceDetectionSession | null = null;
+  const indexedFaces: IndexedFace[] = [];
+
+  try {
+    try {
+      const t0 = Date.now();
+      session = await detectFaces(asset.uri);
+      detectMs += Date.now() - t0;
+    } catch (error) {
+      if (error instanceof FaceCaptureError && error.code === 'no-face') {
+        session = null;
+      } else if (isSkippableAssetError(error)) {
+        return { indexed: false, skipped: true, faceCount: 0 };
+      } else {
+        throw error;
+      }
+    }
+
+    if (session) {
+      for (const detectedFace of getSelectableFaces(session.faces)) {
+        throwIfCancelled(cancellation);
+        let alignedFace: AlignedFace | null = null;
+
+        try {
+          alignedFace = await alignSelectedFace(session, detectedFace.id);
+          const inputTensor = await preprocessAlignedFace(alignedFace);
+          const t0 = Date.now();
+          const embedding = await runFaceEmbedding(inputTensor);
+          embedMs += Date.now() - t0;
+
+          indexedFaces.push({
+            id: `${asset.id}:${detectedFace.id}`,
+            assetId: asset.id,
+            faceIndex: detectedFace.id,
+            boundingBox: detectedFace.boundingBox,
+            embedding,
+            modelVersion: embedding.model.version,
+            indexedAt: Date.now(),
+          });
+        } catch (error) {
+          if (!isSkippableFaceError(error)) {
+            throw error;
+          }
+        } finally {
+          if (alignedFace) {
+            await cleanupTempFiles([alignedFace.uri]);
+          }
+        }
+      }
+    }
+
+    throwIfCancelled(cancellation);
+    await faceSearchRepository.saveIndexedPhoto(
+      createIndexedPhoto(asset, indexedFaces.length),
+      indexedFaces,
+    );
+
+    if (shouldLogPhoto()) {
+      logPhotoTiming({
+        assetId: asset.id,
+        totalMs: Date.now() - startedAt,
+        detectMs,
+        embedMs,
+        faceCount: indexedFaces.length,
+        skipped: false,
+      });
+    }
+
+    return {
+      indexed: true,
+      skipped: false,
+      faceCount: indexedFaces.length,
+    };
+  } finally {
+    await releaseFaceDetectionSession(session);
+  }
+
+2.3 Em indexGallery, adicionar o yield entre fotos e o log
+periódico de progresso. Antes do try de indexGallery, adicionar:
+
+  const indexStartedAt = Date.now();
+
+Dentro do loop de assets, APÓS o bloco que atualiza `progress`
+e chama `options.onProgress?.(progress);`, adicionar:
+
+  if (progress.processedAssets % 20 === 0) {
+    logIndexProgress(
+      progress.processedAssets,
+      totalAssets,
+      Date.now() - indexStartedAt,
+    );
+  }
+
+  await yieldToEventLoop();
+
+Regras:
+- O yield DEVE estar após o onProgress, para não atrasar a UI.
+- O yield DEVE ser aguardado (await).
+- Não alterar nada mais em indexGallery.
+
+Passo 3 — Instrumentar detectFaces em services/faceCapture/index.ts
+
+Em detectFaces, adicionar medição de tempo de detecção nativa. Após
+a linha `const qualityImage = await decodeImage(qualitySample.uri);`
+e antes de `const result = await detectFacesWithMediaPipe(...)`,
+adicionar:
+
+  const detectStartedAt = Date.now();
+
+Após a chamada a detectFacesWithMediaPipe, adicionar:
+
+  if (__DEV__) {
+    console.log(
+      `[Detect] nativo ${Date.now() - detectStartedAt}ms | ` +
+        `faces=${result.faces.length}`,
+    );
+  }
+
+Regras:
+- Não alterar mais nada em detectFaces.
+- Manter o try/catch/finally intacto.
+
+Passo 4 — Não alterar services/faceSearch/index.ts
+
+Conforme revisão do prompt: o arquivo services/faceSearch/index.ts
+NÃO precisa ser alterado nesta etapa. Se você identificar que um
+caminho diferente exige mudança lá, PARE e reporte antes de alterar.
+
+Passo 5 — Validação
+
+5.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa.
+
+5.2 Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+    e cole a saída completa.
+
+5.3 Rode `pnpm --filter @workspace/busca-facial-local run test:face-search`
+    e cole a saída completa.
+
+5.4 Rode `pnpm --filter @workspace/busca-facial-local run test:face-overlay`
+    e cole a saída completa.
+
+5.5 Rode `pnpm --filter @workspace/busca-facial-local run test:face-settings`
+    e cole a saída completa.
+
+5.6 Rode `pnpm --filter @workspace/busca-facial-local run test:face-coordination`
+    e cole a saída completa.
+
+Passo 6 — Relatório
+
+6.1 Cole o conteúdo completo do arquivo novo
+    services/observability/logger.ts.
+
+6.2 Cole o diff unified dos arquivos alterados.
+
+6.3 Confirme explicitamente:
+  - o logger.ts existe com as 4 funções exportadas;
+  - indexAsset mede detectMs e embedMs e chama logPhotoTiming;
+  - indexGallery chama logIndexProgress a cada 20 fotos;
+  - indexGallery chama yieldToEventLoop após onProgress;
+  - detectFaces loga o tempo nativo em DEV;
+  - nenhuma lógica de produção foi alterada (só medições e yield);
+  - nenhum arquivo fora dos listados foi tocado.
+
+Passo 7 — Git
+
+7.1 Rode `git log --oneline -3` e cole.
+7.2 Rode `git status` e cole.
+7.3 Se o working tree estiver limpo, reporte o commit que contém a
+    Fase 7.
+
+Regras finais:
+- Não altere a lógica de produção — só adicionar medições, logs e o
+  yield.
+- Não instale dependências.
+- Não toque em nativeAdapter.ts, alignment.ts, alignmentGeometry.ts,
+  quality.ts, nem em nenhum arquivo fora dos listados.
+- Não faça commit manual.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.
