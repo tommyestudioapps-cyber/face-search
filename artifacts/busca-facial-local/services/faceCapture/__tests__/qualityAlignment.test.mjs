@@ -45,15 +45,15 @@ function assertQualityAndAlignmentWork(landmarks) {
   );
 
   const dimensions = rotatedDimensions(IMAGE_WIDTH, IMAGE_HEIGHT, 0);
+  const { leftEye, rightEye } = getAlignmentLandmarks(landmarks);
   const crop = calculateAlignmentCrop(
-    landmarks,
+    leftEye,
+    rightEye,
     IMAGE_WIDTH,
     IMAGE_HEIGHT,
     0,
     dimensions.width,
     dimensions.height,
-    faceCapture,
-    getAlignmentLandmarks(landmarks),
   );
 
   assertSafeSquareCrop(crop, dimensions.width, dimensions.height);

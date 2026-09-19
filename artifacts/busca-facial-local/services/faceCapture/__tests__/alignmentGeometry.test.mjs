@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { faceCapture } from '../../../constants/faceCapture.ts';
-import { getAlignmentLandmarks } from '../landmarkGeometry.ts';
 import {
   calculateAlignmentCrop,
   rotatedDimensions,
@@ -11,80 +9,22 @@ import {
 const IMAGE_WIDTH = 1200;
 const IMAGE_HEIGHT = 900;
 
-function point(x, y) {
-  return { x, y, z: 0 };
-}
-
-function createFace({ centerX, centerY, rollDegrees }) {
+function createEyePair({ centerX, centerY, rollDegrees, eyeHalfDistance = 0.09 }) {
   const roll = (rollDegrees * Math.PI) / 180;
-  const eyeHalfDistance = 0.09;
   const eyeOffsetX = eyeHalfDistance * Math.cos(roll);
   const eyeOffsetY = eyeHalfDistance * Math.sin(roll);
-  const leftEye = point(centerX - eyeOffsetX, centerY - eyeOffsetY);
-  const rightEye = point(centerX + eyeOffsetX, centerY + eyeOffsetY);
-  const landmarks = Array.from({ length: 363 }, () => point(centerX, centerY));
-
-  landmarks[33] = point(leftEye.x - 0.008, leftEye.y);
-  landmarks[133] = point(leftEye.x + 0.008, leftEye.y);
-  landmarks[263] = point(rightEye.x - 0.008, rightEye.y);
-  landmarks[362] = point(rightEye.x + 0.008, rightEye.y);
-  landmarks[1] = point(centerX + 0.012, centerY + 0.09);
-  landmarks[61] = point(centerX - 0.028, centerY + 0.16);
-  landmarks[291] = point(centerX + 0.028, centerY + 0.16);
-
-  return landmarks;
-}
-
-function expectedAnchor(
-  landmarks,
-  rotationDegrees,
-  outputWidth,
-  outputHeight,
-  { includeNose = true, includeMouth = true } = {},
-) {
-  const feature = (index) => landmarks[index];
-  const leftEye = feature(33);
-  const leftEyeOther = feature(133);
-  const rightEye = feature(263);
-  const rightEyeOther = feature(362);
-  const eyeCenter = {
-    x: (leftEye.x + leftEyeOther.x + rightEye.x + rightEyeOther.x) / 4,
-    y: (leftEye.y + leftEyeOther.y + rightEye.y + rightEyeOther.y) / 4,
-  };
-  const nose = feature(1);
-  const mouthPoints = [feature(61), feature(291)];
-  const mouth =
-    mouthPoints.every(Boolean)
-      ? {
-          x: (mouthPoints[0].x + mouthPoints[1].x) / 2,
-          y: (mouthPoints[0].y + mouthPoints[1].y) / 2,
-        }
-      : null;
-  const transform = (normalizedPoint) =>
-    transformPointForRotation(
-      {
-        x: normalizedPoint.x * IMAGE_WIDTH,
-        y: normalizedPoint.y * IMAGE_HEIGHT,
-      },
-      IMAGE_WIDTH,
-      IMAGE_HEIGHT,
-      outputWidth,
-      outputHeight,
-      rotationDegrees,
-    );
-  const transformedEyeCenter = transform(eyeCenter);
-  const anchorPoints = [
-    { point: transformedEyeCenter, weight: 0.35 },
-    includeNose && nose ? { point: transform(nose), weight: 0.4 } : null,
-    includeMouth && mouth ? { point: transform(mouth), weight: 0.25 } : null,
-  ].filter(Boolean);
-  const totalWeight = anchorPoints.reduce((sum, item) => sum + item.weight, 0);
-
   return {
-    x: anchorPoints.reduce((sum, item) => sum + item.point.x * item.weight, 0) / totalWeight,
-    y: anchorPoints.reduce((sum, item) => sum + item.point.y * item.weight, 0) / totalWeight,
+    leftEye: { x: centerX - eyeOffsetX, y: centerY - eyeOffsetY, z: 0 },
+    rightEye: { x: centerX + eyeOffsetX, y: centerY + eyeOffsetY, z: 0 },
   };
 }
+
+const TEMPLATE_EYE_DISTANCE = Math.hypot(
+  73.5318 - 38.2946,
+  51.5014 - 51.6963,
+);
+const TEMPLATE_EYE_CENTER_X_RATIO = ((38.2946 + 73.5318) / 2) / 112;
+const TEMPLATE_EYE_CENTER_Y_RATIO = ((51.6963 + 51.5014) / 2) / 112;
 
 function assertCropIsSafeAndSquare(crop, width, height) {
   assert.equal(crop.width, crop.height);
@@ -95,9 +35,9 @@ function assertCropIsSafeAndSquare(crop, width, height) {
   assert.ok(crop.originY + crop.height <= height);
 }
 
-test('centraliza olhos, nariz e boca para inclinações positivas e negativas', () => {
-  for (const rollDegrees of [-24, 24]) {
-    const landmarks = createFace({
+test('posiciona os olhos no template canônico para inclinações positivas, negativas e neutras', () => {
+  for (const rollDegrees of [-24, 0, 24]) {
+    const { leftEye, rightEye } = createEyePair({
       centerX: 0.43,
       centerY: 0.42,
       rollDegrees,
@@ -105,47 +45,57 @@ test('centraliza olhos, nariz e boca para inclinações positivas e negativas', 
     const rotationDegrees = -rollDegrees;
     const dimensions = rotatedDimensions(IMAGE_WIDTH, IMAGE_HEIGHT, rotationDegrees);
     const crop = calculateAlignmentCrop(
-      landmarks,
+      leftEye,
+      rightEye,
       IMAGE_WIDTH,
       IMAGE_HEIGHT,
       rotationDegrees,
       dimensions.width,
       dimensions.height,
-      faceCapture,
-      getAlignmentLandmarks(landmarks),
     );
-    const anchor = expectedAnchor(
-      landmarks,
-      rotationDegrees,
-      dimensions.width,
-      dimensions.height,
-    );
-    const cropCenter = {
-      x: crop.originX + crop.width / 2,
-      y: crop.originY + crop.height / 2,
+    const transformEye = (eye) =>
+      transformPointForRotation(
+        {
+          x: eye.x * IMAGE_WIDTH,
+          y: eye.y * IMAGE_HEIGHT,
+        },
+        IMAGE_WIDTH,
+        IMAGE_HEIGHT,
+        dimensions.width,
+        dimensions.height,
+        rotationDegrees,
+      );
+    const transformedLeftEye = transformEye(leftEye);
+    const transformedRightEye = transformEye(rightEye);
+    const eyeCenterRotated = {
+      x: (transformedLeftEye.x + transformedRightEye.x) / 2,
+      y: (transformedLeftEye.y + transformedRightEye.y) / 2,
     };
 
     assertCropIsSafeAndSquare(crop, dimensions.width, dimensions.height);
-    assert.ok(Math.abs(cropCenter.x - anchor.x) <= 1);
-    assert.ok(Math.abs(cropCenter.y - anchor.y) <= 1);
+    const expectedX = TEMPLATE_EYE_CENTER_X_RATIO * crop.width;
+    const expectedY = TEMPLATE_EYE_CENTER_Y_RATIO * crop.height;
+    const actualX = eyeCenterRotated.x - crop.originX;
+    const actualY = eyeCenterRotated.y - crop.originY;
+    assert.ok(Math.abs(actualX - expectedX) <= 1);
+    assert.ok(Math.abs(actualY - expectedY) <= 1);
   }
 });
 
-test('mantém o recorte dentro da imagem quando o rosto encosta no canto superior esquerdo', () => {
-  const landmarks = createFace({
+test('mantém o recorte dentro da imagem quando os olhos encostam no canto superior esquerdo', () => {
+  const { leftEye, rightEye } = createEyePair({
     centerX: 0.1,
     centerY: 0.12,
     rollDegrees: 0,
   });
   const crop = calculateAlignmentCrop(
-    landmarks,
+    leftEye,
+    rightEye,
     IMAGE_WIDTH,
     IMAGE_HEIGHT,
     0,
     IMAGE_WIDTH,
     IMAGE_HEIGHT,
-    faceCapture,
-    getAlignmentLandmarks(landmarks),
   );
 
   assertCropIsSafeAndSquare(crop, IMAGE_WIDTH, IMAGE_HEIGHT);
@@ -153,21 +103,20 @@ test('mantém o recorte dentro da imagem quando o rosto encosta no canto superio
   assert.equal(crop.originY, 0);
 });
 
-test('mantém o recorte dentro da imagem quando o rosto encosta no canto inferior direito', () => {
-  const landmarks = createFace({
+test('mantém o recorte dentro da imagem quando os olhos encostam no canto inferior direito', () => {
+  const { leftEye, rightEye } = createEyePair({
     centerX: 0.88,
     centerY: 0.78,
     rollDegrees: 0,
   });
   const crop = calculateAlignmentCrop(
-    landmarks,
+    leftEye,
+    rightEye,
     IMAGE_WIDTH,
     IMAGE_HEIGHT,
     0,
     IMAGE_WIDTH,
     IMAGE_HEIGHT,
-    faceCapture,
-    getAlignmentLandmarks(landmarks),
   );
 
   assertCropIsSafeAndSquare(crop, IMAGE_WIDTH, IMAGE_HEIGHT);
@@ -175,67 +124,81 @@ test('mantém o recorte dentro da imagem quando o rosto encosta no canto inferio
   assert.equal(crop.originY + crop.height, IMAGE_HEIGHT);
 });
 
-test('usa olhos e boca quando o nariz não é detectado', () => {
-  const landmarks = createFace({
+test('escala proporcionalmente à distância interocular', () => {
+  const smallPair = createEyePair({
     centerX: 0.46,
     centerY: 0.42,
     rollDegrees: 0,
+    eyeHalfDistance: 0.06,
   });
-  delete landmarks[1];
-
-  const dimensions = rotatedDimensions(IMAGE_WIDTH, IMAGE_HEIGHT, 0);
-  const crop = calculateAlignmentCrop(
-    landmarks,
+  const largePair = createEyePair({
+    centerX: 0.46,
+    centerY: 0.42,
+    rollDegrees: 0,
+    eyeHalfDistance: 0.12,
+  });
+  const smallCrop = calculateAlignmentCrop(
+    smallPair.leftEye,
+    smallPair.rightEye,
     IMAGE_WIDTH,
     IMAGE_HEIGHT,
     0,
-    dimensions.width,
-    dimensions.height,
-    faceCapture,
-    getAlignmentLandmarks(landmarks),
+    IMAGE_WIDTH,
+    IMAGE_HEIGHT,
   );
-  const anchor = expectedAnchor(landmarks, 0, dimensions.width, dimensions.height, {
-    includeNose: false,
-  });
-  const cropCenter = {
-    x: crop.originX + crop.width / 2,
-    y: crop.originY + crop.height / 2,
-  };
+  const largeCrop = calculateAlignmentCrop(
+    largePair.leftEye,
+    largePair.rightEye,
+    IMAGE_WIDTH,
+    IMAGE_HEIGHT,
+    0,
+    IMAGE_WIDTH,
+    IMAGE_HEIGHT,
+  );
 
-  assertCropIsSafeAndSquare(crop, dimensions.width, dimensions.height);
-  assert.ok(Math.abs(cropCenter.x - anchor.x) <= 1);
-  assert.ok(Math.abs(cropCenter.y - anchor.y) <= 1);
+  assertCropIsSafeAndSquare(smallCrop, IMAGE_WIDTH, IMAGE_HEIGHT);
+  assertCropIsSafeAndSquare(largeCrop, IMAGE_WIDTH, IMAGE_HEIGHT);
+  assert.ok(Math.abs(largeCrop.width - smallCrop.width * 2) <= 1);
 });
 
-test('usa olhos e nariz quando a boca não é detectada', () => {
-  const landmarks = createFace({
-    centerX: 0.46,
-    centerY: 0.42,
-    rollDegrees: 0,
-  });
-  delete landmarks[61];
-  delete landmarks[291];
+test('mantém a distância interocular proporcional ao template após a rotação', () => {
+  for (const rollDegrees of [-30, -15, 0, 15, 30]) {
+    const { leftEye, rightEye } = createEyePair({
+      centerX: 0.43,
+      centerY: 0.42,
+      rollDegrees,
+    });
+    const rotationDegrees = -rollDegrees;
+    const dimensions = rotatedDimensions(IMAGE_WIDTH, IMAGE_HEIGHT, rotationDegrees);
+    const crop = calculateAlignmentCrop(
+      leftEye,
+      rightEye,
+      IMAGE_WIDTH,
+      IMAGE_HEIGHT,
+      rotationDegrees,
+      dimensions.width,
+      dimensions.height,
+    );
+    const transformEye = (eye) =>
+      transformPointForRotation(
+        {
+          x: eye.x * IMAGE_WIDTH,
+          y: eye.y * IMAGE_HEIGHT,
+        },
+        IMAGE_WIDTH,
+        IMAGE_HEIGHT,
+        dimensions.width,
+        dimensions.height,
+        rotationDegrees,
+      );
+    const transformedLeftEye = transformEye(leftEye);
+    const transformedRightEye = transformEye(rightEye);
+    const eyeDistance = Math.hypot(
+      transformedRightEye.x - transformedLeftEye.x,
+      transformedRightEye.y - transformedLeftEye.y,
+    );
 
-  const dimensions = rotatedDimensions(IMAGE_WIDTH, IMAGE_HEIGHT, 0);
-  const crop = calculateAlignmentCrop(
-    landmarks,
-    IMAGE_WIDTH,
-    IMAGE_HEIGHT,
-    0,
-    dimensions.width,
-    dimensions.height,
-    faceCapture,
-    getAlignmentLandmarks(landmarks),
-  );
-  const anchor = expectedAnchor(landmarks, 0, dimensions.width, dimensions.height, {
-    includeMouth: false,
-  });
-  const cropCenter = {
-    x: crop.originX + crop.width / 2,
-    y: crop.originY + crop.height / 2,
-  };
-
-  assertCropIsSafeAndSquare(crop, dimensions.width, dimensions.height);
-  assert.ok(Math.abs(cropCenter.x - anchor.x) <= 1);
-  assert.ok(Math.abs(cropCenter.y - anchor.y) <= 1);
+    assertCropIsSafeAndSquare(crop, dimensions.width, dimensions.height);
+    assert.ok(Math.abs((crop.width * TEMPLATE_EYE_DISTANCE) / 112 - eyeDistance) <= 1);
+  }
 });

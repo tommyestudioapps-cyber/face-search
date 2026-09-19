@@ -29,14 +29,13 @@ export async function alignFace(
       rotationDegrees,
     );
     const crop = calculateAlignmentCrop(
-      face.landmarks,
+      leftEye,
+      rightEye,
       imageWidth,
       imageHeight,
       rotationDegrees,
       rotatedDims.width,
       rotatedDims.height,
-      faceCapture,
-      keyLandmarks,
     );
     const aligned = await manipulateAsync(
       sourceUri,

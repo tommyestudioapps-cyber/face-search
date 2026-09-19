@@ -1,5 +1,20 @@
 import { FaceCaptureError, type FaceLandmark } from './types';
 
+const TEMPLATE_SIZE = 112;
+const TEMPLATE_LEFT_EYE = { x: 38.2946, y: 51.6963 };
+const TEMPLATE_RIGHT_EYE = { x: 73.5318, y: 51.5014 };
+
+const TEMPLATE_EYE_DISTANCE = Math.hypot(
+  TEMPLATE_RIGHT_EYE.x - TEMPLATE_LEFT_EYE.x,
+  TEMPLATE_RIGHT_EYE.y - TEMPLATE_LEFT_EYE.y,
+);
+const TEMPLATE_EYE_CENTER_X =
+  (TEMPLATE_LEFT_EYE.x + TEMPLATE_RIGHT_EYE.x) / 2;
+const TEMPLATE_EYE_CENTER_Y =
+  (TEMPLATE_LEFT_EYE.y + TEMPLATE_RIGHT_EYE.y) / 2;
+const TEMPLATE_EYE_CENTER_X_RATIO = TEMPLATE_EYE_CENTER_X / TEMPLATE_SIZE;
+const TEMPLATE_EYE_CENTER_Y_RATIO = TEMPLATE_EYE_CENTER_Y / TEMPLATE_SIZE;
+
 export interface AlignmentLandmarks {
   leftEye: FaceLandmark | null;
   rightEye: FaceLandmark | null;
@@ -12,13 +27,6 @@ export interface AlignmentCrop {
   originY: number;
   width: number;
   height: number;
-}
-
-export interface AlignmentCropConfig {
-  cropWidthMultiplier: number;
-  cropHeightMultiplier: number;
-  targetEyeDistanceRatio: number;
-  cropPaddingRatio: number;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -55,142 +63,66 @@ export function rotatedDimensions(width: number, height: number, degrees: number
 }
 
 /**
- * Calculates the square crop after the face has been leveled. The anchor is
- * intentionally based on eyes, nose and mouth rather than the raw landmark
- * bounding-box center, which stays stable when a face is tilted or close to
- * one edge of the image.
+ * Calculates a square crop using the ArcFace/InsightFace 112x112 template.
+ * Only the eyes are used as the alignment anchor.
  */
 export function calculateAlignmentCrop(
-  landmarks: FaceLandmark[],
+  leftEye: FaceLandmark,
+  rightEye: FaceLandmark,
   imageWidth: number,
   imageHeight: number,
   rotationDegrees: number,
   rotatedWidth: number,
   rotatedHeight: number,
-  config: AlignmentCropConfig,
-  keyLandmarks: AlignmentLandmarks,
 ): AlignmentCrop {
-  const points = landmarks
-    .filter(
-      (point): point is FaceLandmark =>
-        point !== null &&
-        point !== undefined &&
-        Number.isFinite(point.x) &&
-        Number.isFinite(point.y) &&
-        Number.isFinite(point.z),
-    )
-    .map((point) =>
-      transformPointForRotation(
-        { x: point.x * imageWidth, y: point.y * imageHeight },
-        imageWidth,
-        imageHeight,
-        rotatedWidth,
-        rotatedHeight,
-        rotationDegrees,
-      ),
-    );
-  if (points.length === 0) {
+  const transformedLeftEye = transformPointForRotation(
+    { x: leftEye.x * imageWidth, y: leftEye.y * imageHeight },
+    imageWidth,
+    imageHeight,
+    rotatedWidth,
+    rotatedHeight,
+    rotationDegrees,
+  );
+  const transformedRightEye = transformPointForRotation(
+    { x: rightEye.x * imageWidth, y: rightEye.y * imageHeight },
+    imageWidth,
+    imageHeight,
+    rotatedWidth,
+    rotatedHeight,
+    rotationDegrees,
+  );
+
+  const eyeDistance = Math.hypot(
+    transformedRightEye.x - transformedLeftEye.x,
+    transformedRightEye.y - transformedLeftEye.y,
+  );
+  if (!Number.isFinite(eyeDistance) || eyeDistance <= 0) {
     throw new FaceCaptureError(
       'landmarks-incomplete',
-      'Não foi possível calcular o recorte porque os pontos do rosto estão incompletos.',
+      'Não foi possível calcular o recorte porque os olhos não puderam ser medidos.',
     );
   }
-  const minX = Math.min(...points.map((point) => point.x));
-  const maxX = Math.max(...points.map((point) => point.x));
-  const minY = Math.min(...points.map((point) => point.y));
-  const maxY = Math.max(...points.map((point) => point.y));
-  const faceWidth = Math.max(1, maxX - minX);
-  const faceHeight = Math.max(1, maxY - minY);
-  const transformedKeyLandmarks = {
-    leftEye: keyLandmarks.leftEye
-      ? transformPointForRotation(
-          { x: keyLandmarks.leftEye.x * imageWidth, y: keyLandmarks.leftEye.y * imageHeight },
-          imageWidth,
-          imageHeight,
-          rotatedWidth,
-          rotatedHeight,
-          rotationDegrees,
-        )
-      : null,
-    rightEye: keyLandmarks.rightEye
-      ? transformPointForRotation(
-          { x: keyLandmarks.rightEye.x * imageWidth, y: keyLandmarks.rightEye.y * imageHeight },
-          imageWidth,
-          imageHeight,
-          rotatedWidth,
-          rotatedHeight,
-          rotationDegrees,
-        )
-      : null,
-    nose: keyLandmarks.nose
-      ? transformPointForRotation(
-          { x: keyLandmarks.nose.x * imageWidth, y: keyLandmarks.nose.y * imageHeight },
-          imageWidth,
-          imageHeight,
-          rotatedWidth,
-          rotatedHeight,
-          rotationDegrees,
-        )
-      : null,
-    mouth: keyLandmarks.mouth
-      ? transformPointForRotation(
-          { x: keyLandmarks.mouth.x * imageWidth, y: keyLandmarks.mouth.y * imageHeight },
-          imageWidth,
-          imageHeight,
-          rotatedWidth,
-          rotatedHeight,
-          rotationDegrees,
-        )
-      : null,
-  };
-  const eyeDistance =
-    transformedKeyLandmarks.leftEye && transformedKeyLandmarks.rightEye
-      ? Math.hypot(
-          transformedKeyLandmarks.rightEye.x - transformedKeyLandmarks.leftEye.x,
-          transformedKeyLandmarks.rightEye.y - transformedKeyLandmarks.leftEye.y,
-        )
-      : 0;
-  const anchorPoints = [
-    transformedKeyLandmarks.leftEye && transformedKeyLandmarks.rightEye
-      ? {
-          x: (transformedKeyLandmarks.leftEye.x + transformedKeyLandmarks.rightEye.x) / 2,
-          y: (transformedKeyLandmarks.leftEye.y + transformedKeyLandmarks.rightEye.y) / 2,
-          weight: 0.35,
-        }
-      : null,
-    transformedKeyLandmarks.nose
-      ? { ...transformedKeyLandmarks.nose, weight: 0.4 }
-      : null,
-    transformedKeyLandmarks.mouth
-      ? { ...transformedKeyLandmarks.mouth, weight: 0.25 }
-      : null,
-  ].filter((point): point is { x: number; y: number; weight: number } => point !== null);
-  const anchorWeight = anchorPoints.reduce((sum, point) => sum + point.weight, 0);
-  const anchor = anchorWeight
-    ? {
-        x: anchorPoints.reduce((sum, point) => sum + point.x * point.weight, 0) / anchorWeight,
-        y: anchorPoints.reduce((sum, point) => sum + point.y * point.weight, 0) / anchorWeight,
-      }
-    : { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+
+  const eyeCenterX = (transformedLeftEye.x + transformedRightEye.x) / 2;
+  const eyeCenterY = (transformedLeftEye.y + transformedRightEye.y) / 2;
+
+  const desiredSide = (eyeDistance * TEMPLATE_SIZE) / TEMPLATE_EYE_DISTANCE;
   const maxSide = Math.min(rotatedWidth, rotatedHeight);
-  const side = clamp(
-    Math.max(
-      faceWidth * config.cropWidthMultiplier,
-      faceHeight * config.cropHeightMultiplier,
-      eyeDistance / config.targetEyeDistanceRatio,
-      Math.max(faceWidth, faceHeight) * (1 + config.cropPaddingRatio * 2),
-    ),
-    1,
-    maxSide,
-  );
-  // Quantize the crop once, after clamping its size. Using the same integer
-  // side for both axes prevents a one-pixel skew at image edges.
-  const cropSide = Math.max(1, Math.floor(side));
+  const cropSide = Math.max(1, Math.floor(Math.min(desiredSide, maxSide)));
+
   const originX = Math.floor(
-    clamp(anchor.x - cropSide / 2, 0, rotatedWidth - cropSide),
+    clamp(
+      eyeCenterX - TEMPLATE_EYE_CENTER_X_RATIO * cropSide,
+      0,
+      rotatedWidth - cropSide,
+    ),
   );
   const originY = Math.floor(
-    clamp(anchor.y - cropSide / 2, 0, rotatedHeight - cropSide),
+    clamp(
+      eyeCenterY - TEMPLATE_EYE_CENTER_Y_RATIO * cropSide,
+      0,
+      rotatedHeight - cropSide,
+    ),
   );
 
   return {

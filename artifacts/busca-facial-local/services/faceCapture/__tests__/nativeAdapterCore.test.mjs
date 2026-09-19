@@ -35,17 +35,18 @@ function assertNativePartialFaceReachesAlignment(faceLandmarks, missingAnchor) {
 
   assert.ok(face);
   assert.equal(hasRequiredLandmarks(face.landmarks, faceCapture.minLandmarkCount), true);
-  assert.equal(getAlignmentLandmarks(face.landmarks)[missingAnchor], null);
+  const keyLandmarks = getAlignmentLandmarks(face.landmarks);
+  assert.equal(keyLandmarks[missingAnchor], null);
+  const { leftEye, rightEye } = keyLandmarks;
 
   const crop = calculateAlignmentCrop(
-    face.landmarks,
+    leftEye,
+    rightEye,
     1200,
     900,
     0,
     1200,
     900,
-    faceCapture,
-    getAlignmentLandmarks(face.landmarks),
   );
   assert.equal(crop.width, crop.height);
   assert.ok(crop.width > 0);

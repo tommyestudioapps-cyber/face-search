@@ -103,16 +103,15 @@ async function runPartialCaptureSmokeTest(missingAnchor) {
       detectFaces: async () => session,
       alignSelectedFace: async (nextSession, faceId) => {
         const selectedFace = nextSession.faces.find((candidate) => candidate.id === faceId);
-        const keyLandmarks = getAlignmentLandmarks(selectedFace.landmarks);
+        const { leftEye, rightEye } = getAlignmentLandmarks(selectedFace.landmarks);
         const crop = calculateAlignmentCrop(
-          selectedFace.landmarks,
+          leftEye,
+          rightEye,
           nextSession.width,
           nextSession.height,
           selectedFace.rollDegrees,
           nextSession.width,
           nextSession.height,
-          faceCapture,
-          keyLandmarks,
         );
         return {
           uri: `synthetic://aligned-${missingAnchor}`,

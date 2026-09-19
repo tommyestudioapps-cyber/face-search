@@ -1,0 +1,293 @@
+Contexto: Fase 5 — alinhamento por template canônico. Substituir o
+cálculo heurístico de crop (pesos olho/nariz/boca + multiplicadores)
+por um alinhamento baseado no template ArcFace 112x112 usado por
+MobileFaceNet.
+
+Diagnóstico confirmado:
+- alignedFaceSize = 224; faceSearch.input.width/height = 112.
+- preprocessing.ts da faceSearch NÃO faz nenhuma transformação
+  geométrica extra (só resize bilinear + normalização).
+- calculateAlignmentCrop é o único ponto que decide geometria.
+- Não existe nenhuma referência textual a template/canonical/arcface
+  no projeto.
+
+Esta etapa toca SEIS arquivos:
+- services/faceCapture/alignmentGeometry.ts
+- services/faceCapture/alignment.ts
+- services/faceCapture/__tests__/alignmentGeometry.test.mjs
+- services/faceCapture/__tests__/captureFlow.test.mjs
+- services/faceCapture/__tests__/nativeAdapterCore.test.mjs
+- services/faceCapture/__tests__/qualityAlignment.test.mjs
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — alignmentGeometry.ts
+
+1.1 Remover a interface AlignmentCropConfig (ficará sem uso).
+
+1.2 Adicionar, após os imports e antes de AlignmentLandmarks, as
+constantes do template. Colar exatamente:
+
+  const TEMPLATE_SIZE = 112;
+  const TEMPLATE_LEFT_EYE = { x: 38.2946, y: 51.6963 };
+  const TEMPLATE_RIGHT_EYE = { x: 73.5318, y: 51.5014 };
+
+  const TEMPLATE_EYE_DISTANCE = Math.hypot(
+    TEMPLATE_RIGHT_EYE.x - TEMPLATE_LEFT_EYE.x,
+    TEMPLATE_RIGHT_EYE.y - TEMPLATE_LEFT_EYE.y,
+  );
+  const TEMPLATE_EYE_CENTER_X =
+    (TEMPLATE_LEFT_EYE.x + TEMPLATE_RIGHT_EYE.x) / 2;
+  const TEMPLATE_EYE_CENTER_Y =
+    (TEMPLATE_LEFT_EYE.y + TEMPLATE_RIGHT_EYE.y) / 2;
+  const TEMPLATE_EYE_CENTER_X_RATIO = TEMPLATE_EYE_CENTER_X / TEMPLATE_SIZE;
+  const TEMPLATE_EYE_CENTER_Y_RATIO = TEMPLATE_EYE_CENTER_Y / TEMPLATE_SIZE;
+
+1.3 Substituir completamente o corpo da função calculateAlignmentCrop
+e sua assinatura pela versão abaixo. Remover também os imports e usos
+que ficarem órfãos (config, keyLandmarks, points, minX/maxX/etc):
+
+  export function calculateAlignmentCrop(
+    leftEye: FaceLandmark,
+    rightEye: FaceLandmark,
+    imageWidth: number,
+    imageHeight: number,
+    rotationDegrees: number,
+    rotatedWidth: number,
+    rotatedHeight: number,
+  ): AlignmentCrop {
+    const transformedLeftEye = transformPointForRotation(
+      { x: leftEye.x * imageWidth, y: leftEye.y * imageHeight },
+      imageWidth,
+      imageHeight,
+      rotatedWidth,
+      rotatedHeight,
+      rotationDegrees,
+    );
+    const transformedRightEye = transformPointForRotation(
+      { x: rightEye.x * imageWidth, y: rightEye.y * imageHeight },
+      imageWidth,
+      imageHeight,
+      rotatedWidth,
+      rotatedHeight,
+      rotationDegrees,
+    );
+
+    const eyeDistance = Math.hypot(
+      transformedRightEye.x - transformedLeftEye.x,
+      transformedRightEye.y - transformedLeftEye.y,
+    );
+    if (!Number.isFinite(eyeDistance) || eyeDistance <= 0) {
+      throw new FaceCaptureError(
+        'landmarks-incomplete',
+        'Não foi possível calcular o recorte porque os olhos não puderam ser medidos.',
+      );
+    }
+
+    const eyeCenterX = (transformedLeftEye.x + transformedRightEye.x) / 2;
+    const eyeCenterY = (transformedLeftEye.y + transformedRightEye.y) / 2;
+
+    const desiredSide = (eyeDistance * TEMPLATE_SIZE) / TEMPLATE_EYE_DISTANCE;
+    const maxSide = Math.min(rotatedWidth, rotatedHeight);
+    const cropSide = Math.max(1, Math.floor(Math.min(desiredSide, maxSide)));
+
+    const originX = Math.floor(
+      clamp(
+        eyeCenterX - TEMPLATE_EYE_CENTER_X_RATIO * cropSide,
+        0,
+        rotatedWidth - cropSide,
+      ),
+    );
+    const originY = Math.floor(
+      clamp(
+        eyeCenterY - TEMPLATE_EYE_CENTER_Y_RATIO * cropSide,
+        0,
+        rotatedHeight - cropSide,
+      ),
+    );
+
+    return {
+      originX,
+      originY,
+      width: cropSide,
+      height: cropSide,
+    };
+  }
+
+1.4 Preservar intactos: clamp, transformPointForRotation,
+rotatedDimensions, AlignmentLandmarks, AlignmentCrop.
+
+1.5 Atualizar o comentário JSDoc acima da função para explicar que o
+alinhamento usa template ArcFace/InsightFace (112x112) e que só os
+olhos são usados como âncora.
+
+Passo 2 — alignment.ts
+
+2.1 A chamada atual passa 8 argumentos:
+  calculateAlignmentCrop(
+    face.landmarks,
+    imageWidth,
+    imageHeight,
+    rotationDegrees,
+    rotatedDims.width,
+    rotatedDims.height,
+    faceCapture,
+    keyLandmarks,
+  );
+
+Substituir por:
+  calculateAlignmentCrop(
+    leftEye,
+    rightEye,
+    imageWidth,
+    imageHeight,
+    rotationDegrees,
+    rotatedDims.width,
+    rotatedDims.height,
+  );
+
+2.2 leftEye e rightEye já estão em escopo (destructured de keyLandmarks
+na checagem inicial). Não alterar a checagem.
+
+2.3 Não alterar mais nada em alignment.ts. O import de faceCapture
+continua (alignedFaceSize). O import de rotatedDimensions continua.
+
+Passo 3 — alignmentGeometry.test.mjs
+
+Reescrever o arquivo inteiro. Estrutura sugerida:
+
+3.1 Imports: apenas node:assert/strict, node:test,
+calculateAlignmentCrop, rotatedDimensions, transformPointForRotation
+de ../alignmentGeometry.ts.
+
+3.2 Remover expectedAnchor completamente. Remover a função createFace
+antiga e substituir por um helper que devolve só os dois olhos:
+
+  function createEyePair({ centerX, centerY, rollDegrees, eyeHalfDistance = 0.09 }) {
+    const roll = (rollDegrees * Math.PI) / 180;
+    const eyeOffsetX = eyeHalfDistance * Math.cos(roll);
+    const eyeOffsetY = eyeHalfDistance * Math.sin(roll);
+    return {
+      leftEye: { x: centerX - eyeOffsetX, y: centerY - eyeOffsetY, z: 0 },
+      rightEye: { x: centerX + eyeOffsetX, y: centerY + eyeOffsetY, z: 0 },
+    };
+  }
+
+3.3 Constante local:
+  const TEMPLATE_EYE_DISTANCE = Math.hypot(
+    73.5318 - 38.2946,
+    51.5014 - 51.6963,
+  );
+  const TEMPLATE_EYE_CENTER_X_RATIO = ((38.2946 + 73.5318) / 2) / 112;
+  const TEMPLATE_EYE_CENTER_Y_RATIO = ((51.6963 + 51.5014) / 2) / 112;
+
+3.4 Preservar assertCropIsSafeAndSquare como está.
+
+3.5 Teste 1 — posicionamento canônico:
+  Para rollDegrees em [-24, 0, 24]:
+    - createEyePair({ centerX: 0.43, centerY: 0.42, rollDegrees })
+    - rotationDegrees = -rollDegrees
+    - dimensions = rotatedDimensions(IMAGE_WIDTH, IMAGE_HEIGHT, rotationDegrees)
+    - crop = calculateAlignmentCrop(leftEye, rightEye, IMAGE_WIDTH,
+      IMAGE_HEIGHT, rotationDegrees, dimensions.width, dimensions.height)
+    - transformar os olhos para o espaço rotacionado via
+      transformPointForRotation e calcular centro esperado
+    - assertCropIsSafeAndSquare(crop, dimensions.width, dimensions.height)
+    - const expectedX = TEMPLATE_EYE_CENTER_X_RATIO * crop.width
+    - const expectedY = TEMPLATE_EYE_CENTER_Y_RATIO * crop.height
+    - const actualX = eyeCenterRotated.x - crop.originX
+    - const actualY = eyeCenterRotated.y - crop.originY
+    - assert.ok(Math.abs(actualX - expectedX) <= 1)
+    - assert.ok(Math.abs(actualY - expectedY) <= 1)
+
+3.6 Teste 2 — encosta no canto superior esquerdo:
+  createEyePair({ centerX: 0.1, centerY: 0.12, rollDegrees: 0 })
+  crop sem rotação
+  assert.equal(crop.originX, 0)
+  assert.equal(crop.originY, 0)
+  assertCropIsSafeAndSquare
+
+3.7 Teste 3 — encosta no canto inferior direito:
+  createEyePair({ centerX: 0.88, centerY: 0.78, rollDegrees: 0 })
+  crop sem rotação
+  assert.equal(crop.originX + crop.width, IMAGE_WIDTH)
+  assert.equal(crop.originY + crop.height, IMAGE_HEIGHT)
+  assertCropIsSafeAndSquare
+
+3.8 Teste 4 — escala proporcional à distância interocular:
+  Dois pares de olhos: eyeHalfDistance = 0.06 e eyeHalfDistance = 0.12,
+  mesma posição central. O crop do segundo deve ser aproximadamente o
+  dobro do primeiro. Tolerância: 1 pixel.
+
+3.9 Teste 5 — distância interocular casando com o template:
+  Para rollDegrees em [-30, -15, 0, 15, 30]:
+    - createEyePair padrão
+    - rotação = -rollDegrees
+    - crop calculado
+    - distância interocular rotacionada d (via transformPointForRotation
+      nos dois olhos)
+    - assert.ok(Math.abs((crop.width * TEMPLATE_EYE_DISTANCE) / 112 - d) <= 1)
+
+3.10 Manter os testes de rotatedDimensions/transformPointForRotation
+se existirem no arquivo atual; se não existirem, não adicionar.
+
+Passo 4 — captureFlow.test.mjs, nativeAdapterCore.test.mjs e qualityAlignment.test.mjs
+
+Nos três arquivos existe uma chamada a calculateAlignmentCrop usada
+como setup. Atualizar a assinatura:
+
+- Se o teste já obtém leftEye/rightEye via getAlignmentLandmarks, usar
+  esses valores.
+- Se passa landmarks diretos, usar
+  getAlignmentLandmarks(landmarks) e destructure leftEye/rightEye.
+- Manter a intenção do teste intacta. Se alguma asserção dependia do
+  valor antigo do crop e o novo valor é diferente, ajustar a asserção
+  para refletir o comportamento baseado em template, sem remover a
+  cobertura do caso.
+
+Passo 5 — Validação
+
+5.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa.
+
+5.2 a 5.6 Rode os cinco runners de teste na ordem habitual
+    (face-capture, face-search, face-overlay, face-settings,
+    face-coordination). Cole as saídas completas.
+
+Passo 6 — Relatório
+
+6.1 Cole o diff unified completo dos seis arquivos alterados.
+
+6.2 Confirme explicitamente:
+  - AlignmentCropConfig não existe mais;
+  - calculateAlignmentCrop recebe exatamente 7 parâmetros
+    (leftEye, rightEye, imageWidth, imageHeight, rotationDegrees,
+    rotatedWidth, rotatedHeight);
+  - as constantes TEMPLATE_* existem e são usadas;
+  - o bloco "points / minX / maxX / minY / maxY / faceWidth /
+    faceHeight / anchorPoints" foi totalmente removido;
+  - alignment.ts passa exatamente 7 argumentos;
+  - os testes de alignmentGeometry foram reescritos com 5 testes;
+  - nenhuma outra função em alignmentGeometry.ts foi alterada;
+  - nenhum arquivo fora dos 6 listados foi tocado.
+
+Passo 7 — Git (sem alterar nada)
+
+7.1 Rode `git log --oneline -3` e cole a saída.
+7.2 Rode `git status` e cole a saída.
+7.3 Se o working tree estiver limpo, apenas reporte o commit que
+    contém a Fase 5.
+
+Regras finais:
+- Não toque em faceCapture.ts nesta etapa (os campos cropWidthMultiplier,
+  cropHeightMultiplier, cropPaddingRatio e targetEyeDistanceRatio ficam
+  para uma limpeza futura).
+- Não toque em preprocessing.ts nem em services/faceSearch/.
+- Não toque em alignment.ts fora do bloco da chamada a
+  calculateAlignmentCrop.
+- Não importe template do faceCapture; as constantes vivem em
+  alignmentGeometry.ts.
+- Não adicione dependências.
+- Não faça commit manual.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.
