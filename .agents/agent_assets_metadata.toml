@@ -28,3 +28,17 @@ mtime_ms = 1789814576907
 storage_uri = "gcs://replit-rams-assets-reed/rams/assets/repl:2a4d4a8e-7c22-4ff1-a93e-6196ada332df/7f1c4d80-cfa8-407a-bf72-8d92570414ff/01f00b04-7d04-46d7-9373-4c8ae9354439"
 storage_version_token = "1789814577442314"
 content_type = "image/png"
+
+[[outputs]]
+id = "wnrLVPAHLpPUAz_zneaNI"
+uri = "file://attached_assets/busca-facial-local-dev-qr.png"
+type = "image"
+title = "QR code — Busca Facial Local"
+description = "Escaneie este QR code no ambiente de desenvolvimento Expo para abrir o app no dev client."
+logical_id = "fee94d63-a8c8-4e57-8fbf-9361d41f3199"
+content_hash = "sha256:11b634d5c6c3b1aa1aeb985d3c57e393f1dba9584938185435f1e11ae2d98581"
+size = 1416
+mtime_ms = 1789831381176
+storage_uri = "gcs://replit-rams-assets-reed/rams/assets/repl:2a4d4a8e-7c22-4ff1-a93e-6196ada332df/fee94d63-a8c8-4e57-8fbf-9361d41f3199/5fdbcd90-53e8-48d0-8dc7-dfb1fd30e37f"
+storage_version_token = "1789831381666107"
+content_type = "image/png"
