@@ -1,0 +1,128 @@
+Contexto: Fase 9J2. DIAGNÓSTICO puro. A busca retornou 0 resultados
+com 12 rostos salvos no índice. Logs mostraram:
+  [Stats] pós-indexação status=cancelled fotos=102 rostos=12
+  [Search] rodando search pós-indexação
+  [Search] resultados=0
+Precisamos adicionar logs DENTRO de searchAlignedFace para descobrir
+se é divergência de versão, filtro de threshold, ou embeddings ruins.
+
+Esta etapa toca UM arquivo:
+- artifacts/busca-facial-local/services/faceSearch/search.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Adicionar imports
+
+No topo de search.ts, adicionar ao import de searchMath:
+
+  import { groupBestResults, cosineSimilarity } from './searchMath';
+
+Passo 2 — Instrumentar searchAlignedFace
+
+2.1 Logo após a linha `const inputTensor = await preprocessAlignedFace(alignedFace);`,
+adicionar:
+
+  if (__DEV__) {
+    let sum = 0;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const v of inputTensor.data) {
+      sum += v;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    console.log(
+      `[Search:diag] tensor len=${inputTensor.data.length} mean=${(sum / inputTensor.data.length).toFixed(3)} min=${min.toFixed(2)} max=${max.toFixed(2)}`,
+    );
+  }
+
+2.2 Logo após a linha `const queryEmbedding = await runFaceEmbedding(inputTensor);`,
+adicionar:
+
+  if (__DEV__) {
+    let sq = 0;
+    for (const v of queryEmbedding.values) sq += v * v;
+    console.log(
+      `[Search:diag] query norm=${Math.sqrt(sq).toFixed(3)} first=${queryEmbedding.values[0].toFixed(4)}`,
+    );
+  }
+
+2.3 Antes da linha
+`await faceSearchRepository.invalidateIfModelChanged(queryEmbedding.model);`,
+adicionar:
+
+  let storedVersion: string | null = null;
+  if (__DEV__) {
+    storedVersion = await faceSearchRepository.getStoredModelVersion();
+    console.log(
+      `[Search:diag] storedVersion=${storedVersion}`,
+    );
+    console.log(
+      `[Search:diag] queryVersion=${getModelStorageVersion(queryEmbedding.model)}`,
+    );
+  }
+
+2.4 Após a linha
+`const candidates = await faceSearchRepository.getIndexedEmbeddings(modelStorageVersion);`,
+adicionar:
+
+  if (__DEV__) {
+    console.log(`[Search:diag] candidates=${candidates.length}`);
+    if (candidates.length > 0) {
+      let sq = 0;
+      for (const v of candidates[0].face.embedding.values) sq += v * v;
+      console.log(
+        `[Search:diag] candidate[0] norm=${Math.sqrt(sq).toFixed(3)} first=${candidates[0].face.embedding.values[0].toFixed(4)}`,
+      );
+      const sims = candidates
+        .map((c) =>
+          cosineSimilarity(queryEmbedding.values, c.face.embedding.values),
+        )
+        .sort((a, b) => b - a);
+      console.log(
+        `[Search:diag] top5 sims=${sims
+          .slice(0, 5)
+          .map((s) => s.toFixed(4))
+          .join(',')}`,
+      );
+      console.log(
+        `[Search:diag] thresholds review=${faceSearch.similarityThresholds.review} approved=${faceSearch.similarityThresholds.approved}`,
+      );
+    }
+  }
+
+2.5 Após a linha
+`const results = groupBestResults(...)`,
+adicionar:
+
+  if (__DEV__) {
+    console.log(`[Search:diag] finalResults=${results.length}`);
+  }
+
+Passo 3 — Validação
+
+3.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída.
+
+3.2 Rode `pnpm --filter @workspace/busca-facial-local run test:face-search`
+    e cole a saída.
+
+Passo 4 — Relatório
+
+4.1 Cole o diff de search.ts.
+
+4.2 Confirme:
+  - os logs [Search:diag] foram adicionados;
+  - nenhuma lógica de produção foi alterada (só logs);
+  - nenhum outro arquivo foi tocado.
+
+Passo 5 — Git
+
+5.1 Rode `git log --oneline -3`.
+5.2 Rode `git status`.
+
+Regras:
+- Não faça commit manual.
+- Não altere nenhum arquivo fora de search.ts.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.
