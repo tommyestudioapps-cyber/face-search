@@ -267,11 +267,13 @@ function Home({
   onSettings,
   onOpenIndexed,
   indexedPhotoCount,
+  indexedFaceCount,
 }: {
   onSelect: () => void;
   onSettings: () => void;
   onOpenIndexed: () => void;
   indexedPhotoCount: number;
+  indexedFaceCount: number;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -331,36 +333,66 @@ function Home({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Ver ${indexedPhotoCount} fotos indexadas`}
-              disabled={indexedPhotoCount === 0}
               onPress={onOpenIndexed}
               testID="open-indexed-photos"
               style={({ pressed }) => [
                 styles.statCard,
+                styles.statCardActionable,
                 { backgroundColor: colors.card },
-                pressed ? styles.pressed : null,
-                indexedPhotoCount === 0 ? styles.disabledButton : null,
+                pressed ? styles.statCardPressed : null,
               ]}
             >
-              <IconCircle name="image" color={colors.primary} backgroundColor={colors.accent} />
+              <View style={styles.statCardTop}>
+                <IconCircle
+                  name="image"
+                  color={colors.primary}
+                  backgroundColor={colors.accent}
+                />
+                <Feather
+                  name="arrow-up-right"
+                  size={15}
+                  color={colors.primary}
+                />
+              </View>
               <Text style={[styles.statValue, { color: colors.foreground }]}>
                 {String(indexedPhotoCount)}
               </Text>
-              <View style={styles.statLabelRow}>
-                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
-                  fotos indexadas
-                </Text>
-                {indexedPhotoCount > 0 ? (
-                  <Feather name="chevron-right" size={13} color={colors.mutedForeground} />
-                ) : null}
-              </View>
-            </Pressable>
-            <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-              <IconCircle name="cloud-off" color={colors.primary} backgroundColor={colors.accent} />
-              <Text style={[styles.statValue, { color: colors.foreground }]}>0</Text>
               <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
-                dados na nuvem
+                fotos indexadas
               </Text>
-            </View>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Ver ${indexedFaceCount} rostos indexados`}
+              onPress={onOpenIndexed}
+              testID="open-indexed-faces"
+              style={({ pressed }) => [
+                styles.statCard,
+                styles.statCardActionable,
+                { backgroundColor: colors.card },
+                pressed ? styles.statCardPressed : null,
+              ]}
+            >
+              <View style={styles.statCardTop}>
+                <IconCircle
+                  name="users"
+                  color="#34D399"
+                  backgroundColor="#123429"
+                />
+                <Feather
+                  name="arrow-up-right"
+                  size={15}
+                  color="#34D399"
+                />
+              </View>
+              <Text style={[styles.statValue, { color: colors.foreground }]}>
+                {String(indexedFaceCount)}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
+                rostos indexados
+              </Text>
+            </Pressable>
           </View>
 
           <View style={[styles.privacyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -904,6 +936,11 @@ export default function HomeScreen() {
   const openSearch = () => setScreen('select');
 
   const openIndexed = () => {
+    if (__DEV__) {
+      console.log(
+        `[Indexed] abrindo galeria. stats fotos=${storedIndexStats.indexedPhotos} rostos=${storedIndexStats.indexedFaces} carregadas=${indexedPhotos.length}`,
+      );
+    }
     setScreen('indexed');
     void refreshIndexedPhotos();
   };
@@ -1013,6 +1050,7 @@ export default function HomeScreen() {
             onSettings={() => setShowIndexSettings(true)}
             onOpenIndexed={openIndexed}
             indexedPhotoCount={storedIndexStats.indexedPhotos}
+            indexedFaceCount={storedIndexStats.indexedFaces}
           />
         );
     }
@@ -1132,6 +1170,19 @@ const styles = StyleSheet.create({
   readyText: { fontSize: 9, fontFamily: 'Inter_700Bold', letterSpacing: 0.6, color: '#6EE7B7' },
   statsRow: { flexDirection: 'row', gap: 12 },
   statCard: { flex: 1, minHeight: 121, borderRadius: 19, padding: 14 },
+  statCardActionable: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  statCardPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.98 }],
+  },
+  statCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   statValue: { fontSize: 24, fontFamily: 'Inter_700Bold', marginTop: 11, letterSpacing: -0.7 },
   statLabel: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
   statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },

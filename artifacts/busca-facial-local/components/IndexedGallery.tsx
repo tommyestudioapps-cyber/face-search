@@ -25,6 +25,19 @@ export function IndexedGallery({
   isLoading,
   onBack,
 }: IndexedGalleryProps) {
+  React.useEffect(() => {
+    if (__DEV__) {
+      console.log(
+        `[IndexedGallery] montada com ${photos.length} fotos, isLoading=${isLoading}`,
+      );
+      if (photos.length > 0) {
+        console.log(
+          `[IndexedGallery] primeira uri=${photos[0].uri.slice(0, 80)}`,
+        );
+      }
+    }
+  }, [photos.length, isLoading]);
+
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { contentWidth, numColumns } = useResponsiveLayout();

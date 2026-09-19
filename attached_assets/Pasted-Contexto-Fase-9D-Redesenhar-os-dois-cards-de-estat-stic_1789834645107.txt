@@ -1,0 +1,186 @@
+Contexto: Fase 9D. Redesenhar os dois cards de estatísticas na Home
+para dar affordance visual de clique e tornar os dados mais úteis.
+Usuário testou em device real e reportou: card "fotos indexadas" não
+parece clicável, card "dados na nuvem" é inútil, e não consegue
+chegar à tela de fotos indexadas. Hipótese: falta de seta e falta
+de estado de press são a causa. Vamos corrigir.
+
+Esta etapa toca DOIS arquivos:
+- artifacts/busca-facial-local/app/index.tsx
+- artifacts/busca-facial-local/components/IndexedGallery.tsx
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — app/index.tsx: redesenhar os dois cards
+
+Localizar o bloco `statsRow` no componente Home e substituí-lo
+inteiramente por:
+
+  <View style={styles.statsRow}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Ver ${indexedPhotoCount} fotos indexadas`}
+      onPress={onOpenIndexed}
+      testID="open-indexed-photos"
+      style={({ pressed }) => [
+        styles.statCard,
+        styles.statCardActionable,
+        { backgroundColor: colors.card },
+        pressed ? styles.statCardPressed : null,
+      ]}
+    >
+      <View style={styles.statCardTop}>
+        <IconCircle
+          name="image"
+          color={colors.primary}
+          backgroundColor={colors.accent}
+        />
+        <Feather
+          name="arrow-up-right"
+          size={15}
+          color={colors.primary}
+        />
+      </View>
+      <Text style={[styles.statValue, { color: colors.foreground }]}>
+        {String(indexedPhotoCount)}
+      </Text>
+      <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
+        fotos indexadas
+      </Text>
+    </Pressable>
+
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Ver ${indexedFaceCount} rostos indexados`}
+      onPress={onOpenIndexed}
+      testID="open-indexed-faces"
+      style={({ pressed }) => [
+        styles.statCard,
+        styles.statCardActionable,
+        { backgroundColor: colors.card },
+        pressed ? styles.statCardPressed : null,
+      ]}
+    >
+      <View style={styles.statCardTop}>
+        <IconCircle
+          name="users"
+          color="#34D399"
+          backgroundColor="#123429"
+        />
+        <Feather
+          name="arrow-up-right"
+          size={15}
+          color="#34D399"
+        />
+      </View>
+      <Text style={[styles.statValue, { color: colors.foreground }]}>
+        {String(indexedFaceCount)}
+      </Text>
+      <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
+        rostos indexados
+      </Text>
+    </Pressable>
+  </View>
+
+Onde `indexedFaceCount` deve vir de `storedIndexStats.indexedFaces`.
+Adicionar a prop no componente Home:
+
+  function Home({
+    onSelect,
+    onSettings,
+    onOpenIndexed,
+    indexedPhotoCount,
+    indexedFaceCount,
+  }: {
+    onSelect: () => void;
+    onSettings: () => void;
+    onOpenIndexed: () => void;
+    indexedPhotoCount: number;
+    indexedFaceCount: number;
+  }) {
+
+E na chamada `<Home ... />` dentro do switch, adicionar:
+
+  indexedFaceCount={storedIndexStats.indexedFaces}
+
+Passo 2 — app/index.tsx: log ao abrir
+
+No handler openIndexed, adicionar log para confirmar execução:
+
+  const openIndexed = () => {
+    if (__DEV__) {
+      console.log(
+        `[Indexed] abrindo galeria. stats fotos=${storedIndexStats.indexedPhotos} rostos=${storedIndexStats.indexedFaces} carregadas=${indexedPhotos.length}`,
+      );
+    }
+    setScreen('indexed');
+    void refreshIndexedPhotos();
+  };
+
+Passo 3 — app/index.tsx: novos estilos
+
+Adicionar ao StyleSheet, mantendo os estilos existentes intactos:
+
+  statCardActionable: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  statCardPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.98 }],
+  },
+  statCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+Não remover o estilo `statCard` existente.
+
+Passo 4 — IndexedGallery.tsx: log de montagem
+
+No componente IndexedGallery, logo no início do corpo, adicionar:
+
+  React.useEffect(() => {
+    if (__DEV__) {
+      console.log(
+        `[IndexedGallery] montada com ${photos.length} fotos, isLoading=${isLoading}`,
+      );
+      if (photos.length > 0) {
+        console.log(
+          `[IndexedGallery] primeira uri=${photos[0].uri.slice(0, 80)}`,
+        );
+      }
+    }
+  }, [photos.length, isLoading]);
+
+Passo 5 — Validação
+
+5.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída.
+
+5.2 Rode os cinco runners na ordem habitual e cole as saídas.
+
+Passo 6 — Relatório
+
+6.1 Cole o diff unified dos dois arquivos.
+
+6.2 Confirme:
+  - o card de fotos indexadas agora tem ícone "arrow-up-right";
+  - o card de rostos indexados substituiu "dados na nuvem";
+  - ambos os cards chamam onOpenIndexed;
+  - openIndexed loga stats;
+  - IndexedGallery loga ao montar;
+  - a prop indexedFaceCount existe em Home;
+  - nada fora dos dois arquivos foi alterado.
+
+Passo 7 — Git
+
+7.1 Rode `git log --oneline -3`.
+7.2 Rode `git status`.
+
+Regras:
+- Não faça commit manual.
+- Não altere nenhum outro arquivo.
+- Não remova o estilo `statCard` antigo.
+- Se algo falhar, PARE e reporte.
