@@ -39,6 +39,7 @@ import {
 export interface GalleryIndexOptions {
   onProgress?: (progress: FaceIndexProgress) => void;
   cancellation?: GalleryIndexCancellation;
+  albumId?: string | null;
 }
 
 export interface GalleryIndexResult {
@@ -312,6 +313,10 @@ export async function indexGallery(
   options: GalleryIndexOptions = {},
 ): Promise<GalleryIndexResult> {
   const cancellation = options.cancellation ?? new GalleryIndexCancellation();
+  const albumId = options.albumId ?? null;
+  if (__DEV__) {
+    console.log(`[Index] albumId=${albumId ?? 'todo o dispositivo'}`);
+  }
   let progress = makeInitialProgress();
   let totalAssets = 0;
   let indexedPhotoCount = 0;
@@ -369,6 +374,7 @@ export async function indexGallery(
         after: cursor,
         mediaType: MediaLibrary.MediaType.photo,
         sortBy: [MediaLibrary.SortBy.modificationTime],
+        ...(albumId ? { album: albumId } : {}),
       });
       totalAssets = page.totalCount;
       emitProgress({

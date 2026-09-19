@@ -26,6 +26,10 @@ import { FaceSearchProgress } from '@/components/FaceSearchProgress';
 import { IndexSettings } from '@/components/IndexSettings';
 import { IndexedGallery } from '@/components/IndexedGallery';
 import { IndexStatsCards } from '@/components/IndexStatsCards';
+import {
+  AlbumPicker,
+  type AlbumOption,
+} from '@/components/AlbumPicker';
 import { useFaceSearch, type FaceSearchStatus } from '@/hooks/useFaceSearch';
 import type {
   FaceIndexProgress,
@@ -39,6 +43,8 @@ import type {
 } from '@/services/faceCapture';
 
 type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results' | 'indexed';
+
+const ALBUM_STORAGE_KEY = 'visage.index.album';
 
 function IconCircle({
   name,
@@ -413,6 +419,8 @@ function SelectPhoto({
   onSelectFace,
   onSearch,
   onOpenMatches,
+  albumLabel,
+  onPressAlbum,
   onBack,
 }: {
   selectedImage: string | null;
@@ -431,6 +439,8 @@ function SelectPhoto({
   onSelectFace: (faceId: number) => void;
   onSearch: () => void;
   onOpenMatches: () => void;
+  albumLabel: string;
+  onPressAlbum: () => void;
   onBack: () => void;
 }) {
   const colors = useColors();
@@ -568,6 +578,29 @@ function SelectPhoto({
             <Text style={[styles.sourceButtonText, { color: colors.foreground }]}>Câmera</Text>
           </Pressable>
         </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Pasta de busca: ${albumLabel}`}
+          onPress={onPressAlbum}
+          testID="open-album-picker"
+          style={({ pressed }) => [
+            styles.albumButton,
+            { backgroundColor: colors.card, borderColor: colors.border },
+            pressed ? styles.pressed : null,
+          ]}
+        >
+          <Feather name="folder" size={17} color={colors.primary} />
+          <View style={styles.albumCopy}>
+            <Text style={[styles.albumLabel, { color: colors.mutedForeground }]}>
+              Buscar em
+            </Text>
+            <Text style={[styles.albumValue, { color: colors.foreground }]}>
+              {albumLabel}
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+        </Pressable>
 
         <PrimaryButton
           label={alignedImageUri ? 'Buscar este rosto na galeria' : 'Aguardando rosto válido'}
@@ -816,6 +849,10 @@ export default function HomeScreen() {
   const [showReward, setShowReward] = useState(false);
   const [showIndexSettings, setShowIndexSettings] = useState(false);
   const [showOffline, setShowOffline] = useState(false);
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
+  const [selectedAlbumTitle, setSelectedAlbumTitle] =
+    useState<string>('Todo o dispositivo');
+  const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [rewardCountdown, setRewardCountdown] = useState(3);
   const colors = useColors();
   const {
@@ -859,6 +896,18 @@ export default function HomeScreen() {
     void AsyncStorage.getItem('visage.onboarding.complete').then((value) => {
       if (value === 'true') {
         setScreen('home');
+      }
+    });
+    void AsyncStorage.getItem(ALBUM_STORAGE_KEY).then((value) => {
+      if (!value) return;
+      try {
+        const parsed = JSON.parse(value) as { id: string | null; title: string };
+        if (parsed.id) {
+          setSelectedAlbumId(parsed.id);
+          setSelectedAlbumTitle(parsed.title);
+        }
+      } catch {
+        // ignore parse error
       }
     });
   }, []);
@@ -926,6 +975,20 @@ export default function HomeScreen() {
 
   const openSearch = () => setScreen('select');
 
+  const handleSelectAlbum = (album: AlbumOption) => {
+    setSelectedAlbumId(album.id);
+    setSelectedAlbumTitle(album.title);
+    void AsyncStorage.setItem(
+      ALBUM_STORAGE_KEY,
+      JSON.stringify({ id: album.id, title: album.title }),
+    );
+    if (__DEV__) {
+      console.log(
+        `[Album] selecionado id=${album.id ?? 'all'} title=${album.title}`,
+      );
+    }
+  };
+
   const openIndexed = () => {
     if (__DEV__) {
       console.log(
@@ -988,7 +1051,7 @@ export default function HomeScreen() {
     setShowReward(false);
     setScreen('analyzing');
     try {
-      const searchSummary = await indexAndSearch(alignedFace);
+      const searchSummary = await indexAndSearch(alignedFace, selectedAlbumId);
       if (searchSummary) {
         setScreen('results');
       }
@@ -1047,6 +1110,8 @@ export default function HomeScreen() {
             }}
             onSearch={beginSearch}
             onOpenMatches={openMatches}
+            albumLabel={selectedAlbumTitle}
+            onPressAlbum={() => setShowAlbumPicker(true)}
             onBack={leaveSelection}
           />
         );
@@ -1118,6 +1183,9 @@ export default function HomeScreen() {
     openIndexed,
     continueFaceSearch,
     openMatches,
+    selectedAlbumTitle,
+    setShowAlbumPicker,
+    handleSelectAlbum,
     cancelIndexing,
     results,
   ]);
@@ -1149,6 +1217,12 @@ export default function HomeScreen() {
           setShowIndexSettings(false);
           openIndexed();
         }}
+      />
+      <AlbumPicker
+        visible={showAlbumPicker}
+        selectedAlbumId={selectedAlbumId}
+        onSelect={handleSelectAlbum}
+        onClose={() => setShowAlbumPicker(false)}
       />
     </>
   );
@@ -1273,6 +1347,10 @@ const styles = StyleSheet.create({
   sourceButtons: { flexDirection: 'row', gap: 12, marginTop: 25, marginBottom: 17 },
   sourceButton: { flex: 1, minHeight: 52, borderRadius: 16, borderWidth: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   sourceButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  albumButton: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 15, padding: 13, marginTop: 14, marginBottom: 10 },
+  albumCopy: { flex: 1 },
+  albumLabel: { fontFamily: 'Inter_400Regular', fontSize: 10, letterSpacing: 0.4 },
+  albumValue: { fontFamily: 'Inter_600SemiBold', fontSize: 14, marginTop: 2 },
   localNotice: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 7, marginTop: 15 },
   localNoticeText: { fontFamily: 'Inter_400Regular', fontSize: 11 },
   centeredScreen: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },

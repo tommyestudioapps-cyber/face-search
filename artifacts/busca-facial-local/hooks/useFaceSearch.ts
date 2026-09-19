@@ -52,12 +52,15 @@ export interface UseFaceSearchResult {
   refreshIndexedPhotos: () => Promise<void>;
   error: FaceRecognitionError | null;
   setActiveAlignedFace: (face: AlignedFace | null) => void;
-  startIndexing: () => Promise<GalleryIndexResult | null>;
+  startIndexing: (
+    albumId?: string | null,
+  ) => Promise<GalleryIndexResult | null>;
   cancelIndexing: () => void;
   clearIndex: () => Promise<void>;
   search: (alignedFace: AlignedFace | null) => Promise<FaceSearchSummary | null>;
   indexAndSearch: (
     alignedFace: AlignedFace | null,
+    albumId?: string | null,
   ) => Promise<FaceSearchSummary | null>;
 }
 
@@ -215,7 +218,9 @@ export function useFaceSearch(): UseFaceSearchResult {
     activeAlignedFaceRef.current = face;
   }, []);
 
-  const startIndexing = useCallback(async (): Promise<GalleryIndexResult | null> => {
+  const startIndexing = useCallback(async (
+    albumId?: string | null,
+  ): Promise<GalleryIndexResult | null> => {
     if (indexPromiseRef.current) {
       return indexPromiseRef.current;
     }
@@ -235,6 +240,7 @@ export function useFaceSearch(): UseFaceSearchResult {
       const faceSearchModule = await getFaceSearchModule();
       const task = faceSearchModule.startGalleryIndexing({
         onProgress: handleProgress,
+        albumId: albumId ?? null,
       });
       indexTaskRef.current = task;
 
@@ -468,8 +474,11 @@ export function useFaceSearch(): UseFaceSearchResult {
   );
 
   const indexAndSearch = useCallback(
-    async (alignedFace: AlignedFace | null): Promise<FaceSearchSummary | null> => {
-      const indexResult = await startIndexing();
+    async (
+      alignedFace: AlignedFace | null,
+      albumId?: string | null,
+    ): Promise<FaceSearchSummary | null> => {
+      const indexResult = await startIndexing(albumId);
       if (!indexResult || indexResult.status !== 'completed') {
         return null;
       }
