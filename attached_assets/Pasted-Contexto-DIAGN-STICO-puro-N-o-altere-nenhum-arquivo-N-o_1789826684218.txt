@@ -1,0 +1,75 @@
+Contexto: DIAGNÓSTICO puro. Não altere nenhum arquivo. Não faça
+commit, add, stash, checkout, reset, restore nem clean. Apenas leia
+e reporte.
+
+Situação: em teste em device real, o app crashou ao processar
+aproximadamente 182 fotos durante indexação da galeria, com mais de
+5.000 fotos disponíveis. Ao reabrir, o app mostrou que verificou 182
+e que 44 foram "reparadas" (com rosto), mas não há tela para ver
+essas 44. Suspeita principal: morte de processo Android por
+acúmulo de memória. Precisamos mapear onde memória pode vazar no
+pipeline antes de adicionar logs e corrigir.
+
+Reporte em seções numeradas, colando os trechos completos:
+
+1. Cole a função inteira galleryIndexer.indexAsset, incluindo try,
+   catch, finally, e o bloco de limpeza de alignedFace.
+
+2. Cole a função galleryIndexer.indexGallery inteira, incluindo
+   o loop de assets e o emitProgress.
+
+3. Cole a função preprocessAlignedFace inteira de
+   services/faceSearch/preprocessing.ts, incluindo
+   readJpegInMemory e resizeAndNormalize.
+
+4. Cole a função runFaceEmbedding inteira de
+   services/faceSearch/model.ts.
+
+5. Cole a função releaseRecognitionModel inteira.
+
+6. Cole a função detectFaces inteira de
+   services/faceCapture/index.ts (versão atual após Fase 2).
+
+7. Cole a função releaseFaceDetectionSession inteira e
+   cleanupTempFiles inteira.
+
+8. Confirme explicitamente:
+   - Quantas vezes `detectFaces` é chamado por foto da galeria?
+   - Quantas vezes `alignSelectedFace` é chamado por foto?
+   - Quantos arquivos temporários são criados por foto processada
+     (conte: normalized, sample, rotated, aligned — o que sobrar)?
+   - O TFLite `loadedModel` é descarregado entre fotos ou só no
+     finally de indexGallery?
+   - O MediaPipe nativo tem alguma função de "release" sendo
+     chamada entre fotos?
+
+9. Procure no projeto por qualquer variável, closure ou cache que
+   acumule entre iterações do loop de indexação:
+   comando sugerido:
+   grep -rn "new Map\|new Set\|push(\|\.cache\|memo" artifacts/busca-facial-local/services/faceSearch/ 2>/dev/null
+   Cole a saída. Analise se algo cresce monotonicamente com o número
+   de fotos.
+
+10. Procure no projeto qualquer lugar que chame `releaseRecognitionModel`
+    e qualquer lugar que descarte explicitamente arrays grandes
+    (buffers de pixels, embeddings acumulados):
+    grep -rn "releaseRecognitionModel\|\.length = 0\|= null" artifacts/busca-facial-local/services/faceSearch/ 2>/dev/null
+    Cole a saída.
+
+11. Cole o texto EXATO de qualquer mensagem de UI que contenha
+    "reparad", "verificad", "encontrad", "indexad" — ou seja, as
+    mensagens relacionadas ao resultado da indexação. Faça:
+    grep -rn "reparad\|verificad\|fotos\|rostos\|indexad" artifacts/busca-facial-local/components artifacts/busca-facial-local/app 2>/dev/null | head -40
+    Cole a saída completa. Quero identificar qual tela está exibindo
+    esse número e se existe navegação para ver as fotos indexadas.
+
+12. Liste todos os arquivos em artifacts/busca-facial-local/components
+    e artifacts/busca-facial-local/app que existam hoje. Para cada
+    um, uma linha de responsabilidade. Quero saber se existe alguma
+    tela de "ver fotos indexadas".
+
+Regras:
+- Apenas leitura. Zero alteração.
+- Não execute git add, commit, stash, reset, checkout, restore, clean.
+- Se algo não existir, diga "não existe".
+- Ao final, aguarde instrução.
