@@ -4,6 +4,8 @@ import { FaceCaptureError } from './types';
 import { getNativeErrorDetails, mapNativeResult } from './nativeAdapterCore';
 import type { NativeDetectionResult, NativeResultBundle } from './types';
 
+const NATIVE_DETECTION_TIMEOUT_MS = 30_000;
+
 export type {
   NativeDetectedFace,
   NativeDetectionResult,
@@ -45,6 +47,28 @@ function getRuntime(): NativeMediaPipeRuntime {
   }
 }
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => FaceCaptureError,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(onTimeout());
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 function mapNativeError(error: unknown): FaceCaptureError {
   const details = getNativeErrorDetails(error);
   return new FaceCaptureError(details.code, details.message);
@@ -60,16 +84,24 @@ export async function detectFacesWithMediaPipe(
   const runtime = getRuntime();
 
   try {
-    const result = await runtime.faceLandmarkDetectionOnImage(
-      imagePath,
-      faceCapture.modelAssetName,
-      {
-        numFaces: faceCapture.maxFaces,
-        minFaceDetectionConfidence: faceCapture.minDetectionConfidence,
-        minFacePresenceConfidence: faceCapture.minPresenceConfidence,
-        minTrackingConfidence: faceCapture.minTrackingConfidence,
-        delegate: 0,
-      },
+    const result = await withTimeout(
+      runtime.faceLandmarkDetectionOnImage(
+        imagePath,
+        faceCapture.modelAssetName,
+        {
+          numFaces: faceCapture.maxFaces,
+          minFaceDetectionConfidence: faceCapture.minDetectionConfidence,
+          minFacePresenceConfidence: faceCapture.minPresenceConfidence,
+          minTrackingConfidence: faceCapture.minTrackingConfidence,
+          delegate: 0,
+        },
+      ),
+      NATIVE_DETECTION_TIMEOUT_MS,
+      () =>
+        new FaceCaptureError(
+          'processing-failed',
+          'A detecção facial demorou demais para responder.',
+        ),
     );
 
     return mapNativeResult(result);

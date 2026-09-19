@@ -1,0 +1,145 @@
+Contexto: Fase 3A. A chamada nativa em
+services/faceCapture/nativeAdapter.ts é `await runtime.faceLandmarkDetectionOnImage(...)`
+sem timeout. Se o módulo nativo travar ou demorar indefinidamente, o app
+fica preso em 'detecting' para sempre. Precisamos de um timeout que
+aborte a operação e lance um FaceCaptureError com code
+'processing-failed'.
+
+Diagnóstico confirmado:
+- react-native-mediapipe@0.6.0 instalado.
+- A assinatura retorna Promise<FaceLandmarkDetectionResultBundle>.
+- O único chamador desta função é services/faceCapture/index.ts.
+- Não existe timeout em lugar nenhum do pipeline atual.
+
+Esta etapa toca UM arquivo:
+- artifacts/busca-facial-local/services/faceCapture/nativeAdapter.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Adicionar constante de configuração local
+
+No topo do arquivo, após os imports e antes da interface
+NativeMediaPipeRuntime, adicionar:
+
+  const NATIVE_DETECTION_TIMEOUT_MS = 30_000;
+
+Não colocar em constants/faceCapture.ts nesta etapa — mantemos o
+escopo estreito. O valor será promovido depois se necessário.
+
+Passo 2 — Adicionar helper withTimeout
+
+Após a função getRuntime (ou antes, no mesmo escopo de módulo),
+adicionar a seguinte função interna:
+
+  function withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    onTimeout: () => FaceCaptureError,
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(onTimeout());
+      }, timeoutMs);
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+  }
+
+Regras do helper:
+- Não usar AbortController (a API nativa não expõe cancelamento).
+- Não tentar cancelar a chamada nativa quando o timeout disparar —
+  ela continua rodando em background, mas o JS já não espera por ela.
+- Limpar o timer em sucesso E em falha.
+
+Passo 3 — Envolver a chamada nativa com o timeout
+
+Em detectFacesWithMediaPipe, dentro do bloco try, onde hoje está:
+
+  const result = await runtime.faceLandmarkDetectionOnImage(
+    imagePath,
+    faceCapture.modelAssetName,
+    {
+      numFaces: faceCapture.maxFaces,
+      minFaceDetectionConfidence: faceCapture.minDetectionConfidence,
+      minFacePresenceConfidence: faceCapture.minPresenceConfidence,
+      minTrackingConfidence: faceCapture.minTrackingConfidence,
+      delegate: 0,
+    },
+  );
+
+Substituir por:
+
+  const result = await withTimeout(
+    runtime.faceLandmarkDetectionOnImage(
+      imagePath,
+      faceCapture.modelAssetName,
+      {
+        numFaces: faceCapture.maxFaces,
+        minFaceDetectionConfidence: faceCapture.minDetectionConfidence,
+        minFacePresenceConfidence: faceCapture.minPresenceConfidence,
+        minTrackingConfidence: faceCapture.minTrackingConfidence,
+        delegate: 0,
+      },
+    ),
+    NATIVE_DETECTION_TIMEOUT_MS,
+    () =>
+      new FaceCaptureError(
+        'processing-failed',
+        'A detecção facial demorou demais para responder.',
+      ),
+  );
+
+Não alterar nenhuma outra linha de detectFacesWithMediaPipe.
+Não alterar o catch existente — ele já trata FaceCaptureError.
+Não alterar a assinatura da função pública.
+Não alterar o parâmetro `delegate: 0` nesta etapa (isso é a Fase 3B).
+
+Passo 4 — Validação
+
+4.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa.
+
+4.2 Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+    e cole a saída completa.
+
+4.3 Rode `pnpm --filter @workspace/busca-facial-local run test:face-search`
+    e cole a saída completa.
+
+4.4 Rode `pnpm --filter @workspace/busca-facial-local run test:face-overlay`
+    e cole a saída completa.
+
+4.5 Rode `pnpm --filter @workspace/busca-facial-local run test:face-settings`
+    e cole a saída completa.
+
+4.6 Rode `pnpm --filter @workspace/busca-facial-local run test:face-coordination`
+    e cole a saída completa.
+
+Passo 5 — Relatório
+
+5.1 Cole o diff unified de services/faceCapture/nativeAdapter.ts.
+
+5.2 Confirme explicitamente:
+  - NATIVE_DETECTION_TIMEOUT_MS = 30000 existe no arquivo;
+  - withTimeout limpa o timer nos dois caminhos (resolve e reject);
+  - a chamada nativa está envolvida por withTimeout;
+  - o FaceCaptureError lançado no timeout tem code 'processing-failed';
+  - `delegate: 0` permanece inalterado nesta etapa;
+  - nenhum outro arquivo foi alterado.
+
+Regras:
+- Não faça commit.
+- Não altere nenhum arquivo fora de nativeAdapter.ts.
+- Não mude `delegate: 0` (é a Fase 3B).
+- Não toque em nativeAdapterCore.ts, index.ts, quality.ts,
+  alignment.ts, nem em services/faceSearch/.
+- Não adicione dependências.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.
