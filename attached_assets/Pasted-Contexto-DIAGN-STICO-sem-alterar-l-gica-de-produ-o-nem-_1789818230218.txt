@@ -1,0 +1,64 @@
+Contexto: DIAGNÓSTICO, sem alterar lógica de produção nem testes.
+Não faça commit, não faça stash, não descarte nada.
+
+Situação: a correção de alignmentGeometry.ts já está DENTRO do commit
+HEAD (0f58fe3). Precisamos descobrir se os 4 testes que falharam já
+falhavam ANTES dessa correção. Para isso vamos trocar temporariamente
+o conteúdo do arquivo pela versão do commit anterior, rodar os testes,
+e restaurar.
+
+Faça na ordem, e PARE se qualquer passo falhar:
+
+1. Identifique o commit imediatamente anterior ao HEAD:
+   - rode `git rev-parse HEAD~1`
+   - rode `git log --oneline -3` para confirmar
+   - reporte os dois resultados.
+
+2. Confirme que, em HEAD~1, o arquivo
+   services/faceCapture/alignmentGeometry.ts NÃO contém a guarda
+   `points.length === 0`:
+   - rode `git show HEAD~1:artifacts/busca-facial-local/services/faceCapture/alignmentGeometry.ts | grep -n "points.length"`
+   - se retornar vazio, confirma o baseline. Se retornar linha, PARE e reporte.
+   - rode `git show HEAD~1:artifacts/busca-facial-local/services/faceCapture/alignmentGeometry.ts | head -5`
+     e cole a saída (queremos ver que o import é
+     `import type { FaceLandmark } from './types';`).
+
+3. Guarde uma cópia do conteúdo atual em /tmp:
+   - `cp artifacts/busca-facial-local/services/faceCapture/alignmentGeometry.ts /tmp/alignmentGeometry.current.ts`
+   - confirme com `wc -l /tmp/alignmentGeometry.current.ts`.
+
+4. Substitua o conteúdo atual pela versão do HEAD~1:
+   - `git show HEAD~1:artifacts/busca-facial-local/services/faceCapture/alignmentGeometry.ts > artifacts/busca-facial-local/services/faceCapture/alignmentGeometry.ts`
+   - rode `head -5 artifacts/busca-facial-local/services/faceCapture/alignmentGeometry.ts`
+     e confirme que o import voltou a ser `import type { FaceLandmark } from './types';`
+   - rode `grep -n "points.length" artifacts/busca-facial-local/services/faceCapture/alignmentGeometry.ts`
+     e confirme que NÃO retorna nada.
+
+5. Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+   e cole a saída completa, sem resumir.
+
+6. Reporte explicitamente, com base nessa saída:
+   - quantos testes passaram;
+   - quantos falharam;
+   - quais falharam;
+   - qual foi o erro de cada um que falhou.
+
+7. Restaure o conteúdo do HEAD a partir da cópia:
+   - `cp /tmp/alignmentGeometry.current.ts artifacts/busca-facial-local/services/faceCapture/alignmentGeometry.ts`
+   - confirme com `head -5` e `grep -n "points.length"` que a
+     guarda voltou e o import tem FaceCaptureError.
+
+8. Confirme que o repositório está idêntico ao HEAD:
+   - rode `git status` e cole a saída completa.
+   - rode `git diff` e cole a saída (deve ser vazio).
+
+9. Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+   e cole a saída completa.
+
+Regras:
+- Não faça commit, stash, rebase ou checkout de branch.
+- Não altere testes.
+- Não altere nenhum outro arquivo.
+- Se qualquer comando do passo 2, 4, 7 ou 8 der resultado inesperado,
+  PARE e reporte o estado exato em vez de continuar.
+- Ao terminar, aguarde a próxima instrução.
