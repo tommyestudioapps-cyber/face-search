@@ -24,6 +24,7 @@ import { FaceCaptureFeedback } from '@/components/FaceCaptureFeedback';
 import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
 import { FaceSearchProgress } from '@/components/FaceSearchProgress';
 import { IndexSettings } from '@/components/IndexSettings';
+import { IndexedGallery } from '@/components/IndexedGallery';
 import { useFaceSearch, type FaceSearchStatus } from '@/hooks/useFaceSearch';
 import type {
   FaceIndexProgress,
@@ -36,7 +37,7 @@ import type {
   FaceCaptureStatus,
 } from '@/services/faceCapture';
 
-type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results';
+type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results' | 'indexed';
 
 function IconCircle({
   name,
@@ -264,10 +265,12 @@ function Header({
 function Home({
   onSelect,
   onSettings,
+  onOpenIndexed,
   indexedPhotoCount,
 }: {
   onSelect: () => void;
   onSettings: () => void;
+  onOpenIndexed: () => void;
   indexedPhotoCount: number;
 }) {
   const colors = useColors();
@@ -325,16 +328,39 @@ function Home({
           </View>
 
           <View style={styles.statsRow}>
-            {[
-              [String(indexedPhotoCount), 'fotos indexadas', 'image'],
-              ['0', 'dados na nuvem', 'cloud-off'],
-            ].map(([value, label, icon]) => (
-              <View key={label} style={[styles.statCard, { backgroundColor: colors.card }]}>
-                <IconCircle name={icon as keyof typeof Feather.glyphMap} color={colors.primary} backgroundColor={colors.accent} />
-                <Text style={[styles.statValue, { color: colors.foreground }]}>{value}</Text>
-                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{label}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Ver ${indexedPhotoCount} fotos indexadas`}
+              disabled={indexedPhotoCount === 0}
+              onPress={onOpenIndexed}
+              testID="open-indexed-photos"
+              style={({ pressed }) => [
+                styles.statCard,
+                { backgroundColor: colors.card },
+                pressed ? styles.pressed : null,
+                indexedPhotoCount === 0 ? styles.disabledButton : null,
+              ]}
+            >
+              <IconCircle name="image" color={colors.primary} backgroundColor={colors.accent} />
+              <Text style={[styles.statValue, { color: colors.foreground }]}>
+                {String(indexedPhotoCount)}
+              </Text>
+              <View style={styles.statLabelRow}>
+                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
+                  fotos indexadas
+                </Text>
+                {indexedPhotoCount > 0 ? (
+                  <Feather name="chevron-right" size={13} color={colors.mutedForeground} />
+                ) : null}
               </View>
-            ))}
+            </Pressable>
+            <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+              <IconCircle name="cloud-off" color={colors.primary} backgroundColor={colors.accent} />
+              <Text style={[styles.statValue, { color: colors.foreground }]}>0</Text>
+              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
+                dados na nuvem
+              </Text>
+            </View>
           </View>
 
           <View style={[styles.privacyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -794,6 +820,9 @@ export default function HomeScreen() {
     progress: faceSearchProgress,
     results,
     storedIndexStats,
+    indexedPhotos,
+    isLoadingIndexedPhotos,
+    refreshIndexedPhotos,
     error: faceSearchError,
     cancelIndexing,
     clearIndex,
@@ -873,6 +902,11 @@ export default function HomeScreen() {
   };
 
   const openSearch = () => setScreen('select');
+
+  const openIndexed = () => {
+    setScreen('indexed');
+    void refreshIndexedPhotos();
+  };
 
   const beginSearch = async () => {
     if (
@@ -963,12 +997,21 @@ export default function HomeScreen() {
         );
       case 'results':
         return <Results results={results} onNewSearch={goHome} />;
+      case 'indexed':
+        return (
+          <IndexedGallery
+            photos={indexedPhotos}
+            isLoading={isLoadingIndexedPhotos}
+            onBack={() => setScreen('home')}
+          />
+        );
       case 'home':
       default:
         return (
           <Home
             onSelect={openSearch}
             onSettings={() => setShowIndexSettings(true)}
+            onOpenIndexed={openIndexed}
             indexedPhotoCount={storedIndexStats.indexedPhotos}
           />
         );
@@ -989,6 +1032,10 @@ export default function HomeScreen() {
     faceSearchStatus,
     faceSearchError,
     storedIndexStats,
+    indexedPhotos,
+    isLoadingIndexedPhotos,
+    refreshIndexedPhotos,
+    openIndexed,
     cancelIndexing,
     results,
   ]);
@@ -1016,6 +1063,10 @@ export default function HomeScreen() {
         progress={faceSearchProgress}
         onClose={() => setShowIndexSettings(false)}
         onClearIndex={clearIndex}
+        onOpenIndexed={() => {
+          setShowIndexSettings(false);
+          openIndexed();
+        }}
       />
     </>
   );
@@ -1083,6 +1134,7 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, minHeight: 121, borderRadius: 19, padding: 14 },
   statValue: { fontSize: 24, fontFamily: 'Inter_700Bold', marginTop: 11, letterSpacing: -0.7 },
   statLabel: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
+  statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   privacyCard: { flexDirection: 'row', alignItems: 'center', gap: 11, borderRadius: 17, borderWidth: 1, padding: 13, marginTop: 12 },
   privacyCardCopy: { flex: 1 },
   privacyCardTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },

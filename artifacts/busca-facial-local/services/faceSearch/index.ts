@@ -101,6 +101,11 @@ export async function readIndexedPhotos(): Promise<IndexedPhoto[]> {
   return faceSearchRepository.getIndexedPhotos();
 }
 
+export async function readIndexedPhotosWithFaceCounts(): Promise<IndexedPhoto[]> {
+  await faceSearchRepository.initialize();
+  return faceSearchRepository.getIndexedPhotosWithFaceCounts();
+}
+
 export async function getStoredIndexStats(): Promise<StoredIndexStats> {
   await faceSearchRepository.initialize();
   return faceSearchRepository.getStoredIndexStats();

@@ -1,0 +1,583 @@
+Contexto: Fase 8A. Adicionar uma tela interna "Fotos indexadas" que
+mostra as fotos que o pipeline já processou, com miniatura, nome e
+contagem de rostos por foto. Não altera navegação Expo Router; a
+tela é mais um case do switch existente em app/index.tsx
+(AppScreen). Também tornar o card "X fotos indexadas" na Home
+clicável e adicionar botão em IndexSettings para abrir a nova tela.
+
+Esta etapa toca CINCO arquivos:
+- services/faceSearch/repository.ts (novo método)
+- services/faceSearch/index.ts (novo export)
+- hooks/useFaceSearch.ts (novo state + método)
+- components/IndexedGallery.tsx (NOVO)
+- app/index.tsx (novo case + entry points)
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — repository.ts: novo método getIndexedPhotosWithFaceCounts
+
+Adicionar o seguinte método público na classe FaceSearchRepository,
+logo após getIndexedPhotos():
+
+  async getIndexedPhotosWithFaceCounts(): Promise<IndexedPhoto[]> {
+    const photos = await this.getIndexedPhotos();
+    if (photos.length === 0) {
+      return photos;
+    }
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<{ photo_id: string; count: number }>(
+      `
+        SELECT photo_id, COUNT(*) AS count
+        FROM face_embeddings
+        GROUP BY photo_id
+      `,
+    );
+    const counts = new Map(rows.map((row) => [row.photo_id, Number(row.count)]));
+    return photos.map((photo) => ({
+      ...photo,
+      faceCount: counts.get(photo.assetId) ?? 0,
+    }));
+  }
+
+Regras:
+- Não alterar getIndexedPhotos() nem mapIndexedPhotoRow.
+- Não alterar o schema SQLite.
+- Não alterar nenhum outro método.
+
+Passo 2 — services/faceSearch/index.ts: novo export
+
+Logo após a função readIndexedPhotos existente, adicionar:
+
+  export async function readIndexedPhotosWithFaceCounts(): Promise<IndexedPhoto[]> {
+    await faceSearchRepository.initialize();
+    return faceSearchRepository.getIndexedPhotosWithFaceCounts();
+  }
+
+Não alterar readIndexedPhotos nem nenhum outro export.
+
+Passo 3 — hooks/useFaceSearch.ts: state + método
+
+3.1 Adicionar import do tipo IndexedPhoto no bloco existente de
+imports de '@/services/faceSearch/types':
+
+  import {
+    FaceRecognitionError,
+    type FaceIndexProgress,
+    type FaceSearchResult,
+    type FaceSearchSummary,
+    type IndexedPhoto,
+    type StoredIndexStats,
+  } from '@/services/faceSearch/types';
+
+3.2 Na interface UseFaceSearchResult, adicionar duas entradas após
+"storedIndexStats":
+
+  indexedPhotos: IndexedPhoto[];
+  isLoadingIndexedPhotos: boolean;
+  refreshIndexedPhotos: () => Promise<void>;
+
+3.3 Dentro do hook, após o state storedIndexStats, adicionar:
+
+  const [indexedPhotos, setIndexedPhotos] = useState<IndexedPhoto[]>([]);
+  const [isLoadingIndexedPhotos, setIsLoadingIndexedPhotos] = useState(false);
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
+
+3.4 Dentro do hook, após a definição de clearIndex, adicionar:
+
+  const refreshIndexedPhotos = useCallback((): Promise<void> => {
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
+    }
+
+    const loading = (async () => {
+      if (mountedRef.current) {
+        setIsLoadingIndexedPhotos(true);
+      }
+      try {
+        const faceSearchModule = await getFaceSearchModule();
+        const photos = await faceSearchModule.readIndexedPhotosWithFaceCounts();
+        if (mountedRef.current) {
+          setIndexedPhotos(photos);
+        }
+      } catch (caught) {
+        const nextError = toFaceSearchError(
+          caught,
+          'Não foi possível carregar as fotos indexadas.',
+        );
+        if (mountedRef.current) {
+          setError(nextError);
+        }
+      } finally {
+        if (mountedRef.current) {
+          setIsLoadingIndexedPhotos(false);
+        }
+      }
+    })();
+
+    refreshPromiseRef.current = loading;
+    void loading
+      .finally(() => {
+        if (refreshPromiseRef.current === loading) {
+          refreshPromiseRef.current = null;
+        }
+      })
+      .catch(() => undefined);
+    return loading;
+  }, [getFaceSearchModule]);
+
+3.5 Atualizar o return do hook para incluir:
+
+  indexedPhotos,
+  isLoadingIndexedPhotos,
+  refreshIndexedPhotos,
+
+(colocar logo após storedIndexStats, mantendo a ordem do state.)
+
+3.6 Também: quando clearIndex() for bem-sucedido, limpar a lista.
+No bloco onde hoje se faz:
+
+  setStoredIndexStats(initialStoredIndexStats);
+  setProgress({ ...initialProgress });
+  setSummary(null);
+  setResults([]);
+  setError(null);
+  setStatus('ready');
+
+adicionar após setResults([]):
+
+  setIndexedPhotos([]);
+
+Passo 4 — components/IndexedGallery.tsx (arquivo NOVO)
+
+Criar o arquivo com este conteúdo exato:
+
+  import { Feather } from '@expo/vector-icons';
+  import React from 'react';
+  import {
+    ActivityIndicator,
+    FlatList,
+    Image,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+  } from 'react-native';
+  import { useSafeAreaInsets } from 'react-native-safe-area-context';
+  import { useColors } from '@/hooks/useColors';
+  import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
+  import type { IndexedPhoto } from '@/services/faceSearch';
+
+  interface IndexedGalleryProps {
+    photos: IndexedPhoto[];
+    isLoading: boolean;
+    onBack: () => void;
+  }
+
+  export function IndexedGallery({
+    photos,
+    isLoading,
+    onBack,
+  }: IndexedGalleryProps) {
+    const colors = useColors();
+    const insets = useSafeAreaInsets();
+    const { contentWidth, numColumns } = useResponsiveLayout();
+
+    const renderItem = ({ item }: { item: IndexedPhoto }) => (
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+      >
+        <Image
+          source={{ uri: item.uri }}
+          style={styles.thumbnail}
+          resizeMode="cover"
+        />
+        <View style={styles.cardBody}>
+          <Text
+            numberOfLines={1}
+            style={[styles.filename, { color: colors.foreground }]}
+          >
+            {item.filename ?? 'Foto da galeria'}
+          </Text>
+          <View style={styles.badgeRow}>
+            <Feather name="user" size={11} color="#34D399" />
+            <Text style={styles.badgeText}>
+              {item.faceCount === 1
+                ? '1 rosto'
+                : `${item.faceCount} rostos`}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+
+    return (
+      <View style={[styles.screen, { backgroundColor: colors.background }]}>
+        <View
+          style={[
+            styles.header,
+            {
+              paddingTop: insets.top + 8,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
+          <Pressable onPress={onBack} hitSlop={14} testID="indexed-back">
+            <Feather name="arrow-left" size={22} color={colors.foreground} />
+          </Pressable>
+          <View style={styles.headerCopy}>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+              Fotos indexadas
+            </Text>
+            <Text
+              style={[styles.headerSubtitle, { color: colors.mutedForeground }]}
+            >
+              {photos.length === 1
+                ? '1 foto processada neste aparelho'
+                : `${photos.length} fotos processadas neste aparelho`}
+            </Text>
+          </View>
+          <View style={styles.headerSpacer} />
+        </View>
+
+        {isLoading && photos.length === 0 ? (
+          <View style={styles.centered}>
+            <ActivityIndicator color={colors.primary} size="large" />
+            <Text
+              style={[styles.loadingText, { color: colors.mutedForeground }]}
+            >
+              Carregando índice local…
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            key={`indexed-${numColumns}`}
+            data={photos}
+            keyExtractor={(item) => item.assetId}
+            numColumns={numColumns}
+            contentContainerStyle={[
+              styles.list,
+              {
+                width: contentWidth,
+                alignSelf: 'center',
+                paddingBottom: insets.bottom + 28,
+              },
+            ]}
+            columnWrapperStyle={styles.row}
+            showsVerticalScrollIndicator={false}
+            renderItem={renderItem}
+            ListEmptyComponent={
+              <View style={styles.centered}>
+                <Feather
+                  name="image"
+                  size={34}
+                  color={colors.mutedForeground}
+                />
+                <Text
+                  style={[styles.emptyTitle, { color: colors.foreground }]}
+                >
+                  Nenhuma foto indexada
+                </Text>
+                <Text
+                  style={[styles.emptyBody, { color: colors.mutedForeground }]}
+                >
+                  Faça uma busca para que o app processe sua galeria local.
+                </Text>
+              </View>
+            }
+          />
+        )}
+      </View>
+    );
+  }
+
+  const styles = StyleSheet.create({
+    screen: { flex: 1 },
+    header: {
+      minHeight: 78,
+      paddingHorizontal: 22,
+      paddingBottom: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    headerCopy: { flex: 1 },
+    headerTitle: {
+      fontFamily: 'Inter_700Bold',
+      fontSize: 18,
+      letterSpacing: -0.4,
+    },
+    headerSubtitle: {
+      fontFamily: 'Inter_400Regular',
+      fontSize: 11,
+      marginTop: 3,
+    },
+    headerSpacer: { width: 22 },
+    list: { paddingTop: 13 },
+    row: { gap: 12, marginBottom: 12 },
+    card: { flex: 1, borderRadius: 17, overflow: 'hidden', borderWidth: 1 },
+    thumbnail: { width: '100%', aspectRatio: 1 },
+    cardBody: { padding: 10, gap: 6 },
+    filename: { fontFamily: 'Inter_500Medium', fontSize: 11 },
+    badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    badgeText: {
+      color: '#6EE7B7',
+      fontFamily: 'Inter_700Bold',
+      fontSize: 10,
+    },
+    centered: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 30,
+      paddingTop: 80,
+      gap: 12,
+    },
+    loadingText: { fontFamily: 'Inter_400Regular', fontSize: 12 },
+    emptyTitle: {
+      fontFamily: 'Inter_600SemiBold',
+      fontSize: 15,
+      marginTop: 10,
+    },
+    emptyBody: {
+      fontFamily: 'Inter_400Regular',
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign: 'center',
+    },
+  });
+
+Passo 5 — app/index.tsx: integrar a tela e os entry points
+
+5.1 Atualizar o tipo AppScreen:
+
+  type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results' | 'indexed';
+
+5.2 Adicionar import do componente:
+
+  import { IndexedGallery } from '@/components/IndexedGallery';
+
+5.3 Extrair o hook useFaceSearch para expor os novos campos.
+Onde hoje está:
+
+  const {
+    status: faceSearchStatus,
+    operation: faceSearchOperation,
+    isOperationActive: faceSearchOperationActive,
+    clearState: faceSearchClearState,
+    progress: faceSearchProgress,
+    results,
+    storedIndexStats,
+    error: faceSearchError,
+    cancelIndexing,
+    clearIndex,
+    indexAndSearch,
+  } = useFaceSearch();
+
+Adicionar, na desestruturação:
+
+  indexedPhotos,
+  isLoadingIndexedPhotos,
+  refreshIndexedPhotos,
+
+5.4 No componente Home, adicionar prop onOpenIndexed. Atualizar
+a assinatura:
+
+  function Home({
+    onSelect,
+    onSettings,
+    onOpenIndexed,
+    indexedPhotoCount,
+  }: {
+    onSelect: () => void;
+    onSettings: () => void;
+    onOpenIndexed: () => void;
+    indexedPhotoCount: number;
+  }) {
+
+E substituir o bloco do statsRow (que hoje faz um map sobre dois
+itens) por dois cards explícitos. O primeiro vira Pressable:
+
+  <View style={styles.statsRow}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Ver ${indexedPhotoCount} fotos indexadas`}
+      disabled={indexedPhotoCount === 0}
+      onPress={onOpenIndexed}
+      testID="open-indexed-photos"
+      style={({ pressed }) => [
+        styles.statCard,
+        { backgroundColor: colors.card },
+        pressed ? styles.pressed : null,
+        indexedPhotoCount === 0 ? styles.disabledButton : null,
+      ]}
+    >
+      <IconCircle name="image" color={colors.primary} backgroundColor={colors.accent} />
+      <Text style={[styles.statValue, { color: colors.foreground }]}>
+        {String(indexedPhotoCount)}
+      </Text>
+      <View style={styles.statLabelRow}>
+        <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
+          fotos indexadas
+        </Text>
+        {indexedPhotoCount > 0 ? (
+          <Feather name="chevron-right" size={13} color={colors.mutedForeground} />
+        ) : null}
+      </View>
+    </Pressable>
+    <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+      <IconCircle name="cloud-off" color={colors.primary} backgroundColor={colors.accent} />
+      <Text style={[styles.statValue, { color: colors.foreground }]}>0</Text>
+      <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
+        dados na nuvem
+      </Text>
+    </View>
+  </View>
+
+Adicionar o estilo statLabelRow no StyleSheet:
+
+  statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+
+5.5 No componente IndexSettings (que é um modal), adicionar prop
+opcional onOpenIndexed. O usuário clica, fecha o modal, navega.
+Modificar a interface IndexSettingsProps em IndexSettings.tsx
+(ARQUIVO ADICIONAL — ver Passo 6 abaixo).
+
+5.6 No HomeScreen (componente default), adicionar o handler:
+
+  const openIndexed = () => {
+    setScreen('indexed');
+    void refreshIndexedPhotos();
+  };
+
+5.7 No switch de `content`, adicionar antes do `default`:
+
+  case 'indexed':
+    return (
+      <IndexedGallery
+        photos={indexedPhotos}
+        isLoading={isLoadingIndexedPhotos}
+        onBack={() => setScreen('home')}
+      />
+    );
+
+5.8 Onde hoje se renderiza <Home />, adicionar a prop onOpenIndexed:
+
+  <Home
+    onSelect={openSearch}
+    onSettings={() => setShowIndexSettings(true)}
+    onOpenIndexed={openIndexed}
+    indexedPhotoCount={storedIndexStats.indexedPhotos}
+  />
+
+5.9 Onde hoje se renderiza <IndexSettings ... />, adicionar a
+prop onOpenIndexed:
+
+  onOpenIndexed={() => {
+    setShowIndexSettings(false);
+    openIndexed();
+  }}
+
+5.10 Atualizar as dependências do useMemo de `content` para incluir
+indexedPhotos, isLoadingIndexedPhotos, refreshIndexedPhotos e
+openIndexed (se o linter reclamar).
+
+Passo 6 — components/IndexSettings.tsx: novo botão
+
+6.1 Adicionar prop à interface IndexSettingsProps:
+
+  onOpenIndexed?: () => void;
+
+6.2 No destructuring do componente, adicionar:
+
+  onOpenIndexed,
+
+6.3 Entre a infoCard e o clearButton, adicionar (apenas se
+onOpenIndexed existir):
+
+  {onOpenIndexed && stats.indexedPhotos > 0 ? (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onOpenIndexed}
+      style={({ pressed }) => [
+        styles.viewPhotosButton,
+        { borderColor: colors.border },
+        pressed ? styles.pressed : null,
+      ]}
+      testID="view-indexed-photos"
+    >
+      <Feather name="image" size={16} color={colors.primary} />
+      <Text style={[styles.viewPhotosText, { color: colors.foreground }]}>
+        Ver fotos indexadas
+      </Text>
+      <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+    </Pressable>
+  ) : null}
+
+6.4 Adicionar os estilos:
+
+  viewPhotosButton: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 14,
+  },
+  viewPhotosText: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+  },
+
+Passo 7 — Validação
+
+7.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa.
+
+7.2 Rode os cinco runners de teste na ordem habitual
+    (face-capture, face-search, face-overlay, face-settings,
+    face-coordination) e cole as saídas completas.
+
+Passo 8 — Relatório
+
+8.1 Cole o diff unified de cada arquivo alterado. Se for muito
+    longo, cole o diff completo de app/index.tsx e
+    hooks/useFaceSearch.ts, e resuma os outros.
+
+8.2 Confirme explicitamente:
+  - getIndexedPhotosWithFaceCounts existe no repository e retorna
+    faceCount real;
+  - readIndexedPhotosWithFaceCounts existe em services/faceSearch/index.ts;
+  - useFaceSearch expõe indexedPhotos, isLoadingIndexedPhotos e
+    refreshIndexedPhotos;
+  - IndexedGallery.tsx existe com a estrutura de grid;
+  - app/index.tsx tem case 'indexed' no switch;
+  - Home recebe onOpenIndexed e o card de fotos indexadas é Pressable;
+  - IndexSettings recebe onOpenIndexed e mostra botão quando
+    stats.indexedPhotos > 0;
+  - nada foi alterado em nativeAdapter.ts, alignment.ts,
+    alignmentGeometry.ts, quality.ts;
+  - nenhum arquivo fora dos SIX listados foi tocado.
+
+Passo 9 — Git
+
+9.1 Rode `git log --oneline -3` e cole.
+9.2 Rode `git status` e cole.
+
+Regras finais:
+- Não faça commit manual.
+- Não adicione dependências.
+- Não mude a assinatura de getIndexedPhotos (só adicione o novo
+  método).
+- Não altere Expo Router nem crie arquivos dentro de app/.
+- Não mexa em _layout.tsx nem em +not-found.tsx.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.

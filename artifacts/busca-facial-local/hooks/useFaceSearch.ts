@@ -6,6 +6,7 @@ import {
   type FaceIndexProgress,
   type FaceSearchResult,
   type FaceSearchSummary,
+  type IndexedPhoto,
   type StoredIndexStats,
 } from '@/services/faceSearch/types';
 import type {
@@ -46,6 +47,9 @@ export interface UseFaceSearchResult {
   results: FaceSearchResult[];
   summary: FaceSearchSummary | null;
   storedIndexStats: StoredIndexStats;
+  indexedPhotos: IndexedPhoto[];
+  isLoadingIndexedPhotos: boolean;
+  refreshIndexedPhotos: () => Promise<void>;
   error: FaceRecognitionError | null;
   startIndexing: () => Promise<GalleryIndexResult | null>;
   cancelIndexing: () => void;
@@ -112,6 +116,8 @@ export function useFaceSearch(): UseFaceSearchResult {
   const [summary, setSummary] = useState<FaceSearchSummary | null>(null);
   const [storedIndexStats, setStoredIndexStats] =
     useState<StoredIndexStats>(initialStoredIndexStats);
+  const [indexedPhotos, setIndexedPhotos] = useState<IndexedPhoto[]>([]);
+  const [isLoadingIndexedPhotos, setIsLoadingIndexedPhotos] = useState(false);
   const [error, setError] = useState<FaceRecognitionError | null>(null);
   const mountedRef = useRef(true);
   const initializationPromiseRef = useRef<Promise<void> | null>(null);
@@ -121,6 +127,7 @@ export function useFaceSearch(): UseFaceSearchResult {
   const indexPromiseRef = useRef<Promise<GalleryIndexResult | null> | null>(null);
   const searchPromiseRef = useRef<Promise<FaceSearchSummary | null> | null>(null);
   const clearPromiseRef = useRef<Promise<void> | null>(null);
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
   const operationGateRef = useRef(new FaceSearchOperationGate());
 
   const getFaceSearchModule = useCallback(async (): Promise<FaceSearchModule> => {
@@ -299,6 +306,7 @@ export function useFaceSearch(): UseFaceSearchResult {
         setProgress({ ...initialProgress });
         setSummary(null);
         setResults([]);
+        setIndexedPhotos([]);
         setError(null);
         setStatus('ready');
       }
@@ -317,6 +325,47 @@ export function useFaceSearch(): UseFaceSearchResult {
       })
       .catch(() => undefined);
     return clearing;
+  }, [getFaceSearchModule]);
+
+  const refreshIndexedPhotos = useCallback((): Promise<void> => {
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
+    }
+
+    const loading = (async () => {
+      if (mountedRef.current) {
+        setIsLoadingIndexedPhotos(true);
+      }
+      try {
+        const faceSearchModule = await getFaceSearchModule();
+        const photos = await faceSearchModule.readIndexedPhotosWithFaceCounts();
+        if (mountedRef.current) {
+          setIndexedPhotos(photos);
+        }
+      } catch (caught) {
+        const nextError = toFaceSearchError(
+          caught,
+          'Não foi possível carregar as fotos indexadas.',
+        );
+        if (mountedRef.current) {
+          setError(nextError);
+        }
+      } finally {
+        if (mountedRef.current) {
+          setIsLoadingIndexedPhotos(false);
+        }
+      }
+    })();
+
+    refreshPromiseRef.current = loading;
+    void loading
+      .finally(() => {
+        if (refreshPromiseRef.current === loading) {
+          refreshPromiseRef.current = null;
+        }
+      })
+      .catch(() => undefined);
+    return loading;
   }, [getFaceSearchModule]);
 
   const search = useCallback(
@@ -442,6 +491,9 @@ export function useFaceSearch(): UseFaceSearchResult {
     results,
     summary,
     storedIndexStats,
+    indexedPhotos,
+    isLoadingIndexedPhotos,
+    refreshIndexedPhotos,
     error,
     startIndexing,
     cancelIndexing,

@@ -513,6 +513,26 @@ export class FaceSearchRepository {
     return rows.map(mapIndexedPhotoRow);
   }
 
+  async getIndexedPhotosWithFaceCounts(): Promise<IndexedPhoto[]> {
+    const photos = await this.getIndexedPhotos();
+    if (photos.length === 0) {
+      return photos;
+    }
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<{ photo_id: string; count: number }>(
+      `
+        SELECT photo_id, COUNT(*) AS count
+        FROM face_embeddings
+        GROUP BY photo_id
+      `,
+    );
+    const counts = new Map(rows.map((row) => [row.photo_id, Number(row.count)]));
+    return photos.map((photo) => ({
+      ...photo,
+      faceCount: counts.get(photo.assetId) ?? 0,
+    }));
+  }
+
   async getStoredIndexStats(): Promise<StoredIndexStats> {
     const database = await this.getDatabase();
     const photoCount = await database.getFirstAsync<{ count: number }>(

@@ -33,6 +33,7 @@ interface IndexSettingsProps {
   stats: StoredIndexStats;
   onClose: () => void;
   onClearIndex: () => Promise<void>;
+  onOpenIndexed?: () => void;
   operation: FaceSearchOperation;
   isOperationActive: boolean;
   clearState: FaceSearchClearState;
@@ -44,6 +45,7 @@ export function IndexSettings({
   stats,
   onClose,
   onClearIndex,
+  onOpenIndexed,
   operation,
   isOperationActive,
   clearState,
@@ -184,6 +186,25 @@ export function IndexSettings({
               galeria permanecem intactas.
             </Text>
           </View>
+
+          {onOpenIndexed && stats.indexedPhotos > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onOpenIndexed}
+              style={({ pressed }) => [
+                styles.viewPhotosButton,
+                { borderColor: colors.border },
+                pressed ? styles.pressed : null,
+              ]}
+              testID="view-indexed-photos"
+            >
+              <Feather name="image" size={16} color={colors.primary} />
+              <Text style={[styles.viewPhotosText, { color: colors.foreground }]}>
+                Ver fotos indexadas
+              </Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </Pressable>
+          ) : null}
 
           {isWaitingForOperation ? (
             <View
@@ -356,6 +377,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginTop: 12,
+  },
+  viewPhotosButton: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 14,
+  },
+  viewPhotosText: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
   },
   clearButton: {
     minHeight: 50,
