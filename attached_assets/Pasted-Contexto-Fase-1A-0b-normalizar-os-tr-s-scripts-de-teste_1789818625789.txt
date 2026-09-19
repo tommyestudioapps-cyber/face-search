@@ -1,0 +1,74 @@
+Contexto: Fase 1A.0b — normalizar os três scripts de teste restantes
+ao mesmo padrão de runner já usado por test:face-capture e
+test:face-search. Diagnóstico confirmou que os três scripts abaixo
+ainda usam `--experimental-strip-types`, que não resolve imports de
+valor sem extensão em arquivos .ts. Hoje eles passam por sorte, porque
+os .ts que importam ainda não têm esse tipo de import. A mudança torna
+os cinco runners consistentes e elimina a bomba-relógio.
+
+Esta etapa toca UM arquivo: artifacts/busca-facial-local/package.json.
+Nenhum outro arquivo deve ser alterado.
+
+Observação: já existe uma alteração não commitada nesse mesmo arquivo
+(a mudança de test:face-capture feita na Fase 1A.0). Ela deve ser
+PRESERVADA. O diff final mostrará as quatro mudanças juntas.
+
+Passo 1 — Aplicar as três mudanças:
+
+Em artifacts/busca-facial-local/package.json, altere SOMENTE os três
+scripts abaixo, trocando `--experimental-strip-types` por `--import tsx`.
+
+Antes:
+  "test:face-overlay": "node --experimental-strip-types --test components/__tests__/faceOverlayLayout.test.mjs",
+Depois:
+  "test:face-overlay": "node --import tsx --test components/__tests__/faceOverlayLayout.test.mjs",
+
+Antes:
+  "test:face-settings": "node --experimental-strip-types --test components/__tests__/indexSettingsFlow.test.mjs",
+Depois:
+  "test:face-settings": "node --import tsx --test components/__tests__/indexSettingsFlow.test.mjs",
+
+Antes:
+  "test:face-coordination": "node --experimental-strip-types --test hooks/__tests__/faceSearchOperationGate.test.mjs",
+Depois:
+  "test:face-coordination": "node --import tsx --test hooks/__tests__/faceSearchOperationGate.test.mjs",
+
+Regras:
+- Não altere test:face-capture (já foi feito na etapa anterior).
+- Não altere test:face-search (já usa --import tsx).
+- Não altere nenhum outro script nem nenhuma outra chave.
+- Não instale dependências (tsx já está declarado e em uso).
+- Não toque em tsconfig, testes .mjs, nem em serviços.
+
+Passo 2 — Validação:
+
+2.1 Rode `pnpm --filter @workspace/busca-facial-local run test:face-overlay`
+    e cole a saída completa.
+
+2.2 Rode `pnpm --filter @workspace/busca-facial-local run test:face-settings`
+    e cole a saída completa.
+
+2.3 Rode `pnpm --filter @workspace/busca-facial-local run test:face-coordination`
+    e cole a saída completa.
+
+2.4 Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+    e cole a saída completa. (Confirma que a mudança da etapa anterior
+    continua verde após esta edição.)
+
+2.5 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa.
+
+Passo 3 — Diff:
+
+Mostre o diff unified completo de artifacts/busca-facial-local/package.json.
+Ele deve conter exatamente 4 linhas alteradas: test:face-capture (da
+etapa anterior), test:face-overlay, test:face-settings e
+test:face-coordination (desta etapa).
+
+Regras finais:
+- Não faça commit.
+- Não altere nenhum outro arquivo.
+- Não proponha outras correções.
+- Se algum teste falhar, PARE e reporte o erro exato em vez de tentar
+  consertar.
+- Ao final, aguarde próxima instrução.
