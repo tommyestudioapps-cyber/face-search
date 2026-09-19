@@ -1,0 +1,227 @@
+Contexto: Fase 9K. O usuário reportou que ao fechar o app tudo se
+perde — índice, rosto enquadrado, resultados. Precisamos persistir a
+sessão em disco. Regra de ouro: a sessão (rosto + resultados) só é
+apagada quando o usuário (a) enquadra um rosto novo, (b) limpa o
+índice, ou (c) escolhe nova foto. Fechar o app NÃO apaga.
+
+Esta etapa toca CINCO arquivos:
+- NOVO: artifacts/busca-facial-local/services/faceCapture/sessionPersistence.ts
+- artifacts/busca-facial-local/hooks/useFaceCapture.ts
+- artifacts/busca-facial-local/hooks/useFaceSearch.ts
+- artifacts/busca-facial-local/app/index.tsx
+- artifacts/busca-facial-local/services/faceSearch/index.ts (adicionar export)
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Descobrir a API do expo-file-system
+
+Antes de escrever código, verifique em
+node_modules/expo-file-system/build/ se a API `File`/`Directory`
+está disponível. Comando:
+  ls node_modules/expo-file-system/build/
+Confirme se existe File e Directory exportados. Se sim, use-os. Se
+não, PARE e reporte a API disponível.
+
+Passo 2 — Criar sessionPersistence.ts
+
+Criar o arquivo com a lógica de persistir o alignedFace em
+documentDirectory e os metadados em AsyncStorage.
+
+Contrato público:
+  export interface PersistedSession {
+    alignedFace: AlignedFace;
+    sourceUri: string;
+    savedAt: number;
+  }
+  export async function persistSession(alignedFace: AlignedFace, sourceUri: string): Promise<void>;
+  export async function loadPersistedSession(): Promise<PersistedSession | null>;
+  export async function clearPersistedSession(): Promise<void>;
+
+A implementação deve:
+- Copiar o arquivo do alignedFace para
+  `${documentDirectory}/visage-session/face.jpg`.
+- Guardar { alignedFace (com uri apontando para o novo caminho),
+  sourceUri, savedAt } em AsyncStorage sob a chave
+  `visage.session`.
+- loadPersistedSession verifica se o arquivo existe; se não,
+  retorna null e limpa o AsyncStorage.
+- clearPersistedSession apaga o arquivo e o AsyncStorage.
+- Se a API nova (File/Directory) estiver disponível, use-a. Caso
+  contrário, use a API legada (FileSystem.copyAsync, deleteAsync,
+  getInfoAsync).
+- Não lançar exceção em caso de falha de I/O: logar em DEV e
+  retornar sem quebrar. Persistência é best-effort.
+
+Passo 3 — useFaceCapture.ts: persistir quando alignedFace é criado
+
+3.1 Importar persistSession, clearPersistedSession de
+'@/services/faceCapture/sessionPersistence'.
+
+3.2 Receber o sourceUri como parâmetro de analyze (já recebe
+`uri: string`). Guardar em ref:
+
+  const sourceUriRef = useRef<string | null>(null);
+
+  No início de analyze, adicionar:
+    sourceUriRef.current = uri;
+
+3.3 Em setAlignedFaceResult, quando `next` não for null, chamar
+persistSession em background:
+
+  if (next) {
+    const sourceUri = sourceUriRef.current ?? next.sourceUri ?? '';
+    void persistSession(next, sourceUri);
+  }
+
+Não bloquear o fluxo. Fire-and-forget.
+
+3.4 Em reset e cancel, chamar clearPersistedSession().
+
+3.5 Expor função restoreFromSession() no hook, para o app chamar
+no boot. A função:
+  - chama loadPersistedSession()
+  - se encontrar, define alignedFace state + ref + sourceUriRef
+  - retorna o PersistedSession ou null
+  - não altera status
+
+Adicionar restoreFromSession ao return do hook e à interface.
+
+Passo 4 — useFaceSearch.ts: reidratar + auto-search
+
+4.1 Em ensureInitialized (após getStoredIndexStats), se houver um
+activeAlignedFaceRef.current, rodar search automaticamente. Mas
+como o boot acontece antes do useFaceCapture restaurar, precisamos
+de um método explícito. Adicionar:
+
+  Na interface UseFaceSearchResult:
+    rehydrateSession: (alignedFace: AlignedFace) => Promise<void>;
+
+  Implementação:
+    const rehydrateSession = useCallback(async (alignedFace: AlignedFace) => {
+      activeAlignedFaceRef.current = alignedFace;
+      try {
+        await ensureInitialized();
+        const faceSearchModule = await getFaceSearchModule();
+        const nextSummary = await faceSearchModule.searchFace(alignedFace);
+        if (mountedRef.current) {
+          setSummary(nextSummary);
+          setResults(nextSummary.results);
+          if (__DEV__) {
+            console.log(
+              `[Rehydrate] resultados=${nextSummary.results.length}`,
+            );
+          }
+        }
+      } catch (error) {
+        if (__DEV__) {
+          console.log('[Rehydrate] falhou', error);
+        }
+      }
+    }, [ensureInitialized, getFaceSearchModule]);
+
+Adicionar rehydrateSession ao return.
+
+Passo 5 — app/index.tsx: reidratar no boot
+
+5.1 No destructuring de useFaceCapture, adicionar
+restoreFromSession.
+
+5.2 No destructuring de useFaceSearch, adicionar rehydrateSession
+e setActiveAlignedFace.
+
+5.3 Adicionar um useEffect que roda uma vez no boot:
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const session = await restoreFromSession();
+      if (cancelled || !session) return;
+      if (__DEV__) {
+        console.log(
+          `[Boot] restaurando sessão de ${new Date(session.savedAt).toISOString()}`,
+        );
+      }
+      setActiveAlignedFace(session.alignedFace);
+      await rehydrateSession(session.alignedFace);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+5.4 Em pickFromLibrary e takePhoto, ANTES de chamar analyzeFace,
+limpar a sessão persistida atual e o estado. O resetCapture já
+chama reset que chama clearPersistedSession, mas para garantir,
+adicionar:
+
+  await clearPersistedSession();
+  
+como primeira linha dentro do `if (!selection.canceled ...)`.
+
+Importar clearPersistedSession de
+'@/services/faceCapture/sessionPersistence'.
+
+5.5 Em goHome, NÃO limpar persistência. Só resetCapture do estado
+visual. O usuário ainda tem a sessão salva.
+
+Cuidado: resetCapture hoje chama reset() que chama
+clearPersistedSession(). Isso apagaria a persistência ao voltar
+para a Home, o que é indesejado.
+
+Solução: modificar o hook useFaceCapture para que reset() aceite
+um parâmetro `{ preserveSession?: boolean }`. Se preserveSession
+for true, não chama clearPersistedSession.
+
+  const reset = useCallback(async (options?: { preserveSession?: boolean }) => {
+    // ... código existente
+    if (!options?.preserveSession) {
+      await clearPersistedSession();
+    }
+  }, [...]);
+
+E ajustar as chamadas:
+- pickFromLibrary: resetCapture() (padrão, limpa)
+- takePhoto: resetCapture() (padrão, limpa)
+- goHome: resetCapture({ preserveSession: true })
+- leaveSelection: resetCapture({ preserveSession: true })
+- dismissSearchProgress: resetCapture({ preserveSession: true })
+
+Passo 6 — services/faceSearch/index.ts (export)
+
+Se o index do faceSearch tem funções que precisam ser expostas,
+adicionar export do rehydrateSession. Na verdade não precisa — é
+chamado via hook. Deixar como está.
+
+Passo 7 — Validação
+
+7.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída.
+
+7.2 Rode os cinco runners na ordem habitual e cole as saídas.
+
+Passo 8 — Relatório
+
+8.1 Cole o diff unified dos arquivos alterados. Para
+sessionPersistence.ts, cole o arquivo completo.
+
+8.2 Confirme:
+  - sessionPersistence.ts existe com as três funções;
+  - useFaceCapture persiste alignedFace ao criar e restaura no boot;
+  - reset() aceita { preserveSession } e só limpa persistência
+    quando false/ausente;
+  - goHome e leaveSelection usam preserveSession: true;
+  - pickFromLibrary e takePhoto limpam a persistência;
+  - useFaceSearch tem rehydrateSession;
+  - app/index.tsx reidrata no boot e auto-roda search;
+  - nenhum arquivo fora dos cinco listados foi alterado.
+
+Passo 9 — Git
+
+9.1 Rode `git log --oneline -3`.
+9.2 Rode `git status`.
+
+Regras:
+- Não faça commit manual.
+- Não altere nenhum outro arquivo.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.
