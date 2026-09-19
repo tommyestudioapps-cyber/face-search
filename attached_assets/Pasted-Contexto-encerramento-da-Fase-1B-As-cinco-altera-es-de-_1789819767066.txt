@@ -1,0 +1,41 @@
+Contexto: encerramento da Fase 1B. As cinco alterações de remoção do
+caminho morto já foram aplicadas (quality.ts, types.ts, index.ts,
+FaceCaptureFeedback.tsx, captureFlow.test.mjs) e todos os 41 testes
+mais typecheck passaram. Mas git diff voltou vazio, o que sugere que
+a mudança pode já estar commitada automaticamente. Antes de seguir
+para a próxima fase, precisamos saber o estado real do repositório.
+
+Faça exatamente isto, na ordem, e PARE se algo divergir:
+
+1. `git status` — cole a saída completa.
+
+2. `git log --oneline -5` — cole a saída.
+
+3. `git log -1 --format=%H%n%ci%n%s -- artifacts/busca-facial-local/services/faceCapture/quality.ts`
+   — cole a saída. Isso diz qual foi o último commit que tocou o
+   arquivo que mais mudou nesta fase.
+
+4. Confirme o conteúdo atual de um dos pontos alterados. Rode:
+   `grep -rn "confidenceAccepted\|low-confidence\|detectorConfidenceAccepted" artifacts/busca-facial-local/services artifacts/busca-facial-local/components artifacts/busca-facial-local/hooks 2>/dev/null || echo "nenhuma ocorrência encontrada"`
+   e cole a saída.
+
+5. Com base nas saídas acima, responda explicitamente:
+   - A remoção da Fase 1B está commitada, ou está em working tree?
+   - Existe commit novo depois de cf14c9a? Se sim, qual é o hash e
+     a mensagem?
+
+6. Se a remoção estiver apenas em working tree (não commitada):
+   - `git add artifacts/busca-facial-local/services/faceCapture/quality.ts artifacts/busca-facial-local/services/faceCapture/types.ts artifacts/busca-facial-local/services/faceCapture/index.ts artifacts/busca-facial-local/components/FaceCaptureFeedback.tsx artifacts/busca-facial-local/services/faceCapture/__tests__/captureFlow.test.mjs`
+   - `git commit -m "refactor(faceCapture): remove dead confidence path"`
+   - Cole a saída do commit.
+
+7. Se a remoção já estiver commitada, não faça nada adicional no git.
+   Apenas diga qual commit a contém.
+
+8. Rode `git status` novamente e cole a saída final.
+
+Regras:
+- Não altere nenhum arquivo de produção.
+- Não faça push.
+- Não rode nenhum outro comando além dos listados.
+- Ao final, aguarde instrução.
