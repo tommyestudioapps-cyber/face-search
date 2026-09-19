@@ -801,6 +801,9 @@ export default function HomeScreen() {
   } = useFaceSearch();
 
   useEffect(() => {
+    if (__DEV__) {
+      console.info('[startup] HomeScreen mounted');
+    }
     void AsyncStorage.getItem('visage.onboarding.complete').then((value) => {
       if (value === 'true') {
         setScreen('home');
