@@ -25,6 +25,7 @@ import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
 import { FaceSearchProgress } from '@/components/FaceSearchProgress';
 import { IndexSettings } from '@/components/IndexSettings';
 import { IndexedGallery } from '@/components/IndexedGallery';
+import { IndexStatsCards } from '@/components/IndexStatsCards';
 import { useFaceSearch, type FaceSearchStatus } from '@/hooks/useFaceSearch';
 import type {
   FaceIndexProgress,
@@ -267,6 +268,8 @@ function Home({
   onSettings,
   onOpenIndexed,
   onOpenIndexedFaces,
+  onContinueFace,
+  hasActiveFace,
   indexedPhotoCount,
   indexedFaceCount,
 }: {
@@ -274,6 +277,8 @@ function Home({
   onSettings: () => void;
   onOpenIndexed: () => void;
   onOpenIndexedFaces: () => void;
+  onContinueFace: () => void;
+  hasActiveFace: boolean;
   indexedPhotoCount: number;
   indexedFaceCount: number;
 }) {

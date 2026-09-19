@@ -1,0 +1,429 @@
+Contexto: Fase 9I. Duas mudanças de UX:
+1) Os dois cards de estatísticas (fotos indexadas, rostos indexados)
+   hoje só aparecem na Home. O usuário volta para a tela de seleção
+   (tela 2) após cancelar uma indexação e não vê os números. Precisa
+   vê-los lá também.
+2) Quando o usuário tem um rosto alinhado ativo em memória e volta
+   para a Home, perde acesso à tela 2 sem refazer enquadramento.
+   Precisa de um card "Continuar busca com rosto selecionado".
+
+Esta etapa toca DOIS arquivos:
+- NOVO: artifacts/busca-facial-local/components/IndexStatsCards.tsx
+- MODIFICADO: artifacts/busca-facial-local/app/index.tsx
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Criar components/IndexStatsCards.tsx
+
+Criar arquivo novo com o seguinte conteúdo exato:
+
+  import { Feather } from '@expo/vector-icons';
+  import React from 'react';
+  import { Pressable, StyleSheet, Text, View } from 'react-native';
+  import { useColors } from '@/hooks/useColors';
+
+  interface IndexStatsCardsProps {
+    photoCount: number;
+    faceCount: number;
+    onPressPhotos: () => void;
+    onPressFaces: () => void;
+  }
+
+  function IconCircle({
+    name,
+    color,
+    backgroundColor,
+  }: {
+    name: keyof typeof Feather.glyphMap;
+    color: string;
+    backgroundColor: string;
+  }) {
+    return (
+      <View style={[styles.iconCircle, { backgroundColor }]}>
+        <Feather name={name} size={20} color={color} />
+      </View>
+    );
+  }
+
+  export function IndexStatsCards({
+    photoCount,
+    faceCount,
+    onPressPhotos,
+    onPressFaces,
+  }: IndexStatsCardsProps) {
+    const colors = useColors();
+
+    return (
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Ver ${photoCount} fotos indexadas`}
+          onPress={onPressPhotos}
+          testID="index-stats-photos"
+          style={({ pressed }) => [
+            styles.card,
+            styles.cardActionable,
+            { backgroundColor: colors.card },
+            pressed ? styles.cardPressed : null,
+          ]}
+        >
+          <View style={styles.cardTop}>
+            <IconCircle
+              name="image"
+              color={colors.primary}
+              backgroundColor={colors.accent}
+            />
+            <Feather name="arrow-up-right" size={15} color={colors.primary} />
+          </View>
+          <Text style={[styles.value, { color: colors.foreground }]}>
+            {String(photoCount)}
+          </Text>
+          <Text style={[styles.label, { color: colors.mutedForeground }]}>
+            fotos indexadas
+          </Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Ver ${faceCount} rostos indexados`}
+          onPress={onPressFaces}
+          testID="index-stats-faces"
+          style={({ pressed }) => [
+            styles.card,
+            styles.cardActionable,
+            { backgroundColor: colors.card },
+            pressed ? styles.cardPressed : null,
+          ]}
+        >
+          <View style={styles.cardTop}>
+            <IconCircle
+              name="users"
+              color="#34D399"
+              backgroundColor="#123429"
+            />
+            <Feather name="arrow-up-right" size={15} color="#34D399" />
+          </View>
+          <Text style={[styles.value, { color: colors.foreground }]}>
+            {String(faceCount)}
+          </Text>
+          <Text style={[styles.label, { color: colors.mutedForeground }]}>
+            rostos indexados
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const styles = StyleSheet.create({
+    row: { flexDirection: 'row', gap: 12 },
+    card: { flex: 1, minHeight: 121, borderRadius: 19, padding: 14 },
+    cardActionable: {
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: 'rgba(255,255,255,0.06)',
+    },
+    cardPressed: {
+      opacity: 0.75,
+      transform: [{ scale: 0.98 }],
+    },
+    cardTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    iconCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    value: {
+      fontSize: 24,
+      fontFamily: 'Inter_700Bold',
+      marginTop: 11,
+      letterSpacing: -0.7,
+    },
+    label: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
+  });
+
+Passo 2 — app/index.tsx: importar o componente
+
+Adicionar, junto dos outros imports de componentes:
+
+  import { IndexStatsCards } from '@/components/IndexStatsCards';
+
+Passo 3 — Home: usar IndexStatsCards
+
+3.1 Adicionar duas props novas à Home. Atualizar a assinatura:
+
+  function Home({
+    onSelect,
+    onSettings,
+    onOpenIndexed,
+    onOpenIndexedFaces,
+    onContinueFace,
+    hasActiveFace,
+    indexedPhotoCount,
+    indexedFaceCount,
+  }: {
+    onSelect: () => void;
+    onSettings: () => void;
+    onOpenIndexed: () => void;
+    onOpenIndexedFaces: () => void;
+    onContinueFace: () => void;
+    hasActiveFace: boolean;
+    indexedPhotoCount: number;
+    indexedFaceCount: number;
+  }) {
+
+3.2 Substituir o bloco `statsRow` do Home (que começa com
+`<View style={styles.statsRow}>` e termina com o `</View>` depois
+do card de rostos) por:
+
+  <IndexStatsCards
+    photoCount={indexedPhotoCount}
+    faceCount={indexedFaceCount}
+    onPressPhotos={onOpenIndexed}
+    onPressFaces={onOpenIndexedFaces}
+  />
+
+3.3 Adicionar, imediatamente ANTES do `<IndexStatsCards ... />`,
+um card de "continuar busca" condicional:
+
+  {hasActiveFace ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Continuar busca com rosto selecionado"
+      onPress={onContinueFace}
+      testID="continue-active-face"
+      style={({ pressed }) => [
+        styles.continueCard,
+        { backgroundColor: colors.card, borderColor: colors.border },
+        pressed ? styles.pressed : null,
+      ]}
+    >
+      <View style={[styles.continueIcon, { backgroundColor: colors.accent }]}>
+        <Feather name="user-check" size={19} color={colors.primary} />
+      </View>
+      <View style={styles.continueCopy}>
+        <Text style={[styles.continueTitle, { color: colors.foreground }]}>
+          Continuar busca
+        </Text>
+        <Text
+          style={[styles.continueSubtitle, { color: colors.mutedForeground }]}
+        >
+          Um rosto já está selecionado e pronto para buscar
+        </Text>
+      </View>
+      <Feather name="arrow-right" size={18} color={colors.primary} />
+    </Pressable>
+  ) : null}
+
+3.4 Adicionar estes estilos ao StyleSheet existente (não remover
+os estilos statsRow, statCard, statValue, statLabel existentes;
+eles podem ficar órfãos se não forem usados, ou podem ser
+removidos nesta etapa):
+
+  continueCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 17,
+    padding: 14,
+    marginBottom: 14,
+  },
+  continueIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueCopy: { flex: 1 },
+  continueTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
+  },
+  continueSubtitle: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+
+Pode remover os estilos statsRow, statCard, statCardActionable,
+statCardPressed, statCardTop, statValue, statLabel se não forem
+mais usados em nenhum lugar do arquivo. Se preferir manter, tudo
+bem — só não deve quebrar o typecheck.
+
+Passo 4 — SelectPhoto: adicionar cards e props
+
+4.1 Adicionar três props novas à SelectPhoto. Atualizar a assinatura:
+
+  function SelectPhoto({
+    selectedImage,
+    normalizedImageUri,
+    alignedImageUri,
+    faces,
+    selectedFaceId,
+    imageWidth,
+    imageHeight,
+    captureError,
+    captureProcessing,
+    captureStatus,
+    indexedPhotoCount,
+    indexedFaceCount,
+    onPickLibrary,
+    onTakePhoto,
+    onSelectFace,
+    onSearch,
+    onOpenIndexed,
+    onOpenIndexedFaces,
+    onBack,
+  }: {
+    selectedImage: string | null;
+    normalizedImageUri: string | null;
+    alignedImageUri: string | null;
+    faces: DetectedFace[];
+    selectedFaceId: number | null;
+    imageWidth: number | null;
+    imageHeight: number | null;
+    captureError: FaceCaptureError | null;
+    captureProcessing: boolean;
+    captureStatus: FaceCaptureStatus;
+    indexedPhotoCount: number;
+    indexedFaceCount: number;
+    onPickLibrary: () => void;
+    onTakePhoto: () => void;
+    onSelectFace: (faceId: number) => void;
+    onSearch: () => void;
+    onOpenIndexed: () => void;
+    onOpenIndexedFaces: () => void;
+    onBack: () => void;
+  }) {
+
+4.2 No JSX do SelectPhoto, imediatamente APÓS o bloco
+`<FaceCaptureFeedback ... />` e ANTES do
+`{alignedImageUri ? ... : null}` do preview alinhado, adicionar:
+
+  <View style={styles.selectStatsWrap}>
+    <IndexStatsCards
+      photoCount={indexedPhotoCount}
+      faceCount={indexedFaceCount}
+      onPressPhotos={onOpenIndexed}
+      onPressFaces={onOpenIndexedFaces}
+    />
+  </View>
+
+4.3 Adicionar o estilo:
+
+  selectStatsWrap: { marginTop: 14 },
+
+Passo 5 — HomeScreen: novas props e handlers
+
+5.1 No componente HomeScreen, onde o `<Home ... />` é renderizado
+dentro do switch, adicionar as novas props. Onde hoje está:
+
+  <Home
+    onSelect={openSearch}
+    onSettings={() => setShowIndexSettings(true)}
+    onOpenIndexed={openIndexed}
+    onOpenIndexedFaces={openIndexedFaces}
+    indexedPhotoCount={storedIndexStats.indexedPhotos}
+    indexedFaceCount={storedIndexStats.indexedFaces}
+  />
+
+Trocar por:
+
+  <Home
+    onSelect={openSearch}
+    onSettings={() => setShowIndexSettings(true)}
+    onOpenIndexed={openIndexed}
+    onOpenIndexedFaces={openIndexedFaces}
+    onContinueFace={continueFaceSearch}
+    hasActiveFace={Boolean(alignedFace)}
+    indexedPhotoCount={storedIndexStats.indexedPhotos}
+    indexedFaceCount={storedIndexStats.indexedFaces}
+  />
+
+5.2 Adicionar o handler continueFaceSearch, próximo dos outros
+handlers (por exemplo, logo após openIndexedFaces):
+
+  const continueFaceSearch = () => {
+    if (__DEV__) {
+      console.log('[Face] continuando busca com rosto existente');
+    }
+    setScreen('select');
+  };
+
+5.3 Onde o `<SelectPhoto ... />` é renderizado dentro do switch,
+adicionar as novas props. Onde hoje está:
+
+  <SelectPhoto
+    selectedImage={selectedImage}
+    normalizedImageUri={normalizedImageUri}
+    alignedImageUri={alignedFace?.uri ?? null}
+    faces={faces}
+    selectedFaceId={selectedFaceId}
+    imageWidth={imageWidth}
+    imageHeight={imageHeight}
+    captureError={captureError}
+    captureProcessing={captureProcessing}
+    captureStatus={captureStatus}
+    onPickLibrary={pickFromLibrary}
+    onTakePhoto={takePhoto}
+    onSelectFace={(faceId) => {
+      setSelectedFaceId(faceId);
+      void alignFace(faceId);
+    }}
+    onSearch={beginSearch}
+    onBack={leaveSelection}
+  />
+
+Adicionar, antes de onPickLibrary:
+
+  indexedPhotoCount={storedIndexStats.indexedPhotos}
+  indexedFaceCount={storedIndexStats.indexedFaces}
+
+E adicionar, após onSearch:
+
+  onOpenIndexed={openIndexed}
+  onOpenIndexedFaces={openIndexedFaces}
+
+Passo 6 — Validação
+
+6.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída.
+
+6.2 Rode os cinco runners na ordem habitual
+    (test:face-capture, test:face-search, test:face-overlay,
+    test:face-settings, test:face-coordination) e cole as saídas.
+
+Passo 7 — Relatório
+
+7.1 Cole o diff unified de app/index.tsx. Para
+components/IndexStatsCards.tsx, apenas confirme que o arquivo foi
+criado com o conteúdo especificado.
+
+7.2 Confirme:
+  - IndexStatsCards.tsx existe e é importado em app/index.tsx;
+  - Home usa IndexStatsCards em vez dos cards inline;
+  - Home mostra o card de "Continuar busca" quando hasActiveFace;
+  - SelectPhoto recebe indexedPhotoCount, indexedFaceCount,
+    onOpenIndexed e onOpenIndexedFaces;
+  - SelectPhoto renderiza IndexStatsCards após FaceCaptureFeedback;
+  - HomeScreen tem o handler continueFaceSearch;
+  - Home recebe hasActiveFace={Boolean(alignedFace)};
+  - nenhum arquivo fora dos dois listados foi alterado.
+
+Passo 8 — Git
+
+8.1 Rode `git log --oneline -3`.
+8.2 Rode `git status`.
+
+Regras:
+- Não faça commit manual.
+- Não altere nenhum outro arquivo.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.
