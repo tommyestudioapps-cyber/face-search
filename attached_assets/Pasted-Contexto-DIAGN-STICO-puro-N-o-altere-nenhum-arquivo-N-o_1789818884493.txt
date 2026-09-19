@@ -1,0 +1,70 @@
+Contexto: DIAGNÓSTICO puro. Não altere nenhum arquivo. Não faça
+commit, add, stash, checkout, reset, restore nem clean. Apenas leia
+e reporte.
+
+Objetivo: entender se o campo `confidenceAccepted` em
+services/faceCapture/quality.ts é um caminho morto que deve ser
+removido, ou se existe uma confiança real do MediaPipe sendo
+descartada que deveria ser propagada.
+
+Fatos já confirmados por diagnóstico anterior:
+- services/faceCapture/index.ts chama
+  `evaluateFaceQuality(..., true)` passando `true` fixo em
+  `detectorConfidenceAccepted`.
+- `confidence` nunca é passado, então usa o default `null`.
+- Em quality.ts, `confidenceAccepted` vira `true` sempre nesse
+  caminho.
+- createDetectedFace grava `confidence: null` e
+  `confidenceSource: 'mediapipe-threshold'`.
+
+Perguntas a responder com base no código real:
+
+1. Abra services/faceCapture/types.ts e cole a definição completa de:
+   - NativeResultBundle
+   - NativeFaceResult
+   - NativeDetectedFace
+   - NativeDetectionResult
+   Diga se algum desses tipos carrega confiança, score,
+   presence, visibility ou similar por rosto.
+
+2. Abra services/faceCapture/nativeAdapterCore.ts e cole a função
+   mapNativeResult inteira. Diga explicitamente quais campos do
+   resultado nativo são lidos e quais são descartados.
+
+3. Abra services/faceCapture/nativeAdapter.ts e cole a chamada a
+   runtime.faceLandmarkDetectionOnImage com o objeto de opções.
+   Liste todas as opções passadas e explique o significado de cada
+   uma em uma linha (com base no nome, sem inventar).
+
+4. Procure em todo o diretório services/faceCapture/ e em
+   services/faceSearch/ por qualquer uso de:
+   - field "confidence"
+   - field "score"
+   - field "presence"
+   - field "visibility"
+   Liste arquivo + linha + trecho onde aparecem.
+
+5. Abra services/faceCapture/landmarkGeometry.ts e cole a definição
+   do tipo FaceLandmark e da função isUsableLandmark. Diga se
+   presence ou visibility são usados em algum filtro hoje.
+
+6. Abra services/faceCapture/index.ts e cole o bloco completo onde
+   `evaluateFaceQuality` é chamada. Não resuma.
+
+7. Abra services/faceCapture/quality.ts e cole os trechos exatos
+   onde aparecem:
+   - o parâmetro detectorConfidenceAccepted
+   - o parâmetro confidence
+   - o cálculo de confidenceAccepted
+   - o push de 'low-confidence' em issues
+
+8. Liste todos os lugares do projeto que consomem a propriedade
+   `quality.confidenceAccepted` ou o valor `'low-confidence'`, tanto
+   em produção quanto em testes. Mostre arquivo + linha + trecho.
+
+Regras:
+- Apenas leitura. Zero alteração.
+- Não proponha correções nesta etapa.
+- Não execute git add, commit, stash, reset, checkout, restore, clean.
+- Se algo não existir, diga "não existe" em vez de inventar.
+- Ao final, aguarde instrução.
