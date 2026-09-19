@@ -1,0 +1,79 @@
+Contexto: Fase 9F. Diagnóstico puro. Não altera lógica de produção.
+Usuário reportou que em 136 fotos o índice tem apenas 17 rostos.
+Precisamos entender: o MediaPipe não detecta rostos, ou detecta e o
+filtro de qualidade rejeita? Hoje os logs mostram apenas '[Detect]
+faces=N' do nativo e '[Index:photo] faces=N' dos aceitos, mas falta
+ver quantos foram rejeitados e por qual motivo.
+
+Esta etapa toca UM arquivo:
+- artifacts/busca-facial-local/services/faceCapture/index.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — No corpo de detectFaces, dentro do bloco onde o array
+`faces: DetectedFace[] = []` é declarado, adicionar logo depois:
+
+  let rejectedCount = 0;
+  const rejectionReasons: string[] = [];
+
+Passo 2 — Após a chamada a evaluateFaceQuality dentro do loop,
+adicionar log de rejeição quando quality.accepted for falso.
+Onde hoje está:
+
+  const evaluated = await evaluateFaceQuality(
+    qualityImage,
+    normalized.width,
+    normalized.height,
+    landmarks,
+  );
+
+Adicionar logo depois:
+
+  if (!evaluated.quality.accepted) {
+    rejectedCount += 1;
+    rejectionReasons.push(evaluated.quality.reason);
+  }
+
+Passo 3 — Após o loop de nativeFaces, antes do `return { sourceUri, ... }`,
+adicionar log consolidado:
+
+  if (__DEV__ && nativeFaces.length > 0) {
+    console.log(
+      `[Detection] nativo=${nativeFaces.length} aceitos=${faces.length} rejeitados=${rejectedCount}`,
+    );
+    if (rejectionReasons.length > 0) {
+      console.log(
+        `[Detection] motivos=${rejectionReasons.join(',')}`,
+      );
+    }
+  }
+
+Passo 4 — Validação
+
+4.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída.
+
+4.2 Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+    e cole a saída.
+
+Passo 5 — Relatório
+
+5.1 Cole o diff de services/faceCapture/index.ts.
+
+5.2 Confirme:
+  - rejectedCount e rejectionReasons foram adicionados;
+  - o log [Detection] mostra nativo vs aceitos vs rejeitados;
+  - o log [Detection] mostra os motivos quando há rejeição;
+  - nenhuma lógica de produção foi alterada;
+  - nenhum outro arquivo foi tocado.
+
+Passo 6 — Git
+
+6.1 Rode `git log --oneline -3`.
+6.2 Rode `git status`.
+
+Regras:
+- Não faça commit manual.
+- Não altere nenhum arquivo fora de services/faceCapture/index.ts.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.

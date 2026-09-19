@@ -53,6 +53,8 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
     }
 
     const faces: DetectedFace[] = [];
+    let rejectedCount = 0;
+    const rejectionReasons: string[] = [];
     for (const [id, nativeFace] of nativeFaces.entries()) {
       const landmarks = nativeFace.landmarks as FaceLandmark[];
       const evaluated = await evaluateFaceQuality(
@@ -61,6 +63,10 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
         normalized.height,
         landmarks,
       );
+      if (!evaluated.quality.accepted) {
+        rejectedCount += 1;
+        rejectionReasons.push(evaluated.quality.reason);
+      }
       faces.push(
         createDetectedFace(
           id,
@@ -71,6 +77,17 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
           nativeFace.boundingBox,
         ),
       );
+    }
+
+    if (__DEV__ && nativeFaces.length > 0) {
+      console.log(
+        `[Detection] nativo=${nativeFaces.length} aceitos=${faces.length} rejeitados=${rejectedCount}`,
+      );
+      if (rejectionReasons.length > 0) {
+        console.log(
+          `[Detection] motivos=${rejectionReasons.join(',')}`,
+        );
+      }
     }
 
     return {
