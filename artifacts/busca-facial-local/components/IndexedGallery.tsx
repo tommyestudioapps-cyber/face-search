@@ -17,26 +17,28 @@ import type { IndexedPhoto } from '@/services/faceSearch';
 interface IndexedGalleryProps {
   photos: IndexedPhoto[];
   isLoading: boolean;
+  mode: 'all' | 'withFaces';
   onBack: () => void;
 }
 
 export function IndexedGallery({
   photos,
   isLoading,
+  mode,
   onBack,
 }: IndexedGalleryProps) {
   React.useEffect(() => {
     if (__DEV__) {
       console.log(
-        `[IndexedGallery] montada com ${photos.length} fotos, isLoading=${isLoading}`,
+        `[IndexedGallery] montada mode=${mode} com ${photos.length} fotos, isLoading=${isLoading}`,
       );
       if (photos.length > 0) {
         console.log(
-          `[IndexedGallery] primeira uri=${photos[0].uri.slice(0, 80)}`,
+          `[IndexedGallery] primeira uri=${photos[0].uri.slice(0, 80)} faces=${photos[0].faceCount}`,
         );
       }
     }
-  }, [photos.length, isLoading]);
+  }, [photos.length, isLoading, mode]);
 
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -89,14 +91,18 @@ export function IndexedGallery({
         </Pressable>
         <View style={styles.headerCopy}>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-            Fotos indexadas
+            {mode === 'withFaces' ? 'Rostos detectados' : 'Fotos indexadas'}
           </Text>
           <Text
             style={[styles.headerSubtitle, { color: colors.mutedForeground }]}
           >
-            {photos.length === 1
-              ? '1 foto processada neste aparelho'
-              : `${photos.length} fotos processadas neste aparelho`}
+            {mode === 'withFaces'
+              ? photos.length === 1
+                ? '1 foto com rosto detectado'
+                : `${photos.length} fotos com rostos detectados`
+              : photos.length === 1
+                ? '1 foto processada neste aparelho'
+                : `${photos.length} fotos processadas neste aparelho`}
           </Text>
         </View>
         <View style={styles.headerSpacer} />
@@ -138,12 +144,16 @@ export function IndexedGallery({
               <Text
                 style={[styles.emptyTitle, { color: colors.foreground }]}
               >
-                Nenhuma foto indexada
+                {mode === 'withFaces'
+                  ? 'Nenhuma foto com rostos'
+                  : 'Nenhuma foto indexada'}
               </Text>
               <Text
                 style={[styles.emptyBody, { color: colors.mutedForeground }]}
               >
-                Faça uma busca para que o app processe sua galeria local.
+                {mode === 'withFaces'
+                  ? 'As fotos processadas ainda não tiveram rostos aceitos.'
+                  : 'Faça uma busca para que o app processe sua galeria local.'}
               </Text>
             </View>
           }

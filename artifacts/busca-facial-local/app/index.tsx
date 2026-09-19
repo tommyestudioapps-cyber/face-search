@@ -266,12 +266,14 @@ function Home({
   onSelect,
   onSettings,
   onOpenIndexed,
+  onOpenIndexedFaces,
   indexedPhotoCount,
   indexedFaceCount,
 }: {
   onSelect: () => void;
   onSettings: () => void;
   onOpenIndexed: () => void;
+  onOpenIndexedFaces: () => void;
   indexedPhotoCount: number;
   indexedFaceCount: number;
 }) {
@@ -365,7 +367,7 @@ function Home({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Ver ${indexedFaceCount} rostos indexados`}
-              onPress={onOpenIndexed}
+              onPress={onOpenIndexedFaces}
               testID="open-indexed-faces"
               style={({ pressed }) => [
                 styles.statCard,
@@ -823,6 +825,7 @@ function OfflineModal({
 
 export default function HomeScreen() {
   const [screen, setScreen] = useState<AppScreen>('onboarding');
+  const [indexedFilter, setIndexedFilter] = useState<'all' | 'withFaces'>('all');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showReward, setShowReward] = useState(false);
   const [showIndexSettings, setShowIndexSettings] = useState(false);
@@ -938,9 +941,21 @@ export default function HomeScreen() {
   const openIndexed = () => {
     if (__DEV__) {
       console.log(
-        `[Indexed] abrindo galeria. stats fotos=${storedIndexStats.indexedPhotos} rostos=${storedIndexStats.indexedFaces} carregadas=${indexedPhotos.length}`,
+        `[Indexed] abrindo galeria (todas). fotos=${storedIndexStats.indexedPhotos}`,
       );
     }
+    setIndexedFilter('all');
+    setScreen('indexed');
+    void refreshIndexedPhotos();
+  };
+
+  const openIndexedFaces = () => {
+    if (__DEV__) {
+      console.log(
+        `[Indexed] abrindo galeria (rostos). rostos=${storedIndexStats.indexedFaces}`,
+      );
+    }
+    setIndexedFilter('withFaces');
     setScreen('indexed');
     void refreshIndexedPhotos();
   };
@@ -1034,14 +1049,25 @@ export default function HomeScreen() {
         );
       case 'results':
         return <Results results={results} onNewSearch={goHome} />;
-      case 'indexed':
+      case 'indexed': {
+        const visiblePhotos =
+          indexedFilter === 'withFaces'
+            ? indexedPhotos.filter((photo) => photo.faceCount > 0)
+            : indexedPhotos;
+        if (__DEV__) {
+          console.log(
+            `[Indexed] renderizando mode=${indexedFilter} total=${indexedPhotos.length} visíveis=${visiblePhotos.length}`,
+          );
+        }
         return (
           <IndexedGallery
-            photos={indexedPhotos}
+            photos={visiblePhotos}
             isLoading={isLoadingIndexedPhotos}
+            mode={indexedFilter}
             onBack={() => setScreen('home')}
           />
         );
+      }
       case 'home':
       default:
         return (
@@ -1049,6 +1075,7 @@ export default function HomeScreen() {
             onSelect={openSearch}
             onSettings={() => setShowIndexSettings(true)}
             onOpenIndexed={openIndexed}
+            onOpenIndexedFaces={openIndexedFaces}
             indexedPhotoCount={storedIndexStats.indexedPhotos}
             indexedFaceCount={storedIndexStats.indexedFaces}
           />
@@ -1071,9 +1098,11 @@ export default function HomeScreen() {
     faceSearchError,
     storedIndexStats,
     indexedPhotos,
+    indexedFilter,
     isLoadingIndexedPhotos,
     refreshIndexedPhotos,
     openIndexed,
+    openIndexedFaces,
     cancelIndexing,
     results,
   ]);
