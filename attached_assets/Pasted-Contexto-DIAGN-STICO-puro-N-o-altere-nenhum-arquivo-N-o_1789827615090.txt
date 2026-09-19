@@ -1,0 +1,78 @@
+Contexto: DIAGNÓSTICO puro. Não altere nenhum arquivo. Não faça
+commit, add, stash, checkout, reset, restore nem clean. Apenas leia
+e reporte.
+
+Situação: o usuário testou o app em device real e descobriu que:
+1. Após a indexação, a tela principal mostra "182 fotos analisadas" e
+   "44 fotos indexadas".
+2. O número "44 fotos indexadas" parece um botão, mas não é reativo.
+3. Existe um botão de filtro no canto superior direito que é
+   "apenas informativo", sem comportamento reativo.
+4. Não existe nenhuma tela para VISUALIZAR as fotos indexadas.
+5. Sem ver as fotos, o usuário não consegue validar se o pipeline
+   identificou rostos corretamente.
+
+Objetivo: mapear a UI atual e o modelo de dados disponível para
+desenhar uma tela de navegação das fotos indexadas. Antes de propor
+qualquer código, preciso do inventário completo.
+
+Reporte em seções numeradas, colando os trechos completos:
+
+1. Cole o arquivo inteiro artifacts/busca-facial-local/app/index.tsx.
+   Não resuma, não corte. Preciso ver toda a estrutura de navegação,
+   estados e telas.
+
+2. Cole o arquivo inteiro
+   artifacts/busca-facial-local/components/IndexSettings.tsx.
+
+3. Cole o arquivo inteiro
+   artifacts/busca-facial-local/components/FaceSearchProgress.tsx.
+
+4. Liste todos os componentes em components/ que são renderizados
+   por app/index.tsx. Para cada um, mostre o trecho onde é
+   renderizado (arquivo, linha).
+
+5. Procure por qualquer botão, ícone ou elemento com "filter",
+   "filtro", "search", "config", "menu" no app/index.tsx e nos
+   components. Comando:
+   grep -rn "filter\|Filter\|filtro\|Filtro\|menu\|Menu\|settings\|Settings" artifacts/busca-facial-local/app artifacts/busca-facial-local/components 2>/dev/null | head -40
+   Cole a saída completa.
+
+6. Cole a interface IndexedPhoto completa de
+   services/faceSearch/types.ts.
+
+7. Cole a interface IndexedFace completa.
+
+8. Cole a assinatura e o retorno de:
+   - getIndexedPhotos
+   - getIndexedEmbeddings
+   - getStoredIndexStats
+   de services/faceSearch/repository.ts. Se qualquer um desses
+   métodos retornar URI local da foto indexada, destaque isso.
+
+9. Cole os métodos públicos do faceSearchRepository (só as
+   assinaturas) para eu saber o que já existe pronto para consumo.
+
+10. Confirme explicitamente:
+   - Existe algum método que retorne a lista de fotos indexadas com
+     URI e metadados? Qual?
+   - Existe algum método que retorne as bounding boxes dos rostos
+     indexados por foto? Qual?
+   - A URI armazenada em indexed_photos é a URI do MediaLibrary
+     (content:// ou ph://) ou um caminho de arquivo local?
+
+11. Liste as rotas de navegação existentes no app. Comando:
+    ls -la artifacts/busca-facial-local/app/
+    Cole a saída. Depois confirme quantas telas existem hoje no
+    Expo Router.
+
+12. Procure por qualquer uso de expo-router, Link, router.push,
+    useRouter. Comando:
+    grep -rn "from 'expo-router'\|router\.\|<Link\|useRouter" artifacts/busca-facial-local/app artifacts/busca-facial-local/components 2>/dev/null | head -30
+    Cole a saída.
+
+Regras:
+- Apenas leitura. Zero alteração.
+- Não execute git add, commit, stash, reset, checkout, restore, clean.
+- Se algo não existir, diga "não existe".
+- Ao final, aguarde instrução.
