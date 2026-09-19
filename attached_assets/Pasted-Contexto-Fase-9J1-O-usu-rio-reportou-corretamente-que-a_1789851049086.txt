@@ -1,0 +1,355 @@
+Contexto: Fase 9J1. O usuário reportou corretamente que a UI atual
+está errada pelo objetivo do app. O app existe para encontrar fotos
+de UMA pessoa específica, não para mostrar censo de rostos. Hoje o
+card "12 rostos indexados" mostra qualquer rosto detectado (inclusive
+falsos positivos como um bolo), e não os resultados da busca.
+
+Duas correções:
+1) Rodar search automaticamente após indexação (mesmo se cancelada),
+   desde que haja um alignedFace ativo.
+2) Na Home e na tela 2, mostrar APENAS o número de fotos que casaram
+   com o rosto buscado. Sem cards de "fotos processadas" nem de
+   "rostos detectados".
+
+Esta etapa toca TRÊS arquivos:
+- artifacts/busca-facial-local/hooks/useFaceSearch.ts
+- artifacts/busca-facial-local/app/index.tsx
+- artifacts/busca-facial-local/components/IndexStatsCards.tsx
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — useFaceSearch.ts: rodar search após indexação
+
+1.1 Em startIndexing, onde hoje está, dentro do try:
+
+  try {
+    const result = await task.promise;
+    const nextStats = await faceSearchModule.getStoredIndexStats();
+    if (mountedRef.current) {
+      setStoredIndexStats(nextStats);
+      setStatus(result.status === 'completed' ? 'ready' : 'cancelled');
+      if (__DEV__) {
+        console.log(
+          `[Stats] pós-indexação status=${result.status} fotos=${nextStats.indexedPhotos} rostos=${nextStats.indexedFaces}`,
+        );
+      }
+    }
+    return result;
+  }
+
+Substituir por:
+
+  try {
+    const result = await task.promise;
+    const nextStats = await faceSearchModule.getStoredIndexStats();
+    if (mountedRef.current) {
+      setStoredIndexStats(nextStats);
+      setStatus(result.status === 'completed' ? 'ready' : 'cancelled');
+      if (__DEV__) {
+        console.log(
+          `[Stats] pós-indexação status=${result.status} fotos=${nextStats.indexedPhotos} rostos=${nextStats.indexedFaces}`,
+        );
+      }
+    }
+    // Após indexação (completa ou cancelada), se houver um rosto
+    // ativo em memória, rodar a busca para calcular matches.
+    const activeFace = activeAlignedFaceRef.current;
+    if (activeFace && activeFace.standardized) {
+      if (__DEV__) {
+        console.log('[Search] rodando search pós-indexação');
+      }
+      try {
+        const nextSummary = await faceSearchModule.searchFace(activeFace);
+        if (mountedRef.current) {
+          setSummary(nextSummary);
+          setResults(nextSummary.results);
+          if (__DEV__) {
+            console.log(
+              `[Search] resultados=${nextSummary.results.length}`,
+            );
+          }
+        }
+      } catch (searchError) {
+        if (__DEV__) {
+          console.log('[Search] falhou pós-indexação', searchError);
+        }
+      }
+    }
+    return result;
+  }
+
+1.2 Adicionar uma ref para guardar o alignedFace ativo. No topo do
+hook, junto das outras refs, adicionar:
+
+  const activeAlignedFaceRef = useRef<AlignedFace | null>(null);
+
+1.3 Adicionar uma função pública que o app chama ao definir o rosto.
+Na interface UseFaceSearchResult, adicionar:
+
+  setActiveAlignedFace: (face: AlignedFace | null) => void;
+
+E implementar:
+
+  const setActiveAlignedFace = useCallback((face: AlignedFace | null) => {
+    activeAlignedFaceRef.current = face;
+  }, []);
+
+Adicionar setActiveAlignedFace no return do hook.
+
+1.4 Em clearIndex, adicionar junto do setResults([]):
+
+  setSummary(null);
+  setResults([]);
+
+(o segundo já existe; garantir que summary também é limpo.)
+
+Passo 2 — IndexStatsCards.tsx: simplificar
+
+Substituir TODO o conteúdo do arquivo por:
+
+  import { Feather } from '@expo/vector-icons';
+  import React from 'react';
+  import { Pressable, StyleSheet, Text, View } from 'react-native';
+  import { useColors } from '@/hooks/useColors';
+
+  interface IndexStatsCardsProps {
+    matchCount: number;
+    hasQuery: boolean;
+    onPressMatches: () => void;
+  }
+
+  export function IndexStatsCards({
+    matchCount,
+    hasQuery,
+    onPressMatches,
+  }: IndexStatsCardsProps) {
+    const colors = useColors();
+
+    if (!hasQuery) {
+      return null;
+    }
+
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Ver ${matchCount} fotos com o rosto buscado`}
+        onPress={onPressMatches}
+        testID="view-matches"
+        style={({ pressed }) => [
+          styles.card,
+          { backgroundColor: colors.card, borderColor: colors.border },
+          pressed ? styles.pressed : null,
+        ]}
+      >
+        <View style={[styles.iconWrap, { backgroundColor: colors.accent }]}>
+          <Feather name="user-check" size={20} color={colors.primary} />
+        </View>
+        <View style={styles.copy}>
+          <Text style={[styles.value, { color: colors.foreground }]}>
+            {matchCount}
+          </Text>
+          <Text style={[styles.label, { color: colors.mutedForeground }]}>
+            {matchCount === 1
+              ? 'foto com este rosto'
+              : 'fotos com este rosto'}
+          </Text>
+        </View>
+        <Feather name="arrow-right" size={18} color={colors.primary} />
+      </Pressable>
+    );
+  }
+
+  const styles = StyleSheet.create({
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      borderWidth: 1,
+      borderRadius: 17,
+      padding: 14,
+    },
+    pressed: {
+      opacity: 0.75,
+      transform: [{ scale: 0.985 }],
+    },
+    iconWrap: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    copy: { flex: 1 },
+    value: {
+      fontSize: 22,
+      fontFamily: 'Inter_700Bold',
+      letterSpacing: -0.5,
+    },
+    label: {
+      fontSize: 12,
+      fontFamily: 'Inter_400Regular',
+      marginTop: 2,
+    },
+  });
+
+Passo 3 — app/index.tsx: usar o novo componente e semântica
+
+3.1 No destructuring de useFaceSearch em HomeScreen, adicionar:
+
+  setActiveAlignedFace,
+  summary,
+
+3.2 Onde hoje o SelectPhoto é chamado, precisamos avisar ao hook
+qual é o rosto ativo. Em beginSearch (que já checa alignedFace),
+adicionar logo no início:
+
+  if (alignedFace && alignedFace.standardized) {
+    setActiveAlignedFace(alignedFace);
+  }
+
+3.3 Também em startAnalysis, adicionar no início:
+
+  if (alignedFace && alignedFace.standardized) {
+    setActiveAlignedFace(alignedFace);
+  }
+
+3.4 Também em continueFaceSearch, se houver alignedFace:
+
+  if (alignedFace && alignedFace.standardized) {
+    setActiveAlignedFace(alignedFace);
+  }
+
+3.5 Substituir o uso de IndexStatsCards na Home. Onde hoje está:
+
+  <IndexStatsCards
+    photoCount={indexedPhotoCount}
+    faceCount={indexedFaceCount}
+    onPressPhotos={onOpenIndexed}
+    onPressFaces={onOpenIndexedFaces}
+  />
+
+Trocar por:
+
+  <IndexStatsCards
+    matchCount={results.length}
+    hasQuery={Boolean(alignedFace)}
+    onPressMatches={openMatches}
+  />
+
+3.6 Adicionar o handler openMatches, junto dos outros handlers:
+
+  const openMatches = () => {
+    if (__DEV__) {
+      console.log(`[Matches] abrindo ${results.length} resultados`);
+    }
+    setScreen('results');
+  };
+
+3.7 Na tela 2 (SelectPhoto), substituir o uso de IndexStatsCards.
+Onde hoje está:
+
+  <View style={styles.selectStatsWrap}>
+    <IndexStatsCards
+      photoCount={indexedPhotoCount}
+      faceCount={indexedFaceCount}
+      onPressPhotos={onOpenIndexed}
+      onPressFaces={onOpenIndexedFaces}
+    />
+  </View>
+
+Trocar por:
+
+  {alignedImageUri ? (
+    <View style={styles.selectStatsWrap}>
+      <IndexStatsCards
+        matchCount={results.length}
+        hasQuery={true}
+        onPressMatches={openMatches}
+      />
+    </View>
+  ) : null}
+
+3.8 Atualizar a assinatura de SelectPhoto. Remover as props
+indexedPhotoCount, indexedFaceCount, onOpenIndexed e
+onOpenIndexedFaces, e adicionar:
+
+  matchCount: number;
+  onOpenMatches: () => void;
+
+Ajustar também a chamada no switch:
+
+  <SelectPhoto
+    ...
+    matchCount={results.length}
+    onOpenMatches={openMatches}
+    ...
+  />
+
+E remover as props antigas (indexedPhotoCount, indexedFaceCount,
+onOpenIndexed, onOpenIndexedFaces) da chamada.
+
+3.9 Atualizar a assinatura de Home. Remover as props
+onOpenIndexedFaces, indexedPhotoCount e indexedFaceCount.
+Manter onOpenIndexed (usado pelo Settings) e adicionar:
+
+  matchCount: number;
+  onOpenMatches: () => void;
+
+Ajustar a chamada no switch:
+
+  <Home
+    onSelect={openSearch}
+    onSettings={() => setShowIndexSettings(true)}
+    onOpenIndexed={openIndexed}
+    onContinueFace={continueFaceSearch}
+    hasActiveFace={Boolean(alignedFace)}
+    matchCount={results.length}
+    onOpenMatches={openMatches}
+  />
+
+3.10 No corpo de Home, substituir o bloco do IndexStatsCards
+conforme 3.5 acima.
+
+Passo 4 — Não alterar nada em IndexedGallery.tsx. A tela antiga
+continua existindo, acessível via Settings → "Ver fotos processadas"
+(se existir; se não, deixe como está — a decisão de removê-la vem
+depois).
+
+Passo 5 — Validação
+
+5.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída. Se houver erro de props não usadas, ajuste as
+    assinaturas conforme indicado acima e tente de novo.
+
+5.2 Rode os cinco runners de teste na ordem habitual
+    (test:face-capture, test:face-search, test:face-overlay,
+    test:face-settings, test:face-coordination) e cole as saídas.
+
+Passo 6 — Relatório
+
+6.1 Cole o diff unified dos três arquivos.
+
+6.2 Confirme:
+  - useFaceSearch tem activeAlignedFaceRef e setActiveAlignedFace;
+  - startIndexing chama searchFace após task.promise quando há rosto;
+  - IndexStatsCards foi simplificado para um único card com
+    matchCount, hasQuery e onPressMatches;
+  - Home usa o novo card com results.length;
+  - SelectPhoto usa o novo card quando alignedImageUri existe;
+  - HomeScreen tem openMatches;
+  - beginSearch, startAnalysis e continueFaceSearch chamam
+    setActiveAlignedFace;
+  - nenhuma prop antiga (indexedPhotoCount, indexedFaceCount,
+    onOpenIndexedFaces) sobrou nas assinaturas;
+  - nenhum arquivo fora dos três listados foi tocado.
+
+Passo 7 — Git
+
+7.1 Rode `git log --oneline -3`.
+7.2 Rode `git status`.
+
+Regras:
+- Não faça commit manual.
+- Não altere nenhum outro arquivo.
+- Se algo falhar no typecheck, ajuste conforme indicado e reporte.
+- Ao final, aguarde instrução.
