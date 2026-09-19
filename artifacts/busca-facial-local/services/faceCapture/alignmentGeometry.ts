@@ -1,4 +1,4 @@
-import type { FaceLandmark } from './types';
+import { FaceCaptureError, type FaceLandmark } from './types';
 
 export interface AlignmentLandmarks {
   leftEye: FaceLandmark | null;
@@ -89,6 +89,12 @@ export function calculateAlignmentCrop(
         rotationDegrees,
       ),
     );
+  if (points.length === 0) {
+    throw new FaceCaptureError(
+      'landmarks-incomplete',
+      'Não foi possível calcular o recorte porque os pontos do rosto estão incompletos.',
+    );
+  }
   const minX = Math.min(...points.map((point) => point.x));
   const maxX = Math.max(...points.map((point) => point.x));
   const minY = Math.min(...points.map((point) => point.y));

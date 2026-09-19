@@ -5,3 +5,4 @@
 - [Plugins de configuração Expo 54](expo-config-plugins.md) — use `expo/config-plugins`; a dependência direta `@expo/config-plugins` é rejeitada pelo diagnóstico do SDK.
 - [Carregamento TFLite no Android](tflite-asset-loading.md) — no APK release, resolva o asset via `expo-asset` e passe um `localUri` `file://` ao fast-tflite.
 - [Inicialização do Dev Client](dev-client-startup.md) — montar o provedor global de teclado fechava o app Android ao carregar o bundle; mantenha-o fora da raiz enquanto não for necessário.
+- [Testes Node com TypeScript](node-strip-types-tests.md) — imports de runtime entre arquivos `.ts` podem exigir extensão explícita no executor `node --experimental-strip-types --test`.

@@ -1,0 +1,74 @@
+Contexto: projeto Expo/React Native "Busca Facial Local", pipeline 100%
+local. Esta é a FASE 1A: correção pontual de um bug aritmético em
+services/faceCapture/alignmentGeometry.ts.
+
+Esta etapa toca UM arquivo de produção: services/faceCapture/alignmentGeometry.ts.
+Nenhum outro arquivo de produção deve ser alterado.
+
+Passo 1 — Descoberta (não altera nada):
+
+Leia artifacts/busca-facial-local/package.json e reporte:
+- o nome exato do script de teste disponível no bloco "scripts"
+  (por exemplo: "test", "test:unit", "vitest", etc.);
+- o comando exato para rodá-lo via pnpm a partir da raiz do monorepo.
+
+Se não existir nenhum script de teste, diga claramente
+"nenhum script de teste declarado".
+
+Aguarde nada — apenas reporte esse passo e siga para o passo 2.
+
+Passo 2 — Correção:
+
+Arquivo: services/faceCapture/alignmentGeometry.ts
+Função: calculateAlignmentCrop
+
+Problema confirmado no diagnóstico: se todos os landmarks forem
+filtrados por Number.isFinite (por exemplo, landmarks vazios ou todos
+com NaN), o array `points` fica vazio. Em seguida:
+  - Math.min(...[]) retorna Infinity;
+  - Math.max(...[]) retorna -Infinity;
+  - o cálculo de `anchor` produz NaN;
+  - o crop final contém NaN, que é propagado para manipulateAsync.
+
+Correção a aplicar:
+
+- Imediatamente APÓS a construção de `points` e ANTES de qualquer uso de
+  minX/maxX/minY/maxY, adicionar uma guarda:
+
+  if (points.length === 0) {
+    throw new FaceCaptureError(
+      'landmarks-incomplete',
+      'Não foi possível calcular o recorte porque os pontos do rosto estão incompletos.',
+    );
+  }
+
+- Importar FaceCaptureError do mesmo módulo de tipos já usado pelo
+  arquivo, seguindo o padrão dos outros arquivos de services/faceCapture
+  (o import deve vir de './types').
+
+- Não alterar a assinatura da função.
+- Não alterar o tipo de retorno.
+- Não alterar nenhuma outra função do arquivo.
+- Não adicionar console.log nem logs temporários.
+- Manter o estilo de comentário curto, uma linha, no mesmo tom dos
+  comentários já existentes no arquivo.
+
+Passo 3 — Validação:
+
+1. Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+   e cole a saída completa.
+
+2. Rode o script de teste descoberto no Passo 1 e cole a saída completa.
+   Se algum teste falhar, NÃO altere nenhum arquivo de teste nesta
+   etapa — apenas reporte qual teste falhou, qual foi a mensagem, e
+   aguarde instrução.
+
+3. Mostre apenas o diff do arquivo services/faceCapture/alignmentGeometry.ts
+   (formato unified diff, apenas este arquivo).
+
+Regras da etapa:
+- Não tocar em nenhum outro arquivo de produção.
+- Não alterar testes existentes.
+- Não propor outras correções.
+- Não mencionar confiança, GPU, timeout, observabilidade ou refatoração.
+- Ao terminar, parar e aguardar minha próxima instrução.
