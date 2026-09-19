@@ -1,0 +1,56 @@
+Contexto: DIAGNÓSTICO, sem alterar nada. Não faça commit, stash,
+checkout, nem instale dependências. Apenas leia e reporte.
+
+Estamos na Fase 1A.0: consertar o runner de testes do pacote
+busca-facial-local. Hoje o script roda:
+
+  node --experimental-strip-types --test services/faceCapture/__tests__/*.test.mjs
+
+e falha ao resolver imports de valor sem extensão (ex:
+`import { FaceCaptureError } from './types'`) em arquivos .ts.
+Antes de decidir como corrigir, preciso do inventário abaixo.
+
+Reporte em seções numeradas, colando as saídas completas, sem resumir:
+
+1. Bloco "scripts" completo de
+   artifacts/busca-facial-local/package.json.
+
+2. Blocos "dependencies" e "devDependencies" completos de
+   artifacts/busca-facial-local/package.json. Se as dependências
+   estiverem no package.json da raiz do monorepo, cole esse bloco
+   também.
+
+3. Existe `tsx` disponível? Verifique e reporte:
+   - presença em qualquer package.json dos workspaces;
+   - presença em node_modules/.bin/tsx;
+   - presença de "tsx@" em pnpm-lock.yaml.
+
+4. Existe `vitest` disponível? Mesma verificação dos três pontos acima.
+
+5. Conteúdo completo de artifacts/busca-facial-local/tsconfig.json.
+   Se existir um tsconfig.base.json ou tsconfig na raiz do monorepo,
+   cole também.
+
+6. Existe alguma configuração de flags do Node em algum lugar?
+   Procure em:
+   - qualquer package.json dos workspaces;
+   - .npmrc;
+   - .node-options;
+   - NODE_OPTIONS dentro de scripts.
+
+7. Saída de `node --version`.
+
+8. Liste todos os arquivos de teste existentes em
+   services/faceCapture/__tests__/ e services/faceSearch/__tests__/
+   mostrando o sufixo de cada um (.mjs, .ts, .js).
+
+9. Em artifacts/busca-facial-local/tsconfig.json (ou no tsconfig raiz,
+   se for lá), diga explicitamente se existe a opção
+   "allowImportingTsExtensions" e qual o valor dela.
+
+Regras:
+- Não instale nada.
+- Não altere nenhum arquivo.
+- Não proponha correções ainda.
+- Se algo não existir, diga "não existe" em vez de inventar.
+- Ao final, aguarde minha próxima instrução.
