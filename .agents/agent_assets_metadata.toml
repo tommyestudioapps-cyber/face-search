@@ -14,3 +14,17 @@ mtime_ms = 1789310074071
 storage_uri = "gcs://replit-rams-assets-reed/rams/assets/repl:2a4d4a8e-7c22-4ff1-a93e-6196ada332df/27363ca3-0eb3-4339-9431-106bc016dc48/f76b4be3-ed93-42fe-9c1f-efa99d4ee9c4"
 storage_version_token = "1789310091188751"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "Q4BwCIcrwxgMZxjHVhLZl"
+uri = "file://attached_assets/busca-facial-local-development-qr.png"
+type = "image"
+title = "QR code — Busca Facial Local development client"
+description = "Escaneie este QR code com o development client instalado. O workflow Expo precisa continuar em execução."
+logical_id = "7f1c4d80-cfa8-407a-bf72-8d92570414ff"
+content_hash = "sha256:cb7dcf44329dac12c6b83b72efabc024aa26457185bd97f369b1b7a49bce6e03"
+size = 1428
+mtime_ms = 1789814576907
+storage_uri = "gcs://replit-rams-assets-reed/rams/assets/repl:2a4d4a8e-7c22-4ff1-a93e-6196ada332df/7f1c4d80-cfa8-407a-bf72-8d92570414ff/01f00b04-7d04-46d7-9373-4c8ae9354439"
+storage_version_token = "1789814577442314"
+content_type = "image/png"
