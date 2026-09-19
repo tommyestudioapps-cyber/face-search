@@ -1,0 +1,140 @@
+Contexto: Fase 2. Vamos eliminar decodificações redundantes do sample
+JPEG em detectFaces. Hoje, se uma foto tem N rostos, o mesmo sample
+é decodificado N vezes (uma por rosto) dentro de evaluateFaceQuality.
+Depois desta mudança, será decodificado uma única vez.
+
+Inventário já confirmado:
+- evaluateFaceQuality tem um único chamador: services/faceCapture/index.ts.
+- decodeImage, analyzePixels e DecodedImage são privados de quality.ts.
+- Nenhum teste cobre evaluateFaceQuality diretamente.
+- qualitySample é criado antes de detectFacesWithMediaPipe.
+
+Esta etapa toca DOIS arquivos:
+- artifacts/busca-facial-local/services/faceCapture/quality.ts
+- artifacts/busca-facial-local/services/faceCapture/index.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — quality.ts
+
+1.1 Torne `DecodedImage` exportado. Antes:
+  interface DecodedImage {
+    width: number;
+    height: number;
+    data: Uint8Array;
+  }
+Depois:
+  export interface DecodedImage {
+    width: number;
+    height: number;
+    data: Uint8Array;
+  }
+
+1.2 Torne `decodeImage` exportado. Antes:
+  async function decodeImage(uri: string): Promise<DecodedImage> {
+Depois:
+  export async function decodeImage(uri: string): Promise<DecodedImage> {
+Não altere o corpo da função.
+
+1.3 Não altere `analyzePixels` nem `pixelBrightness`.
+
+1.4 Na assinatura de `evaluateFaceQuality`, troque o primeiro
+parâmetro `sampleUri: string` por `image: DecodedImage`. Mantenha
+`imageWidth: number`, `imageHeight: number` e `landmarks` como estão.
+
+1.5 No corpo de `evaluateFaceQuality`, substitua a linha:
+  const pixels = await analyzePixels(await decodeImage(sampleUri), bounds);
+por:
+  const pixels = analyzePixels(image, bounds);
+
+1.6 Não remova o `async` da função. Não remova o tipo de retorno.
+Não altere nenhuma outra linha do corpo.
+
+Passo 2 — index.ts
+
+2.1 Atualize o import de './quality' para incluir `decodeImage`.
+Antes:
+  import { createDetectedFace, evaluateFaceQuality } from './quality';
+Depois:
+  import { createDetectedFace, decodeImage, evaluateFaceQuality } from './quality';
+
+2.2 Dentro de `detectFaces`, imediatamente APÓS a linha que cria o
+sample e antes da linha que chama `detectFacesWithMediaPipe`,
+adicione a decodificação única:
+  const qualityImage = await decodeImage(qualitySample.uri);
+
+Ou seja, a sequência fica:
+  const qualitySample = await createAnalysisSample(normalized.uri);
+  qualitySampleUri = qualitySample.uri;
+  const qualityImage = await decodeImage(qualitySample.uri);
+  const result = await detectFacesWithMediaPipe(normalized.uri);
+
+2.3 Dentro do loop, troque o primeiro argumento da chamada a
+`evaluateFaceQuality` de `qualitySampleUri` para `qualityImage`.
+Antes:
+  const evaluated = await evaluateFaceQuality(
+    qualitySampleUri,
+    normalized.width,
+    normalized.height,
+    landmarks,
+  );
+Depois:
+  const evaluated = await evaluateFaceQuality(
+    qualityImage,
+    normalized.width,
+    normalized.height,
+    landmarks,
+  );
+
+2.4 Não altere mais nada em `detectFaces`. Preserve:
+  - o `try/catch/finally`;
+  - a limpeza de `qualitySampleUri` no finally;
+  - a limpeza de `normalized.temporaryUris` no catch;
+  - a validação `if (nativeFaces.length === 0)`;
+  - a criação de `DetectedFace` com `createDetectedFace`.
+
+Passo 3 — Validação
+
+3.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa. Se acusar erro, PARE e reporte.
+
+3.2 Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+    e cole a saída completa.
+
+3.3 Rode `pnpm --filter @workspace/busca-facial-local run test:face-search`
+    e cole a saída completa.
+
+3.4 Rode `pnpm --filter @workspace/busca-facial-local run test:face-overlay`
+    e cole a saída completa.
+
+3.5 Rode `pnpm --filter @workspace/busca-facial-local run test:face-settings`
+    e cole a saída completa.
+
+3.6 Rode `pnpm --filter @workspace/busca-facial-local run test:face-coordination`
+    e cole a saída completa.
+
+Passo 4 — Relatório
+
+4.1 Cole o diff unified completo dos dois arquivos alterados.
+
+4.2 Confirme explicitamente:
+  - `evaluateFaceQuality` agora recebe `image: DecodedImage` como
+    primeiro parâmetro;
+  - não existe mais nenhuma chamada a `decodeImage` dentro de
+    `evaluateFaceQuality`;
+  - `decodeImage` é chamado exatamente uma vez em `detectFaces`, fora
+    do loop de rostos;
+  - `DecodedImage` e `decodeImage` estão exportados;
+  - nenhum arquivo fora dos dois listados no Passo 2 foi alterado.
+
+Regras:
+- Não faça commit.
+- Não altere nenhum arquivo fora de quality.ts e index.ts.
+- Não toque em nativeAdapter.ts, nativeAdapterCore.ts,
+  landmarkGeometry.ts, alignmentGeometry.ts, alignment.ts,
+  preprocessing.ts, nem em nenhum arquivo de services/faceSearch/.
+- Não remova o `async` de `evaluateFaceQuality`.
+- Não mexa nos parâmetros `imageWidth` e `imageHeight` (permanecem
+  mesmo que não sejam usados no corpo — é escopo de outra fase).
+- Se algum passo falhar, PARE e reporte o estado exato.
+- Ao final, aguarde instrução.

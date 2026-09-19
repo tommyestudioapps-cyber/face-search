@@ -20,7 +20,7 @@ import {
   isFacePoseWithinLimits,
 } from './landmarkGeometry';
 
-interface DecodedImage {
+export interface DecodedImage {
   width: number;
   height: number;
   data: Uint8Array;
@@ -65,7 +65,7 @@ export function calculateFaceBounds(landmarks: FaceLandmark[]): FaceBounds {
   };
 }
 
-async function decodeImage(uri: string): Promise<DecodedImage> {
+export async function decodeImage(uri: string): Promise<DecodedImage> {
   try {
     const bytes = await new File(uri).bytes();
     const decoded = jpeg.decode(bytes, { useTArray: true });
@@ -119,7 +119,7 @@ function analyzePixels(image: DecodedImage, bounds: FaceBounds) {
 }
 
 export async function evaluateFaceQuality(
-  sampleUri: string,
+  image: DecodedImage,
   imageWidth: number,
   imageHeight: number,
   landmarks: FaceLandmark[],
@@ -141,7 +141,7 @@ export async function evaluateFaceQuality(
     bounds.height >= faceCapture.minFaceHeightRatio &&
     bounds.width * bounds.height >= faceCapture.minFaceAreaRatio;
   const rotationAccepted = isFacePoseWithinLimits(pose, faceCapture);
-  const pixels = await analyzePixels(await decodeImage(sampleUri), bounds);
+  const pixels = analyzePixels(image, bounds);
   const lightingAccepted =
     pixels.brightness !== null &&
     pixels.brightness >= faceCapture.minBrightness &&

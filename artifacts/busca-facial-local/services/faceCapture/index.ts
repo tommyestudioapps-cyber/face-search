@@ -8,7 +8,7 @@ import {
 import { alignFace } from './alignment';
 import { detectFacesWithMediaPipe } from './nativeAdapter';
 import { createAnalysisSample, normalizeImage } from './preprocessing';
-import { createDetectedFace, evaluateFaceQuality } from './quality';
+import { createDetectedFace, decodeImage, evaluateFaceQuality } from './quality';
 import {
   FaceCaptureError,
   type AlignedFace,
@@ -34,6 +34,7 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
   try {
     const qualitySample = await createAnalysisSample(normalized.uri);
     qualitySampleUri = qualitySample.uri;
+    const qualityImage = await decodeImage(qualitySample.uri);
     const result = await detectFacesWithMediaPipe(normalized.uri);
     const nativeFaces = result.faces;
 
@@ -48,7 +49,7 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
     for (const [id, nativeFace] of nativeFaces.entries()) {
       const landmarks = nativeFace.landmarks as FaceLandmark[];
       const evaluated = await evaluateFaceQuality(
-        qualitySampleUri,
+        qualityImage,
         normalized.width,
         normalized.height,
         landmarks,
