@@ -1,0 +1,85 @@
+Contexto: Fase 9H. Bug confirmado em device: após cancelar a
+indexação e voltar para a Home, os cards de estatísticas continuam
+mostrando 0 até o app ser reaberto. Causa: useFaceSearch.startIndexing
+só atualiza storedIndexStats quando result.status === 'completed'.
+Quando é 'cancelled', as fotos JÁ foram salvas em SQLite por cada
+saveIndexedPhoto, mas a UI não relê.
+
+Esta etapa toca UM arquivo:
+- artifacts/busca-facial-local/hooks/useFaceSearch.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Localizar em startIndexing o bloco:
+
+  try {
+    const result = await task.promise;
+    if (result.status === 'completed') {
+      const nextStats = await faceSearchModule.getStoredIndexStats();
+      if (mountedRef.current) {
+        setStoredIndexStats(nextStats);
+      }
+    }
+    if (mountedRef.current) {
+      setStatus(result.status === 'completed' ? 'ready' : 'cancelled');
+    }
+    return result;
+  } catch (caught) {
+    // ...
+  } finally {
+    // ...
+  }
+
+Substituir por:
+
+  try {
+    const result = await task.promise;
+    const nextStats = await faceSearchModule.getStoredIndexStats();
+    if (mountedRef.current) {
+      setStoredIndexStats(nextStats);
+      setStatus(result.status === 'completed' ? 'ready' : 'cancelled');
+      if (__DEV__) {
+        console.log(
+          `[Stats] pós-indexação status=${result.status} fotos=${nextStats.indexedPhotos} rostos=${nextStats.indexedFaces}`,
+        );
+      }
+    }
+    return result;
+  } catch (caught) {
+    // ...manter o catch atual sem alterações
+  } finally {
+    // ...manter o finally atual sem alterações
+  }
+
+Passo 2 — Validação
+
+2.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída.
+
+2.2 Rode `pnpm --filter @workspace/busca-facial-local run test:face-coordination`
+    e cole a saída.
+
+2.3 Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+    e cole a saída.
+
+Passo 3 — Relatório
+
+3.1 Cole o diff de hooks/useFaceSearch.ts.
+
+3.2 Confirme:
+  - getStoredIndexStats é chamado após task.promise em ambos os
+    status (completed e cancelled);
+  - setStoredIndexStats é chamado mesmo em cancelled;
+  - o log [Stats] pós-indexação foi adicionado;
+  - nada fora do arquivo foi alterado.
+
+Passo 4 — Git
+
+4.1 Rode `git log --oneline -3`.
+4.2 Rode `git status`.
+
+Regras:
+- Não faça commit manual.
+- Não altere nenhum outro arquivo.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.

@@ -234,14 +234,15 @@ export function useFaceSearch(): UseFaceSearchResult {
 
       try {
         const result = await task.promise;
-        if (result.status === 'completed') {
-          const nextStats = await faceSearchModule.getStoredIndexStats();
-          if (mountedRef.current) {
-            setStoredIndexStats(nextStats);
-          }
-        }
+        const nextStats = await faceSearchModule.getStoredIndexStats();
         if (mountedRef.current) {
+          setStoredIndexStats(nextStats);
           setStatus(result.status === 'completed' ? 'ready' : 'cancelled');
+          if (__DEV__) {
+            console.log(
+              `[Stats] pós-indexação status=${result.status} fotos=${nextStats.indexedPhotos} rostos=${nextStats.indexedFaces}`,
+            );
+          }
         }
         return result;
       } catch (caught) {
