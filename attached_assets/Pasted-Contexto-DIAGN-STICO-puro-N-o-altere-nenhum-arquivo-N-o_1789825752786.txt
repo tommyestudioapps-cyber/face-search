@@ -1,0 +1,64 @@
+Contexto: DIAGNÓSTICO puro. Não altere nenhum arquivo. Não faça
+commit, add, stash, checkout, reset, restore nem clean. Apenas leia
+e reporte.
+
+Objetivo: preparar a Fase 5, que vai substituir o cálculo heurístico
+de crop por um alinhamento baseado em template canônico (padrão
+ArcFace/MobileFaceNet). Antes de alterar, preciso do inventário abaixo.
+
+Reporte em seções numeradas, colando os trechos completos:
+
+1. Conteúdo completo de artifacts/busca-facial-local/constants/faceCapture.ts.
+   Se for longo, cole inteiro — quero ver todas as constantes.
+
+2. Conteúdo completo de
+   artifacts/busca-facial-local/services/faceCapture/alignmentGeometry.ts.
+   Este é o arquivo que será reescrito na Fase 5.
+
+3. Conteúdo completo de
+   artifacts/busca-facial-local/services/faceCapture/__tests__/alignmentGeometry.test.mjs.
+   Preciso saber exatamente o que os testes cobrem hoje, para
+   prever o impacto.
+
+4. Conteúdo completo de
+   artifacts/busca-facial-local/services/faceSearch/preprocessing.ts.
+   Quero confirmar como o rosto alinhado é redimensionado para o
+   tensor de entrada do TFLite (112x112), e se há alguma transformação
+   extra entre o crop e a inferência.
+
+5. Confirme explicitamente:
+   - o valor atual de faceCapture.alignedFaceSize
+   - o valor atual de faceCapture.input.width e faceCapture.input.height
+     em constants/faceSearch.ts (se existir)
+   - o valor atual de faceCapture.cropWidthMultiplier,
+     cropHeightMultiplier, targetEyeDistanceRatio, cropPaddingRatio
+
+6. Liste todos os arquivos do projeto que importam
+   calculateAlignmentCrop. Mostre arquivo, linha e trecho.
+
+7. Liste todos os arquivos do projeto que importam
+   transformPointForRotation ou rotatedDimensions. Mostre arquivo,
+   linha e trecho.
+
+8. Liste todos os arquivos de teste que referenciam qualquer função
+   de alignmentGeometry.ts. Mostre arquivo, linha e trecho.
+
+9. Existe algum teste que cobre:
+   - o caso de rostos muito inclinados (roll > 30 graus)?
+   - o caso de olhos muito próximos (rosto pequeno)?
+   - o caso de rostos encostados na borda?
+   Para cada um, diga "sim" ou "não" com base na leitura dos testes.
+
+10. Diga se o projeto tem alguma referência textual a "template",
+    "canonical", "arcface", "insightface", "alignment template" ou
+    similar em qualquer arquivo .ts, .tsx, .md ou comentário.
+    Comando sugerido:
+      grep -rin "template\|canonical\|arcface\|insightface" artifacts/busca-facial-local/services artifacts/busca-facial-local/constants artifacts/busca-facial-local/docs 2>/dev/null | head -30
+    Cole a saída completa.
+
+Regras:
+- Apenas leitura. Zero alteração.
+- Não proponha correções nesta etapa.
+- Não execute git add, commit, stash, reset, checkout, restore, clean.
+- Se algo não existir, diga "não existe".
+- Ao final, aguarde instrução.
