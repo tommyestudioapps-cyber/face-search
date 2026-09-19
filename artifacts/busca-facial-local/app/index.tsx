@@ -336,71 +336,41 @@ function Home({
             </View>
           </View>
 
-          <View style={styles.statsRow}>
+          {hasActiveFace ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Ver ${indexedPhotoCount} fotos indexadas`}
-              onPress={onOpenIndexed}
-              testID="open-indexed-photos"
+              accessibilityLabel="Continuar busca com rosto selecionado"
+              onPress={onContinueFace}
+              testID="continue-active-face"
               style={({ pressed }) => [
-                styles.statCard,
-                styles.statCardActionable,
-                { backgroundColor: colors.card },
-                pressed ? styles.statCardPressed : null,
+                styles.continueCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
+                pressed ? styles.pressed : null,
               ]}
             >
-              <View style={styles.statCardTop}>
-                <IconCircle
-                  name="image"
-                  color={colors.primary}
-                  backgroundColor={colors.accent}
-                />
-                <Feather
-                  name="arrow-up-right"
-                  size={15}
-                  color={colors.primary}
-                />
+              <View style={[styles.continueIcon, { backgroundColor: colors.accent }]}>
+                <Feather name="user-check" size={19} color={colors.primary} />
               </View>
-              <Text style={[styles.statValue, { color: colors.foreground }]}>
-                {String(indexedPhotoCount)}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
-                fotos indexadas
-              </Text>
+              <View style={styles.continueCopy}>
+                <Text style={[styles.continueTitle, { color: colors.foreground }]}>
+                  Continuar busca
+                </Text>
+                <Text
+                  style={[styles.continueSubtitle, { color: colors.mutedForeground }]}
+                >
+                  Um rosto já está selecionado e pronto para buscar
+                </Text>
+              </View>
+              <Feather name="arrow-right" size={18} color={colors.primary} />
             </Pressable>
+          ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Ver ${indexedFaceCount} rostos indexados`}
-              onPress={onOpenIndexedFaces}
-              testID="open-indexed-faces"
-              style={({ pressed }) => [
-                styles.statCard,
-                styles.statCardActionable,
-                { backgroundColor: colors.card },
-                pressed ? styles.statCardPressed : null,
-              ]}
-            >
-              <View style={styles.statCardTop}>
-                <IconCircle
-                  name="users"
-                  color="#34D399"
-                  backgroundColor="#123429"
-                />
-                <Feather
-                  name="arrow-up-right"
-                  size={15}
-                  color="#34D399"
-                />
-              </View>
-              <Text style={[styles.statValue, { color: colors.foreground }]}>
-                {String(indexedFaceCount)}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
-                rostos indexados
-              </Text>
-            </Pressable>
-          </View>
+          <IndexStatsCards
+            photoCount={indexedPhotoCount}
+            faceCount={indexedFaceCount}
+            onPressPhotos={onOpenIndexed}
+            onPressFaces={onOpenIndexedFaces}
+          />
 
           <View style={[styles.privacyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <IconCircle name="shield" color="#34D399" backgroundColor="#123429" size={18} />
@@ -440,10 +410,14 @@ function SelectPhoto({
   captureError,
   captureProcessing,
   captureStatus,
+  indexedPhotoCount,
+  indexedFaceCount,
   onPickLibrary,
   onTakePhoto,
   onSelectFace,
   onSearch,
+  onOpenIndexed,
+  onOpenIndexedFaces,
   onBack,
 }: {
   selectedImage: string | null;
@@ -456,10 +430,14 @@ function SelectPhoto({
   captureError: FaceCaptureError | null;
   captureProcessing: boolean;
   captureStatus: FaceCaptureStatus;
+  indexedPhotoCount: number;
+  indexedFaceCount: number;
   onPickLibrary: () => void;
   onTakePhoto: () => void;
   onSelectFace: (faceId: number) => void;
   onSearch: () => void;
+  onOpenIndexed: () => void;
+  onOpenIndexedFaces: () => void;
   onBack: () => void;
 }) {
   const colors = useColors();
@@ -542,6 +520,15 @@ function SelectPhoto({
           faceCount={faces.length}
           hasAlignedFace={Boolean(alignedImageUri)}
         />
+
+        <View style={styles.selectStatsWrap}>
+          <IndexStatsCards
+            photoCount={indexedPhotoCount}
+            faceCount={indexedFaceCount}
+            onPressPhotos={onOpenIndexed}
+            onPressFaces={onOpenIndexedFaces}
+          />
+        </View>
 
         {alignedImageUri ? (
           <View style={[styles.alignedPreview, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -965,6 +952,13 @@ export default function HomeScreen() {
     void refreshIndexedPhotos();
   };
 
+  const continueFaceSearch = () => {
+    if (__DEV__) {
+      console.log('[Face] continuando busca com rosto existente');
+    }
+    setScreen('select');
+  };
+
   const beginSearch = async () => {
     if (
       !selectedImage ||
@@ -1032,6 +1026,8 @@ export default function HomeScreen() {
             captureError={captureError}
             captureProcessing={captureProcessing}
             captureStatus={captureStatus}
+            indexedPhotoCount={storedIndexStats.indexedPhotos}
+            indexedFaceCount={storedIndexStats.indexedFaces}
             onPickLibrary={pickFromLibrary}
             onTakePhoto={takePhoto}
             onSelectFace={(faceId) => {
@@ -1039,6 +1035,8 @@ export default function HomeScreen() {
               void alignFace(faceId);
             }}
             onSearch={beginSearch}
+            onOpenIndexed={openIndexed}
+            onOpenIndexedFaces={openIndexedFaces}
             onBack={leaveSelection}
           />
         );
@@ -1081,6 +1079,8 @@ export default function HomeScreen() {
             onSettings={() => setShowIndexSettings(true)}
             onOpenIndexed={openIndexed}
             onOpenIndexedFaces={openIndexedFaces}
+            onContinueFace={continueFaceSearch}
+            hasActiveFace={Boolean(alignedFace)}
             indexedPhotoCount={storedIndexStats.indexedPhotos}
             indexedFaceCount={storedIndexStats.indexedFaces}
           />
@@ -1108,6 +1108,7 @@ export default function HomeScreen() {
     refreshIndexedPhotos,
     openIndexed,
     openIndexedFaces,
+    continueFaceSearch,
     cancelIndexing,
     results,
   ]);
@@ -1202,23 +1203,34 @@ const styles = StyleSheet.create({
   readyPill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 6 },
   readyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#34D399' },
   readyText: { fontSize: 9, fontFamily: 'Inter_700Bold', letterSpacing: 0.6, color: '#6EE7B7' },
-  statsRow: { flexDirection: 'row', gap: 12 },
-  statCard: { flex: 1, minHeight: 121, borderRadius: 19, padding: 14 },
-  statCardActionable: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  statCardPressed: {
-    opacity: 0.75,
-    transform: [{ scale: 0.98 }],
-  },
-  statCardTop: {
+  continueCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 17,
+    padding: 14,
+    marginBottom: 14,
   },
-  statValue: { fontSize: 24, fontFamily: 'Inter_700Bold', marginTop: 11, letterSpacing: -0.7 },
-  statLabel: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
+  continueIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueCopy: { flex: 1 },
+  continueTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
+  },
+  continueSubtitle: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  selectStatsWrap: { marginTop: 14 },
   statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   privacyCard: { flexDirection: 'row', alignItems: 'center', gap: 11, borderRadius: 17, borderWidth: 1, padding: 13, marginTop: 12 },
   privacyCardCopy: { flex: 1 },
