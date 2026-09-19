@@ -21,35 +21,27 @@ export async function alignFace(
   }
 
   const rotationDegrees = -face.rollDegrees;
-  let rotatedUri: string | null = null;
 
   try {
-    const rotated = await manipulateAsync(
-      sourceUri,
-      [{ rotate: rotationDegrees }],
-      {
-        compress: 0.92,
-        format: SaveFormat.JPEG,
-      },
+    const rotatedDims = rotatedDimensions(
+      imageWidth,
+      imageHeight,
+      rotationDegrees,
     );
-    rotatedUri = rotated.uri;
-    const dimensions =
-      rotated.width > 0 && rotated.height > 0
-        ? { width: rotated.width, height: rotated.height }
-        : rotatedDimensions(imageWidth, imageHeight, rotationDegrees);
     const crop = calculateAlignmentCrop(
       face.landmarks,
       imageWidth,
       imageHeight,
       rotationDegrees,
-      dimensions.width,
-      dimensions.height,
+      rotatedDims.width,
+      rotatedDims.height,
       faceCapture,
       keyLandmarks,
     );
     const aligned = await manipulateAsync(
-      rotated.uri,
+      sourceUri,
       [
+        { rotate: rotationDegrees },
         { crop },
         {
           resize: {
@@ -80,14 +72,5 @@ export async function alignFace(
     }
     const message = error instanceof Error ? error.message : 'Falha ao alinhar o rosto.';
     throw new FaceCaptureError('processing-failed', message);
-  } finally {
-    if (rotatedUri && rotatedUri !== sourceUri) {
-      try {
-        const { File } = await import('expo-file-system');
-        new File(rotatedUri).delete();
-      } catch {
-        // Temporary cleanup is best-effort; the source image is never deleted.
-      }
-    }
   }
 }

@@ -1,0 +1,134 @@
+Contexto: Fase 4. alignment.ts hoje faz duas passadas de
+manipulateAsync:
+  1) rotate da imagem inteira (gera arquivo intermediário grande)
+  2) crop + resize no intermediário
+Vamos unificar em uma única chamada com [{rotate},{crop},{resize}].
+
+Inventário já confirmado:
+- calculateAlignmentCrop já recebe rotatedWidth/rotatedHeight e
+  calcula o crop nesse espaço. Não precisa mudar.
+- rotatedDimensions(width, height, degrees) já existe em
+  alignmentGeometry.ts e retorna as dimensões pós-rotação.
+- O cleanup do rotatedUri no finally é o único consumidor do
+  intermediário.
+
+Esta etapa toca UM arquivo:
+- artifacts/busca-facial-local/services/faceCapture/alignment.ts
+
+Nenhum outro arquivo deve ser alterado.
+
+Passo 1 — Reescrever o corpo da função alignFace
+
+Substituir o bloco try/catch/finally atual pela versão abaixo.
+Preservar: as validações iniciais (keyLandmarks, leftEye/rightEye),
+o cálculo de rotationDegrees, o tratamento de FaceCaptureError, o
+formato do retorno, os campos de AlignedFace.
+
+  const rotationDegrees = -face.rollDegrees;
+
+  try {
+    const rotatedDims = rotatedDimensions(
+      imageWidth,
+      imageHeight,
+      rotationDegrees,
+    );
+    const crop = calculateAlignmentCrop(
+      face.landmarks,
+      imageWidth,
+      imageHeight,
+      rotationDegrees,
+      rotatedDims.width,
+      rotatedDims.height,
+      faceCapture,
+      keyLandmarks,
+    );
+    const aligned = await manipulateAsync(
+      sourceUri,
+      [
+        { rotate: rotationDegrees },
+        { crop },
+        {
+          resize: {
+            width: faceCapture.alignedFaceSize,
+            height: faceCapture.alignedFaceSize,
+          },
+        },
+      ],
+      {
+        compress: 0.94,
+        format: SaveFormat.JPEG,
+      },
+    );
+
+    return {
+      uri: aligned.uri,
+      width: aligned.width,
+      height: aligned.height,
+      faceId: face.id,
+      standardized: true,
+      sourceUri,
+      rotationDegrees,
+      crop,
+    };
+  } catch (error) {
+    if (error instanceof FaceCaptureError) {
+      throw error;
+    }
+    const message =
+      error instanceof Error ? error.message : 'Falha ao alinhar o rosto.';
+    throw new FaceCaptureError('processing-failed', message);
+  }
+
+Regras importantes:
+- Remover a variável `rotatedUri` completamente.
+- Remover o bloco `finally` inteiro (não há mais intermediário para
+  limpar). A imagem sourceUri nunca foi deletada por esta função e
+  continua não sendo.
+- Remover o import dinâmico de File (o `await import('expo-file-system')`
+  que existia dentro do finally).
+- Não alterar o import de `rotatedDimensions` nem de
+  `calculateAlignmentCrop`.
+- Não alterar as validações iniciais.
+- Não alterar a assinatura da função.
+- Não alterar o tipo de retorno.
+
+Passo 2 — Validação
+
+2.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa.
+
+2.2 a 2.6 Rode os cinco runners de teste na ordem habitual
+    (face-capture, face-search, face-overlay, face-settings,
+    face-coordination). Cole as saídas completas.
+
+Passo 3 — Relatório
+
+3.1 Cole o diff unified de alignment.ts.
+
+3.2 Confirme explicitamente:
+  - existe agora UMA única chamada a manipulateAsync em alignment.ts;
+  - o array de ações é exatamente [{rotate}, {crop}, {resize}] nessa
+    ordem;
+  - não existe mais a variável rotatedUri;
+  - não existe mais bloco finally;
+  - não existe mais import dinâmico de expo-file-system dentro desta
+    função;
+  - o retorno mantém todos os campos originais;
+  - apenas alignment.ts foi alterado.
+
+Passo 4 — Git (sem alterar nada)
+
+4.1 Rode `git log --oneline -3` e cole a saída.
+4.2 Rode `git status` e cole a saída.
+4.3 Se estiver limpo, apenas reporte qual commit contém a Fase 4.
+    Não execute git add nem git commit manualmente.
+
+Regras finais:
+- Não altere nenhum arquivo fora de alignment.ts.
+- Não mexa em alignmentGeometry.ts (rotatedDimensions e
+  calculateAlignmentCrop já estão corretas).
+- Não mexa em preprocessing.ts.
+- Não mexa em nada de services/faceSearch/.
+- Não faça commit manual.
+- Se algo falhar, PARE e reporte.
+- Ao final, aguarde instrução.
