@@ -1,0 +1,118 @@
+Contexto: Fase 1B. Diagnóstico confirmado que `confidenceAccepted` em
+services/faceCapture/quality.ts sempre vale `true` no fluxo real,
+porque:
+- index.ts passa `true` fixo em `detectorConfidenceAccepted`;
+- `confidence` nunca é passado (fica null);
+- o MediaPipe já filtra por `minFaceDetectionConfidence` em
+  nativeAdapter.ts antes de qualquer rosto chegar ao JS;
+- `'low-confidence'` é código morto em todo o pipeline.
+
+Decisão: remover o caminho morto. Preservar `confidence` e
+`confidenceSource` em DetectedFace como metadado de auditoria (eles
+dizem de onde veio a decisão, o que é informação honesta).
+
+Esta etapa toca múltiplos arquivos, mas um único conceito. Faça tudo
+em uma única passada, sem commits intermediários.
+
+Passo 1 — Leitura de confirmação (não altera nada):
+
+Antes de alterar, liste para cada arquivo abaixo os trechos exatos que
+serão removidos ou alterados, com linha e trecho. Se algum trecho
+esperado não existir, PARE e reporte.
+
+Arquivos a inspecionar:
+- services/faceCapture/quality.ts
+- services/faceCapture/types.ts
+- services/faceCapture/index.ts
+- components/FaceCaptureFeedback.tsx
+- services/faceCapture/__tests__/captureFlow.test.mjs
+
+Passo 2 — Alterações:
+
+2.1 services/faceCapture/quality.ts
+- Remover o parâmetro `detectorConfidenceAccepted: boolean` da
+  assinatura de `evaluateFaceQuality`.
+- Remover o parâmetro `confidence: number | null = null` da assinatura.
+- Remover o cálculo `const confidenceAccepted = ...`.
+- Remover a linha `if (!confidenceAccepted) issues.push('low-confidence');`.
+- Remover `confidenceAccepted` do objeto retornado dentro de `quality`.
+- Remover `confidenceAccepted` da condição de `accepted` no objeto
+  `quality` (era apenas uma das condições ligadas por &&).
+- NÃO remover `createDetectedFace` nem os campos
+  `confidence: null` e `confidenceSource: 'mediapipe-threshold'` que
+  ela grava. Esses permanecem como metadado de auditoria.
+- Manter imports existentes que continuarem em uso.
+
+2.2 services/faceCapture/types.ts
+- Remover `confidenceAccepted: boolean;` de `FaceQuality`.
+- Remover `'low-confidence'` de `FaceQualityIssue`.
+- Remover `'low-confidence'` de `FaceCaptureErrorCode`.
+- Não alterar nenhum outro tipo.
+
+2.3 services/faceCapture/index.ts
+- Na chamada a `evaluateFaceQuality` dentro de `detectFaces`, remover
+  o argumento `true` (que era `detectorConfidenceAccepted`).
+- Na função `qualityIssueMessage`, remover o case
+  `case 'low-confidence': return '...'`.
+- Não alterar nenhuma outra função.
+
+2.4 components/FaceCaptureFeedback.tsx
+- Remover o case `case 'low-confidence': return '...'`.
+- Não alterar nenhum outro trecho.
+
+2.5 services/faceCapture/__tests__/captureFlow.test.mjs
+- Remover a linha `confidenceAccepted: true,` da fixture onde ela
+  aparecer.
+- Não alterar nenhum outro teste.
+
+Passo 3 — Validação:
+
+3.1 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa. O typecheck DEVE acusar qualquer uso
+    residual de `confidenceAccepted`, `'low-confidence'` ou dos
+    parâmetros removidos. Se acusar, PARE e reporte em vez de tentar
+    adivinhar.
+
+3.2 Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+    e cole a saída completa.
+
+3.3 Rode `pnpm --filter @workspace/busca-facial-local run test:face-search`
+    e cole a saída completa.
+
+3.4 Rode `pnpm --filter @workspace/busca-facial-local run test:face-overlay`
+    e cole a saída completa.
+
+3.5 Rode `pnpm --filter @workspace/busca-facial-local run test:face-settings`
+    e cole a saída completa.
+
+3.6 Rode `pnpm --filter @workspace/busca-facial-local run test:face-coordination`
+    e cole a saída completa.
+
+Passo 4 — Relatório final:
+
+4.1 Cole o diff unified de todos os arquivos alterados.
+
+4.2 Liste os arquivos alterados, um por linha.
+
+4.3 Confirme explicitamente:
+    - `confidenceAccepted` não existe mais em nenhum arquivo do projeto;
+    - `'low-confidence'` não existe mais em nenhum arquivo do projeto;
+    - `detectorConfidenceAccepted` não existe mais em nenhum arquivo do
+      projeto;
+    - `createDetectedFace` ainda grava `confidence: null` e
+      `confidenceSource: 'mediapipe-threshold'`;
+    - o parâmetro `confidence` não existe mais em
+      `evaluateFaceQuality`.
+
+Regras:
+- Não faça commit.
+- Não altere nenhum arquivo fora dos 5 listados no Passo 2.
+- Não instale dependências.
+- Não toque em `nativeAdapter.ts`, `nativeAdapterCore.ts`,
+  `landmarkGeometry.ts`, `alignmentGeometry.ts`, `alignment.ts`,
+  `preprocessing.ts`, nem em nenhum arquivo de `services/faceSearch/`.
+- Não toque em `constants/faceCapture.ts` (as constantes
+  `minDetectionConfidence`, `minPresenceConfidence` e
+  `minTrackingConfidence` continuam sendo usadas pelo nativeAdapter).
+- Se algum passo falhar inesperadamente, PARE e reporte o estado exato.
+- Ao final, aguarde instrução.

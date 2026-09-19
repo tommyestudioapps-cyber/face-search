@@ -51,7 +51,6 @@ function createQuality(landmarks) {
     rotationAccepted: true,
     lightingAccepted: true,
     sharpnessAccepted: true,
-    confidenceAccepted: true,
     brightness: 128,
     sharpness: 64,
     rollDegrees: 0,

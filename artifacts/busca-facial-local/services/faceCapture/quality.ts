@@ -123,8 +123,6 @@ export async function evaluateFaceQuality(
   imageWidth: number,
   imageHeight: number,
   landmarks: FaceLandmark[],
-  detectorConfidenceAccepted: boolean,
-  confidence: number | null = null,
 ): Promise<{
   bounds: FaceBounds;
   yawDegrees: number | null;
@@ -143,10 +141,6 @@ export async function evaluateFaceQuality(
     bounds.height >= faceCapture.minFaceHeightRatio &&
     bounds.width * bounds.height >= faceCapture.minFaceAreaRatio;
   const rotationAccepted = isFacePoseWithinLimits(pose, faceCapture);
-  const confidenceAccepted =
-    confidence === null
-      ? detectorConfidenceAccepted
-      : confidence >= faceCapture.minDetectionConfidence;
   const pixels = await analyzePixels(await decodeImage(sampleUri), bounds);
   const lightingAccepted =
     pixels.brightness !== null &&
@@ -166,7 +160,6 @@ export async function evaluateFaceQuality(
     issues.push('excessive-light');
   }
   if (!sharpnessAccepted) issues.push('blur-detected');
-  if (!confidenceAccepted) issues.push('low-confidence');
   const reason: FaceQuality['reason'] = issues[0] ?? 'accepted';
 
   return {
@@ -181,15 +174,13 @@ export async function evaluateFaceQuality(
         faceSizeAccepted &&
         rotationAccepted &&
         lightingAccepted &&
-        sharpnessAccepted &&
-        confidenceAccepted,
+        sharpnessAccepted,
       faceSizeAccepted,
       faceInFrameAccepted,
       landmarksAccepted,
       rotationAccepted,
       lightingAccepted,
       sharpnessAccepted,
-      confidenceAccepted,
       brightness: pixels.brightness,
       sharpness: pixels.sharpness,
       yawDegrees: pose.yawDegrees,

@@ -27,8 +27,6 @@ function getErrorMessage(error: FaceCaptureError): string {
       return 'O rosto está muito pequeno na imagem.';
     case 'face-out-of-frame':
       return 'O rosto precisa estar completamente dentro do enquadramento.';
-    case 'low-confidence':
-      return 'A detecção do rosto não teve confiança suficiente.';
     case 'excessive-rotation':
       return 'Gire a imagem para deixar o rosto mais reto.';
     case 'insufficient-light':

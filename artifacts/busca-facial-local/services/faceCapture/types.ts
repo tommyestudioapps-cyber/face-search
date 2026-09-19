@@ -64,7 +64,6 @@ export interface NativeDetectionResult {
 export type FaceQualityIssue =
   | 'face-too-small'
   | 'face-out-of-frame'
-  | 'low-confidence'
   | 'excessive-rotation'
   | 'insufficient-light'
   | 'excessive-light'
@@ -79,7 +78,6 @@ export interface FaceQuality {
   rotationAccepted: boolean;
   lightingAccepted: boolean;
   sharpnessAccepted: boolean;
-  confidenceAccepted: boolean;
   brightness: number | null;
   sharpness: number | null;
   yawDegrees: number | null;
@@ -156,7 +154,6 @@ export type FaceCaptureErrorCode =
   | 'multiple-faces'
   | 'face-too-small'
   | 'face-out-of-frame'
-  | 'low-confidence'
   | 'excessive-rotation'
   | 'insufficient-light'
   | 'excessive-light'
