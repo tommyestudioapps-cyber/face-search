@@ -4,3 +4,4 @@
 - [Auditoria de dependências Expo](security-audit.md) — `image-size` permanece sem patch publicado e `esbuild` depende da compatibilidade do plugin de logging.
 - [Plugins de configuração Expo 54](expo-config-plugins.md) — use `expo/config-plugins`; a dependência direta `@expo/config-plugins` é rejeitada pelo diagnóstico do SDK.
 - [Carregamento TFLite no Android](tflite-asset-loading.md) — no APK release, resolva o asset via `expo-asset` e passe um `localUri` `file://` ao fast-tflite.
+- [Inicialização do Dev Client](dev-client-startup.md) — montar o provedor global de teclado fechava o app Android ao carregar o bundle; mantenha-o fora da raiz enquanto não for necessário.
