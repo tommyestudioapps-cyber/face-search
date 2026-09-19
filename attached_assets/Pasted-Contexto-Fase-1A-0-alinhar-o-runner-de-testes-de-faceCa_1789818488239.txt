@@ -1,0 +1,83 @@
+Contexto: Fase 1A.0 — alinhar o runner de testes de faceCapture ao
+padrão já usado por faceSearch. Diagnóstico confirmou:
+- `tsx` está declarado em artifacts/busca-facial-local/package.json
+  como "catalog:" e resolvido em pnpm-lock.yaml.
+- O script `test:face-search` já usa `--import tsx` e não usa
+  `--experimental-strip-types`.
+- O script `test:face-capture` ainda usa `--experimental-strip-types`,
+  que não resolve imports de valor sem extensão em .ts.
+
+A mudança proposta é de UMA linha em package.json:
+trocar `--experimental-strip-types` por `--import tsx` no script
+`test:face-capture`.
+
+Mas antes de aplicar, quero validar o padrão.
+
+Passo 1 — Validar o padrão existente (não altera nada):
+
+Rode `pnpm --filter @workspace/busca-facial-local run test:face-search`
+e cole a saída completa, sem resumir.
+
+Reporte:
+- quantos testes passaram;
+- quantos falharam;
+- se houve erro de resolução de módulo.
+
+Se test:face-search FALHAR, PARE AQUI. Não altere nada. Reporte o
+erro exato e aguarde instrução.
+
+Se test:face-search PASSAR, siga para o Passo 2.
+
+Passo 2 — Aplicar a mudança em package.json:
+
+Arquivo: artifacts/busca-facial-local/package.json
+Script: test:face-capture
+
+Antes:
+  "test:face-capture": "node --experimental-strip-types --test services/faceCapture/__tests__/*.test.mjs"
+
+Depois:
+  "test:face-capture": "node --import tsx --test services/faceCapture/__tests__/*.test.mjs"
+
+Regras:
+- Não altere nenhum outro script.
+- Não altere `--experimental-sqlite` do test:face-search.
+- Não altere nenhuma outra chave do package.json.
+- Não instale dependências (tsx já está declarado).
+- Não toque em tsconfig, testes, nem em serviços.
+
+Passo 3 — Validar a correção:
+
+3.1 Rode `pnpm --filter @workspace/busca-facial-local run test:face-capture`
+    e cole a saída completa, sem resumir.
+
+3.2 Reporte explicitamente:
+    - quantos testes passaram;
+    - quantos falharam;
+    - quais falharam, se houver;
+    - se o erro ERR_MODULE_NOT_FOUND desapareceu.
+
+3.3 Rode `pnpm --filter @workspace/busca-facial-local run typecheck`
+    e cole a saída completa.
+
+3.4 Rode `pnpm --filter @workspace/busca-facial-local run test:face-overlay`
+    e cole a saída. (Só para sabermos se ele usa o mesmo padrão quebrado;
+    NÃO altere esse script nesta etapa.)
+
+3.5 Rode `pnpm --filter @workspace/busca-facial-local run test:face-settings`
+    e cole a saída. (Mesmo objetivo: apenas informar.)
+
+3.6 Rode `pnpm --filter @workspace/busca-facial-local run test:face-coordination`
+    e cole a saída. (Mesmo objetivo: apenas informar.)
+
+Passo 4 — Diff:
+
+Mostre apenas o diff unified de artifacts/busca-facial-local/package.json.
+
+Regras finais:
+- Não faça commit.
+- Não altere outros arquivos.
+- Não proponha outras correções.
+- Se qualquer passo falhar inesperadamente, PARE e reporte o estado
+  exato em vez de continuar.
+- Ao final, aguarde próxima instrução.

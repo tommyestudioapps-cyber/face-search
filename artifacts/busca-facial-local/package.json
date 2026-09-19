@@ -8,7 +8,7 @@
     "build": "node scripts/build.js",
     "build:apk": "eas build --platform android --profile preview",
     "serve": "node server/serve.js",
-    "test:face-capture": "node --experimental-strip-types --test services/faceCapture/__tests__/*.test.mjs",
+    "test:face-capture": "node --import tsx --test services/faceCapture/__tests__/*.test.mjs",
     "test:face-overlay": "node --experimental-strip-types --test components/__tests__/faceOverlayLayout.test.mjs",
     "test:face-settings": "node --experimental-strip-types --test components/__tests__/indexSettingsFlow.test.mjs",
     "test:face-coordination": "node --experimental-strip-types --test hooks/__tests__/faceSearchOperationGate.test.mjs",
