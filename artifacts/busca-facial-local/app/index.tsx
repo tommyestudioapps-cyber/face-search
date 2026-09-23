@@ -1145,6 +1145,11 @@ export default function HomeScreen() {
       if (mountedRef.current) {
         setBackgroundIndexConsentState('declined');
         setShowBackgroundIndexConsent(false);
+        setBackgroundIndexState((current) => ({
+          ...current,
+          status: 'paused',
+          lastError: null,
+        }));
       }
       await clearBackgroundIndexCursor();
       try {
@@ -1204,6 +1209,11 @@ export default function HomeScreen() {
       await setBackgroundIndexConsent('declined');
       if (mountedRef.current) {
         setBackgroundIndexConsentState('declined');
+        setBackgroundIndexState((current) => ({
+          ...current,
+          status: 'paused',
+          lastError: null,
+        }));
       }
       await clearBackgroundIndexCursor();
       try {
@@ -1231,6 +1241,13 @@ export default function HomeScreen() {
       if (mountedRef.current) {
         setIsUpdatingBackgroundIndex(false);
       }
+    }
+  };
+
+  const clearLocalIndex = async (): Promise<void> => {
+    await clearIndex();
+    if (mountedRef.current) {
+      setBackgroundIndexState({ ...initialBackgroundIndexState });
     }
   };
 
@@ -1531,7 +1548,7 @@ export default function HomeScreen() {
         clearState={faceSearchClearState}
         progress={faceSearchProgress}
         onClose={() => setShowIndexSettings(false)}
-        onClearIndex={clearIndex}
+        onClearIndex={clearLocalIndex}
         backgroundIndexEnabled={
           backgroundIndexConsent === 'accepted' && hasGalleryPhotoAccess
         }

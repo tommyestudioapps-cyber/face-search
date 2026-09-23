@@ -16,6 +16,8 @@ test('usa os identificadores do painel de configurações no roteiro', () => {
     close: 'close-index-settings',
     clear: 'clear-local-index',
     backgroundIndexToggle: 'background-index-toggle',
+    backgroundIndexPause: 'background-index-pause',
+    backgroundIndexPrepare: 'background-index-prepare',
   });
   assert.equal(INDEX_CLEAR_ALERT_TITLE, 'Limpar índice local?');
   assert.match(INDEX_CLEAR_ALERT_MESSAGE, /fotos originais.*não serão apagadas/);
