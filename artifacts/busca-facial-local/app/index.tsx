@@ -1085,11 +1085,11 @@ export default function HomeScreen() {
       return;
     }
     setShowReward(false);
+    setMatchesReturnScreen(screen);
     setScreen('analyzing');
     try {
       const searchSummary = await indexAndSearch(alignedFace, selectedAlbumId);
       if (searchSummary) {
-        setMatchesReturnScreen(null);
         setScreen('results');
       }
     } catch {
