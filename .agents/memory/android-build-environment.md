@@ -32,3 +32,9 @@ Depois de executar o prebuild, o manifesto Expo pode receber versões nativas ad
 **Why:** O builder rejeitou a instalação porque o manifesto e o importer do lockfile divergiam em Expo e React.
 
 **How to apply:** Rode uma sincronização de lockfile e valide com `pnpm install --frozen-lockfile --lockfile-only` antes de reenviar o commit ao repositório do build.
+
+Builds Android remotos do Expo também podem ser recusados por cota mensal da conta, mesmo com o projeto e o repositório corretamente configurados.
+
+**Why:** A validação nativa fica bloqueada antes da fila de compilação quando a cota do serviço está esgotada; bundle web e configuração estática não substituem um APK.
+
+**How to apply:** Confirme a cota antes de repetir o build remoto; se estiver bloqueado, entregue a validação estática e os testes locais sem alegar que o APK foi validado.
