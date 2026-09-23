@@ -8,9 +8,15 @@ import {
   type IndexedPhoto,
   type StoredIndexStats,
 } from './types';
+import type {
+  BackgroundIndexState,
+  BackgroundIndexStatePatch,
+  BackgroundIndexScope,
+  BackgroundIndexStatus,
+} from '../backgroundIndexing/status';
 
 const DATABASE_NAME = 'face-search.sqlite';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const INDEXED_STATUS = 'indexed';
 
 interface Dimensions {
@@ -49,6 +55,28 @@ interface IndexedPhotoRow {
 interface ModelVersionRow {
   model_version: string;
 }
+
+interface BackgroundIndexStateRow {
+  status: string;
+  scope: string;
+  processed_assets: number;
+  total_assets: number | null;
+  last_asset_id: string | null;
+  last_started_at: number | null;
+  last_completed_at: number | null;
+  last_error: string | null;
+}
+
+const DEFAULT_BACKGROUND_INDEX_STATE: BackgroundIndexState = {
+  status: 'idle',
+  scope: 'gallery',
+  processedAssets: 0,
+  totalAssets: null,
+  lastAssetId: null,
+  lastStartedAt: null,
+  lastCompletedAt: null,
+  lastError: null,
+};
 
 function unsupportedOnWeb(): FaceRecognitionError {
   return new FaceRecognitionError(
@@ -262,6 +290,20 @@ async function migrateSchema(database: SQLiteDatabase): Promise<void> {
           lease_until INTEGER
         );
         INSERT OR IGNORE INTO gallery_scan (id, generation, active) VALUES (1, 0, 0);
+        CREATE TABLE IF NOT EXISTS background_index_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          status TEXT NOT NULL,
+          scope TEXT NOT NULL,
+          processed_assets INTEGER NOT NULL DEFAULT 0,
+          total_assets INTEGER,
+          last_asset_id TEXT,
+          last_started_at INTEGER,
+          last_completed_at INTEGER,
+          last_error TEXT
+        );
+        INSERT OR IGNORE INTO background_index_state (
+          id, status, scope, processed_assets
+        ) VALUES (1, 'idle', 'gallery', 0);
         PRAGMA user_version = ${SCHEMA_VERSION};
       `);
     });
@@ -277,6 +319,20 @@ async function migrateSchema(database: SQLiteDatabase): Promise<void> {
           lease_until INTEGER
         );
         INSERT INTO gallery_scan (id, generation, active) VALUES (1, 0, 0);
+        CREATE TABLE background_index_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          status TEXT NOT NULL,
+          scope TEXT NOT NULL,
+          processed_assets INTEGER NOT NULL DEFAULT 0,
+          total_assets INTEGER,
+          last_asset_id TEXT,
+          last_started_at INTEGER,
+          last_completed_at INTEGER,
+          last_error TEXT
+        );
+        INSERT INTO background_index_state (
+          id, status, scope, processed_assets
+        ) VALUES (1, 'idle', 'gallery', 0);
         PRAGMA user_version = ${SCHEMA_VERSION};
       `);
     });
@@ -285,6 +341,40 @@ async function migrateSchema(database: SQLiteDatabase): Promise<void> {
       await transaction.execAsync(`
         ALTER TABLE gallery_scan ADD COLUMN lease_owner TEXT;
         ALTER TABLE gallery_scan ADD COLUMN lease_until INTEGER;
+        CREATE TABLE background_index_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          status TEXT NOT NULL,
+          scope TEXT NOT NULL,
+          processed_assets INTEGER NOT NULL DEFAULT 0,
+          total_assets INTEGER,
+          last_asset_id TEXT,
+          last_started_at INTEGER,
+          last_completed_at INTEGER,
+          last_error TEXT
+        );
+        INSERT INTO background_index_state (
+          id, status, scope, processed_assets
+        ) VALUES (1, 'idle', 'gallery', 0);
+        PRAGMA user_version = ${SCHEMA_VERSION};
+      `);
+    });
+  } else if (currentVersion === 3) {
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.execAsync(`
+        CREATE TABLE background_index_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          status TEXT NOT NULL,
+          scope TEXT NOT NULL,
+          processed_assets INTEGER NOT NULL DEFAULT 0,
+          total_assets INTEGER,
+          last_asset_id TEXT,
+          last_started_at INTEGER,
+          last_completed_at INTEGER,
+          last_error TEXT
+        );
+        INSERT INTO background_index_state (
+          id, status, scope, processed_assets
+        ) VALUES (1, 'idle', 'gallery', 0);
         PRAGMA user_version = ${SCHEMA_VERSION};
       `);
     });
