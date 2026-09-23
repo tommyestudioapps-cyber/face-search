@@ -1100,20 +1100,15 @@ export default function HomeScreen() {
   };
 
   const goHome = () => {
-    void resetCapture({ preserveSession: true });
-    setSelectedImage(null);
     setScreen('home');
   };
 
   const leaveSelection = () => {
-    void resetCapture({ preserveSession: true });
-    setSelectedImage(null);
     setScreen('home');
   };
 
   const dismissSearchProgress = () => {
     cancelIndexing();
-    void resetCapture({ preserveSession: true });
     setScreen('select');
   };
 
