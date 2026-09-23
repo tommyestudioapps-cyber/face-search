@@ -15,11 +15,11 @@ O `expo install --check` pode ser executado sem token e confirmar dependências,
 
 **How to apply:** Registrar o erro do Doctor como diagnóstico inconclusivo, validar a configuração com o CLI Expo do próprio projeto e não substituir a validação nativa por esse resultado.
 
-Este workspace pode executar o prebuild Android e validar plugins/assets, mas não dispõe de JDK, Android SDK, Gradle instalado ou ADB para compilar e instalar um APK localmente; o APK precisa vir de um build Android externo.
+Este workspace pode expor Java, Gradle wrapper e `adb`, mas não dispõe necessariamente do Android SDK ou de um aparelho conectado; o prebuild valida plugins/assets, porém um APK instalável ainda depende de um ambiente Android completo.
 
-**Why:** O servidor Metro e o development URL não incluem os módulos nativos em um APK instalado, e a compilação Gradle falha antes de iniciar quando Java não está disponível.
+**Why:** O servidor Metro e o development URL não incluem os módulos nativos em um APK instalado, e a compilação Gradle falha na configuração quando o SDK não está disponível, mesmo que Java e o wrapper Gradle estejam presentes.
 
-**How to apply:** Use o prebuild para validar a configuração e a presença dos modelos, mas trate a execução do roteiro físico como bloqueada até haver um APK gerado por EAS ou outro ambiente Android e um aparelho conectado.
+**How to apply:** Use o prebuild para validar a configuração e a presença dos modelos; antes do roteiro físico, confirme SDK configurado, APK gerado e dispositivo listado por `adb devices`.
 
 Para builds Android remotos deste app via Expo, o projeto precisa estar associado a um repositório GitHub com o código na branch usada pelo build e o diretório-base do monorepo informado; um repositório vazio ou apenas a conexão GitHub do workspace não basta.
 
