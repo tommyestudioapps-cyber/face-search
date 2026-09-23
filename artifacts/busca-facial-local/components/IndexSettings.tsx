@@ -15,6 +15,7 @@ import { useColors } from '@/hooks/useColors';
 import type {
   FaceIndexProgress,
   StoredIndexStats,
+  BackgroundIndexStatus,
 } from '@/services/faceSearch';
 import type {
   FaceSearchClearState,
@@ -40,6 +41,7 @@ interface IndexSettingsProps {
   clearState: FaceSearchClearState;
   progress: FaceIndexProgress;
   backgroundIndexEnabled: boolean;
+  backgroundIndexStatus: BackgroundIndexStatus;
   hasGalleryPhotoPermission: boolean;
   isBackgroundIndexUpdating: boolean;
   onBackgroundIndexToggle: (enabled: boolean) => void | Promise<void>;
@@ -56,6 +58,7 @@ export function IndexSettings({
   clearState,
   progress,
   backgroundIndexEnabled,
+  backgroundIndexStatus,
   hasGalleryPhotoPermission,
   isBackgroundIndexUpdating,
   onBackgroundIndexToggle,
@@ -81,6 +84,30 @@ export function IndexSettings({
       : operation === 'searching'
         ? 'Os resultados estão sendo preservados.'
         : 'Aguarde a operação terminar.';
+  const backgroundIndexTitle = !backgroundIndexEnabled
+    ? 'Índice pausado'
+    : backgroundIndexStatus === 'completed'
+      ? 'Índice preparado'
+      : backgroundIndexStatus === 'running'
+        ? 'Preparando índice'
+        : backgroundIndexStatus === 'paused'
+          ? 'Índice pausado'
+          : backgroundIndexStatus === 'waiting'
+            ? 'Aguardando o sistema'
+            : backgroundIndexStatus === 'error'
+              ? 'Falha na última tentativa'
+              : 'Índice ativo';
+  const backgroundIndexBody = !backgroundIndexEnabled
+    ? hasGalleryPhotoPermission
+      ? 'Ative para autorizar a preparação automática.'
+      : 'Ative para permitir o acesso à sua galeria.'
+    : backgroundIndexStatus === 'completed'
+      ? 'A preparação automática está atualizada.'
+      : backgroundIndexStatus === 'error'
+        ? 'A última tentativa não terminou. O sistema tentará novamente.'
+        : backgroundIndexStatus === 'waiting'
+          ? 'A tarefa está registrada e aguarda uma oportunidade do sistema.'
+          : 'A preparação automática está autorizada.';
 
   useEffect(() => {
     if (visible) {
@@ -256,14 +283,10 @@ export function IndexSettings({
             </View>
             <View style={styles.backgroundIndexCopy}>
               <Text style={[styles.backgroundIndexTitle, { color: colors.foreground }]}>
-                {backgroundIndexEnabled ? 'Índice ativo' : 'Índice pausado'}
+                 {backgroundIndexTitle}
               </Text>
               <Text style={[styles.backgroundIndexBody, { color: colors.mutedForeground }]}>
-                {backgroundIndexEnabled
-                  ? 'A preparação automática está autorizada.'
-                  : hasGalleryPhotoPermission
-                    ? 'Ative para autorizar a preparação automática.'
-                    : 'Ative para permitir o acesso à sua galeria.'}
+                {backgroundIndexBody}
               </Text>
             </View>
             <View style={styles.backgroundIndexControl}>

@@ -49,6 +49,7 @@ import type {
   FaceIndexProgress,
   FaceRecognitionError,
   FaceSearchResult,
+  BackgroundIndexStatus,
 } from '@/services/faceSearch';
 import type {
   DetectedFace,
@@ -883,6 +884,8 @@ export default function HomeScreen() {
   const [backgroundIndexConsent, setBackgroundIndexConsentState] =
     useState<BackgroundIndexConsentStatus>('unknown');
   const [hasGalleryPhotoAccess, setHasGalleryPhotoAccess] = useState(false);
+  const [backgroundIndexStatus, setBackgroundIndexStatus] =
+    useState<BackgroundIndexStatus>('idle');
   const [isUpdatingBackgroundIndex, setIsUpdatingBackgroundIndex] = useState(false);
   const colors = useColors();
   const {
@@ -942,21 +945,29 @@ export default function HomeScreen() {
 
       setBackgroundIndexConsentState(consent);
       if (onboardingValue === 'true') {
-        if (cancelled) return;
         setScreen('home');
-        const galleryPermissionGranted = await hasGalleryPhotoPermission();
-        if (cancelled) return;
-        setHasGalleryPhotoAccess(galleryPermissionGranted);
+      }
+
+      const galleryPermissionGranted = await hasGalleryPhotoPermission();
+      const faceSearchModule = Platform.OS === 'web'
+        ? null
+        : await import('@/services/faceSearch');
+      const persistedIndexState = faceSearchModule
+        ? await faceSearchModule.getBackgroundIndexState()
+        : null;
+      if (cancelled) return;
+
+      setHasGalleryPhotoAccess(galleryPermissionGranted);
+      if (persistedIndexState) {
+        setBackgroundIndexStatus(persistedIndexState.status);
+      }
+      if (onboardingValue === 'true') {
         const canAskForConsent = consent === 'unknown' && galleryPermissionGranted;
         setShowBackgroundIndexConsent(canAskForConsent);
-        void syncBackgroundTask().catch((error) => {
-          console.error('[BackgroundIndex] não foi possível sincronizar a tarefa', error);
-        });
       }
+      await syncBackgroundTask();
     })().catch((error) => {
-      if (__DEV__) {
-        console.error('[BackgroundIndex] não foi possível ler o consentimento', error);
-      }
+      console.error('[BackgroundIndex] não foi possível preparar a inicialização', error);
     });
     void AsyncStorage.getItem(ALBUM_STORAGE_KEY).then((value) => {
       if (!value) return;
@@ -1438,6 +1449,7 @@ export default function HomeScreen() {
         backgroundIndexEnabled={
           backgroundIndexConsent === 'accepted' && hasGalleryPhotoAccess
         }
+        backgroundIndexStatus={backgroundIndexStatus}
         hasGalleryPhotoPermission={hasGalleryPhotoAccess}
         isBackgroundIndexUpdating={isUpdatingBackgroundIndex}
         onBackgroundIndexToggle={toggleBackgroundIndex}

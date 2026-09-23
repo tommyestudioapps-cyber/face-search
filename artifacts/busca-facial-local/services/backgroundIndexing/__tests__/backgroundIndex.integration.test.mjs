@@ -217,7 +217,7 @@ const galleryIndexerMock = {
           status: 'paused',
           processedAssets: 1,
           totalAssets: 2,
-            lastAssetId: page.assets[0].id,
+          lastAssetId: page.assets[0].id,
           indexedPhotos: 1,
           skippedAssets: 0,
           indexedFaces: 0,
