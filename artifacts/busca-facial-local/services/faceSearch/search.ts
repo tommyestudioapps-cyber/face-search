@@ -15,8 +15,15 @@ import {
   type FaceSearchSummary,
 } from './types';
 import { cosineSimilarity, groupBestResults } from './searchMath';
+import { indexCoordinator } from '../backgroundIndexing/indexCoordinator';
 
 export async function searchAlignedFace(
+  alignedFace: AlignedFace,
+): Promise<FaceSearchSummary> {
+  return indexCoordinator.run('search', () => runSearchAlignedFace(alignedFace));
+}
+
+async function runSearchAlignedFace(
   alignedFace: AlignedFace,
 ): Promise<FaceSearchSummary> {
   if (Platform.OS === 'web') {

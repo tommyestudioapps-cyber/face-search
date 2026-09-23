@@ -41,14 +41,18 @@ import {
   requestGalleryPhotoPermission,
 } from '../backgroundIndexing/galleryPermission';
 import { shouldPauseBatch } from '../backgroundIndexing/batchPolicy';
+import { indexCoordinator } from '../backgroundIndexing/indexCoordinator';
+import { clearBackgroundIndexCursor, loadBackgroundIndexCursor } from '../backgroundIndexing/checkpoint';
 
 export interface GalleryIndexBatch {
   after?: string;
   generation: number;
+  leaseOwner: string;
   maxAssets: number;
   timeBudgetMs: number;
   onCheckpoint: (cursor: string) => Promise<void>;
   shouldContinue: () => Promise<boolean>;
+  shouldYield?: () => boolean;
 }
 
 export interface GalleryIndexOptions {
@@ -227,6 +231,8 @@ async function indexAsset(
   indexedPhoto: IndexedPhoto | undefined,
   cancellation: GalleryIndexCancellation,
   shouldContinue?: () => Promise<boolean>,
+  generation?: number,
+  leaseOwner?: string,
 ): Promise<AssetIndexResult> {
   throwIfCancelled(cancellation);
 
@@ -297,6 +303,8 @@ async function indexAsset(
     await faceSearchRepository.saveIndexedPhoto(
       createIndexedPhoto(asset, indexedFaces.length),
       indexedFaces,
+      generation,
+      leaseOwner,
     );
 
     if (shouldLogPhoto()) {
@@ -323,6 +331,13 @@ async function indexAsset(
 export async function indexGallery(
   options: GalleryIndexOptions = {},
 ): Promise<GalleryIndexResult> {
+  if (options.batch) return runGalleryIndex(options);
+  return indexCoordinator.run('manual-index', () => runGalleryIndex(options));
+}
+
+async function runGalleryIndex(
+  options: GalleryIndexOptions = {},
+): Promise<GalleryIndexResult> {
   const cancellation = options.cancellation ?? new GalleryIndexCancellation();
   const albumId = options.albumId ?? null;
   const batch = options.batch;
@@ -344,6 +359,8 @@ export async function indexGallery(
   let indexedFaceCount = 0;
   let removedPhotos = 0;
   let scanGeneration: number | null = null;
+  const manualOwner = batch ? undefined : `${Date.now()}-${Math.random()}`;
+  let manualLeaseHeartbeat: ReturnType<typeof setInterval> | null = null;
 
   const emitProgress = (
     patch: Partial<FaceIndexProgress>,
@@ -394,10 +411,31 @@ export async function indexGallery(
     );
     // A restricted album or limited photo permission is not a complete gallery snapshot.
     const canPrune = !albumId && await hasFullGalleryPhotoPermission();
+    if (!batch && canPrune) {
+      const active = await faceSearchRepository.getActiveScanGeneration();
+      if (active !== null) {
+        const checkpoint = await loadBackgroundIndexCursor();
+        if (checkpoint?.generation === active && await faceSearchRepository.abortScanIfUnleased(active)) {
+          await clearBackgroundIndexCursor();
+        }
+      }
+    }
     const generation = canPrune
-      ? batch ? batch.generation : await faceSearchRepository.beginScan()
+      ? batch ? batch.generation : await faceSearchRepository.beginScan(manualOwner)
       : null;
     scanGeneration = generation;
+    if (!batch && generation !== null && manualOwner) {
+      manualLeaseHeartbeat = setInterval(() => {
+        void faceSearchRepository.renewScan(generation, manualOwner)
+          .then((renewed) => {
+            if (!renewed) cancellation.cancel();
+          })
+          .catch((error) => {
+            cancellation.cancel();
+            console.warn('[Index] Não foi possível renovar a reserva.', error);
+          });
+      }, 15_000);
+    }
     if (batch && (
       generation === null ||
       !Number.isSafeInteger(generation) ||
@@ -415,12 +453,12 @@ export async function indexGallery(
         cancellation.cancel();
         throwIfCancelled(cancellation);
       }
-      if (batch && shouldPauseBatch(
+      if (batch && progress.processedAssets > 0 && (batch.shouldYield?.() || shouldPauseBatch(
         progress.processedAssets,
         batch.maxAssets,
         Date.now() - indexStartedAt,
         batch.timeBudgetMs,
-      )) {
+      ))) {
         return {
           status: 'paused',
           nextCursor: cursor,
@@ -477,9 +515,11 @@ export async function indexGallery(
           indexedById.get(asset.id),
           cancellation,
           batch?.shouldContinue,
+          generation ?? undefined,
+          batch?.leaseOwner ?? (generation !== null ? manualOwner : undefined),
         );
-        if (generation !== null) {
-          await faceSearchRepository.markAssetSeen(asset.id, generation);
+        if (generation !== null && !result.indexed) {
+          await faceSearchRepository.markAssetSeen(asset.id, generation, batch?.leaseOwner ?? manualOwner);
         }
         if (result.indexed) {
           indexedPhotoCount += 1;
@@ -528,7 +568,7 @@ export async function indexGallery(
         cancellation.cancel();
         throwIfCancelled(cancellation);
       }
-      removedPhotos = await faceSearchRepository.completeScan(generation);
+      removedPhotos = await faceSearchRepository.completeScan(generation, batch?.leaseOwner ?? manualOwner);
     }
     emitProgress({
       status: 'completed',
@@ -548,7 +588,11 @@ export async function indexGallery(
     };
   } catch (error) {
     if (!batch && scanGeneration !== null) {
-      await faceSearchRepository.abortScan(scanGeneration);
+      try {
+        await faceSearchRepository.abortScan(scanGeneration, manualOwner);
+      } catch (abortError) {
+        console.warn('[Index] Não foi possível liberar a geração após a falha.', abortError);
+      }
     }
     if (isCancellationError(error)) {
       const cancelled = toIndexError(error);
@@ -576,11 +620,22 @@ export async function indexGallery(
     });
     throw indexError;
   } finally {
-    releaseRecognitionModel();
-    activeIndexing = false;
-    finishActiveIndexing?.();
-    finishActiveIndexing = null;
-    activeIndexingFinished = null;
+    if (manualLeaseHeartbeat) clearInterval(manualLeaseHeartbeat);
+    try {
+      if (!batch && scanGeneration !== null && manualOwner) {
+        await faceSearchRepository.releaseScan(scanGeneration, manualOwner);
+      }
+    } catch (releaseError) {
+      // The lease expires if SQLite is unavailable. Never leave the in-process
+      // index guard or its clear waiters stuck because cleanup failed.
+      console.warn('[Index] Não foi possível liberar a reserva da varredura.', releaseError);
+    } finally {
+      releaseRecognitionModel();
+      activeIndexing = false;
+      finishActiveIndexing?.();
+      finishActiveIndexing = null;
+      activeIndexingFinished = null;
+    }
   }
 }
 

@@ -287,6 +287,91 @@ test('duas conexões não iniciam gerações concorrentes nem alteram a primeira
   }
 });
 
+test('duas retomadas não compartilham a geração e limpeza impede gravação tardia', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-lease-'));
+  const databasePath = path.join(directory, 'index.sqlite');
+  const first = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () => createNativeSQLiteAdapter(databasePath),
+  });
+  const second = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () => createNativeSQLiteAdapter(databasePath),
+  });
+  try {
+    const generation = await first.beginScan();
+    assert.equal(await first.claimScan(generation, 'first-run'), true);
+    assert.equal(await second.claimScan(generation, 'second-run'), false);
+    assert.equal(await second.abortScanIfUnleased(generation), false);
+    await assert.rejects(
+      second.saveIndexedPhoto(createPhoto('late'), [createFace('late')], generation, 'second-run'),
+      /geração da varredura/,
+    );
+    await first.releaseScan(generation, 'first-run');
+    assert.equal(await second.claimScan(generation, 'second-run'), true);
+    await assert.rejects(
+      first.markAssetSeen('late', generation, 'first-run'),
+      /geração da varredura/,
+    );
+    await second.saveIndexedPhoto(createPhoto('saved'), [createFace('saved')], generation, 'second-run');
+    assert.deepEqual(await first.getStoredIndexStats(), { indexedPhotos: 1, indexedFaces: 1 });
+    await first.clearIndex();
+    await assert.rejects(
+      second.saveIndexedPhoto(createPhoto('after-clear'), [createFace('after-clear')], generation, 'second-run'),
+      /geração da varredura/,
+    );
+    assert.deepEqual(await first.getStoredIndexStats(), { indexedPhotos: 0, indexedFaces: 0 });
+  } finally {
+    await first.close();
+    await second.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('migra um índice da versão 2 sem remover fotos ao adicionar a reserva', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-upgrade-'));
+  const databasePath = path.join(directory, 'index.sqlite');
+  const legacy = new DatabaseSync(databasePath);
+  legacy.exec(`
+    PRAGMA user_version = 2;
+    CREATE TABLE indexed_photos (
+      id_media_library TEXT PRIMARY KEY NOT NULL, uri_local TEXT NOT NULL,
+      file_name TEXT, created_at INTEGER, updated_at INTEGER,
+      dimensions TEXT NOT NULL, indexing_status TEXT NOT NULL,
+      model_version TEXT NOT NULL, last_seen_generation INTEGER
+    );
+    CREATE TABLE face_embeddings (
+      id TEXT PRIMARY KEY NOT NULL, photo_id TEXT NOT NULL, face_index INTEGER NOT NULL,
+      bounding_box_json TEXT NOT NULL, embedding_blob BLOB NOT NULL,
+      model_version TEXT NOT NULL, created_at INTEGER NOT NULL
+    );
+    CREATE TABLE gallery_scan (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      generation INTEGER NOT NULL, active INTEGER NOT NULL
+    );
+    INSERT INTO gallery_scan VALUES (1, 0, 0);
+    INSERT INTO indexed_photos VALUES (
+      'saved', 'file:///photos/saved.jpg', 'saved.jpg', 1, 2,
+      '{"width":1200,"height":800}', 'indexed', 'model', NULL
+    );
+  `);
+  legacy.close();
+  const repository = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () => createNativeSQLiteAdapter(databasePath),
+  });
+  try {
+    assert.deepEqual((await repository.getIndexedPhotos()).map((photo) => photo.assetId), ['saved']);
+    const generation = await repository.beginScan('foreground');
+    assert.equal(await repository.claimScan(generation, 'background'), false);
+    await repository.abortScan(generation, 'foreground');
+    assert.deepEqual((await repository.getIndexedPhotos()).map((photo) => photo.assetId), ['saved']);
+  } finally {
+    await repository.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('migra um índice antigo sem perder as fotos e só remove órfãs após ciclo completo', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-migration-'));
   const databasePath = path.join(directory, 'index.sqlite');

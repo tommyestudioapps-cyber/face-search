@@ -8,3 +8,9 @@ A exclusão de registros locais depende de uma varredura completa com acesso int
 **Why:** O cursor fica em armazenamento separado do índice SQLite, então uma interrupção pode deixar apenas um deles atualizado. Uma seleção limitada não representa todas as fotos do dispositivo.
 
 **How to apply:** Ao alterar checkpoints, permissões ou paginação da galeria, preserve a regra de que somente o fim inequívoco de um ciclo integral exclui registros não vistos.
+
+A reserva da geração e a exclusividade da execução são garantias diferentes: uma geração pausada permanece ativa para retomada, mas apenas uma execução pode possuí-la por vez. Escritas de fotos precisam validar a posse da geração na mesma transação em que salvam os resultados.
+
+**Why:** Um segundo runtime pode retomar a mesma geração sem chamar o início de uma geração nova; uma flag em memória ou só a reserva de geração não impede isso. Uma limpeza concorrente também poderia ser seguida por uma gravação tardia.
+
+**How to apply:** Em mudanças nas operações faciais, mantenha a posse temporária da execução, a validação transacional das escritas e a recuperação quando o processo morre antes do primeiro checkpoint. Não apague o único cursor antes de invalidar a geração no SQLite.

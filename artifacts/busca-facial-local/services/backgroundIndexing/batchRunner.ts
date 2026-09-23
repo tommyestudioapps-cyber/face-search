@@ -8,6 +8,7 @@ import {
 } from './checkpoint';
 import { getBackgroundIndexConsent } from './consent';
 import { hasFullGalleryPhotoPermission } from './galleryPermission';
+import { indexCoordinator } from './indexCoordinator';
 
 const MAX_ASSETS_PER_RUN = 16;
 const TIME_BUDGET_MS = 15_000;
@@ -20,12 +21,17 @@ async function canContinue(): Promise<boolean> {
 }
 
 export async function runBackgroundIndexBatch(): Promise<void> {
+  return indexCoordinator.run('background', runCoordinatedBackgroundIndexBatch);
+}
+
+async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
   const activeGeneration = await faceSearchRepository.getActiveScanGeneration();
   if (!(await canContinue())) {
     // Permission could have been reduced to a limited selection since the last page.
+    const checkpoint = await loadBackgroundIndexCursor();
     await clearBackgroundIndexCursor();
-    if (activeGeneration !== null) {
-      await faceSearchRepository.abortScan(activeGeneration);
+    if (checkpoint && checkpoint.generation === activeGeneration) {
+      await faceSearchRepository.abortScanIfUnleased(activeGeneration);
     }
     return;
   }
@@ -40,17 +46,35 @@ export async function runBackgroundIndexBatch(): Promise<void> {
     }
     await clearBackgroundIndexCursor();
   }
-  const generation = resume ? resume.generation : await faceSearchRepository.beginScan();
+  if (!checkpoint && activeGeneration !== null) {
+    if (!(await faceSearchRepository.abortScanIfUnleased(activeGeneration))) return;
+  }
+  const leaseOwner = `${Date.now()}-${Math.random()}`;
+  const generation = resume ? resume.generation : await faceSearchRepository.beginScan(leaseOwner);
   const after = resume?.cursor;
+  if (resume && !(await faceSearchRepository.claimScan(generation, leaseOwner))) {
+    return; // Another runtime owns this execution; it will keep the checkpoint.
+  }
 
+  let leaseHealthy = true;
+  const heartbeat = setInterval(() => {
+    void faceSearchRepository.renewScan(generation, leaseOwner)
+      .then((renewed) => { if (!renewed) leaseHealthy = false; })
+      .catch((error) => {
+        leaseHealthy = false;
+        console.warn('[BackgroundIndex] Não foi possível renovar a reserva.', error);
+      });
+  }, 15_000);
   try {
     const result = await indexGallery({
       batch: {
         after,
         generation,
+        leaseOwner,
         maxAssets: MAX_ASSETS_PER_RUN,
         timeBudgetMs: TIME_BUDGET_MS,
-        shouldContinue: canContinue,
+        shouldContinue: async () => leaseHealthy && await canContinue(),
+        shouldYield: () => indexCoordinator.shouldYieldBackground(),
         onCheckpoint: async (cursor) => {
           if (!(await canContinue())) {
             await clearBackgroundIndexCursor();
@@ -65,7 +89,7 @@ export async function runBackgroundIndexBatch(): Promise<void> {
       await clearBackgroundIndexCursor();
     }
     if (result.status === 'cancelled') {
-      await faceSearchRepository.abortScan(generation);
+      await faceSearchRepository.abortScan(generation, leaseOwner);
     }
     // A cancelled batch leaves its last completed page checkpoint intact.
   } catch (error) {
@@ -73,8 +97,11 @@ export async function runBackgroundIndexBatch(): Promise<void> {
     // the generation from the beginning on the next run.
     if (error instanceof FaceRecognitionError && error.code === 'invalid-cursor') {
       await clearBackgroundIndexCursor();
-      await faceSearchRepository.abortScan(generation);
+      await faceSearchRepository.abortScan(generation, leaseOwner);
     }
     throw error;
+  } finally {
+    clearInterval(heartbeat);
+    await faceSearchRepository.releaseScan(generation, leaseOwner);
   }
 }

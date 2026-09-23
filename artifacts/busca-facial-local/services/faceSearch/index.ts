@@ -22,6 +22,7 @@ import type {
 } from './types';
 import type { AlignedFace } from '../faceCapture/types';
 import { clearBackgroundIndexCursor } from '../backgroundIndexing/checkpoint';
+import { indexCoordinator } from '../backgroundIndexing/indexCoordinator';
 
 let latestProgress: FaceIndexProgress = {
   status: 'idle',
@@ -55,13 +56,17 @@ function withProgress(
 }
 
 export async function initializeFaceSearch(): Promise<void> {
-  await faceSearchRepository.initialize();
-  await loadRecognitionModel();
+  await indexCoordinator.run('initializing', async () => {
+    await faceSearchRepository.initialize();
+    await loadRecognitionModel();
+  });
 }
 
 export async function disposeFaceSearch(): Promise<void> {
-  releaseRecognitionModel();
-  await faceSearchRepository.close();
+  await indexCoordinator.run('dispose', async () => {
+    releaseRecognitionModel();
+    await faceSearchRepository.close();
+  });
 }
 
 export function getFaceIndexProgress(): FaceIndexProgress {
@@ -114,10 +119,12 @@ export async function getStoredIndexStats(): Promise<StoredIndexStats> {
 }
 
 export async function clearStoredIndex(): Promise<void> {
-  await clearAfterGalleryIndexStops(async () => {
-    await clearBackgroundIndexCursor();
-    await faceSearchRepository.initialize();
-    await faceSearchRepository.clearIndex();
+  await indexCoordinator.run('clear', async () => {
+    await clearAfterGalleryIndexStops(async () => {
+      await faceSearchRepository.initialize();
+      await faceSearchRepository.clearIndex();
+      await clearBackgroundIndexCursor();
+    });
   });
 }
 

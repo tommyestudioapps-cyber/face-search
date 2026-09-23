@@ -10,7 +10,7 @@ import {
 } from './types';
 
 const DATABASE_NAME = 'face-search.sqlite';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const INDEXED_STATUS = 'indexed';
 
 interface Dimensions {
@@ -257,7 +257,9 @@ async function migrateSchema(database: SQLiteDatabase): Promise<void> {
         CREATE TABLE IF NOT EXISTS gallery_scan (
           id INTEGER PRIMARY KEY CHECK (id = 1),
           generation INTEGER NOT NULL,
-          active INTEGER NOT NULL
+          active INTEGER NOT NULL,
+          lease_owner TEXT,
+          lease_until INTEGER
         );
         INSERT OR IGNORE INTO gallery_scan (id, generation, active) VALUES (1, 0, 0);
         PRAGMA user_version = ${SCHEMA_VERSION};
@@ -270,9 +272,19 @@ async function migrateSchema(database: SQLiteDatabase): Promise<void> {
         CREATE TABLE gallery_scan (
           id INTEGER PRIMARY KEY CHECK (id = 1),
           generation INTEGER NOT NULL,
-          active INTEGER NOT NULL
+          active INTEGER NOT NULL,
+          lease_owner TEXT,
+          lease_until INTEGER
         );
         INSERT INTO gallery_scan (id, generation, active) VALUES (1, 0, 0);
+        PRAGMA user_version = ${SCHEMA_VERSION};
+      `);
+    });
+  } else if (currentVersion === 2) {
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.execAsync(`
+        ALTER TABLE gallery_scan ADD COLUMN lease_owner TEXT;
+        ALTER TABLE gallery_scan ADD COLUMN lease_until INTEGER;
         PRAGMA user_version = ${SCHEMA_VERSION};
       `);
     });
@@ -351,7 +363,7 @@ export class FaceSearchRepository {
     return row?.generation ?? null;
   }
 
-  async beginScan(): Promise<number> {
+  async beginScan(owner?: string): Promise<number> {
     const database = await this.getDatabase();
     try {
       let generation = 0;
@@ -366,7 +378,8 @@ export class FaceSearchRepository {
           );
         }
         await transaction.runAsync(
-          'UPDATE gallery_scan SET generation = generation + 1, active = 1 WHERE id = 1',
+          'UPDATE gallery_scan SET generation = generation + 1, active = 1, lease_owner = ?, lease_until = ? WHERE id = 1',
+          [owner ?? null, owner ? Date.now() + 120_000 : null],
         );
         const row = await transaction.getFirstAsync<{ generation: number }>(
           'SELECT generation FROM gallery_scan WHERE id = 1',
@@ -383,13 +396,71 @@ export class FaceSearchRepository {
     }
   }
 
-  async abortScan(generation: number): Promise<void> {
+  async claimScan(generation: number, owner: string): Promise<boolean> {
+    const database = await this.getDatabase();
+    let claimed = false;
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      const result = await transaction.runAsync(
+        `UPDATE gallery_scan SET lease_owner = ?, lease_until = ?
+         WHERE id = 1 AND active = 1 AND generation = ?
+           AND (lease_owner IS NULL OR lease_until < ?)`,
+        [owner, Date.now() + 120_000, generation, Date.now()],
+      );
+      claimed = result.changes === 1;
+    });
+    return claimed;
+  }
+
+  async renewScan(generation: number, owner: string): Promise<boolean> {
+    const database = await this.getDatabase();
+    let renewed = false;
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      const now = Date.now();
+      const result = await transaction.runAsync(
+        `UPDATE gallery_scan SET lease_until = ?
+         WHERE id = 1 AND active = 1 AND generation = ?
+           AND lease_owner = ? AND lease_until >= ?`,
+        [now + 120_000, generation, owner, now],
+      );
+      renewed = result.changes === 1;
+    });
+    return renewed;
+  }
+
+  async releaseScan(generation: number, owner: string): Promise<void> {
+    const database = await this.getDatabase();
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.runAsync(
+        'UPDATE gallery_scan SET lease_owner = NULL, lease_until = NULL WHERE id = 1 AND generation = ? AND lease_owner = ?',
+        [generation, owner],
+      );
+    });
+  }
+
+  async abortScanIfUnleased(generation: number): Promise<boolean> {
+    const database = await this.getDatabase();
+    let aborted = false;
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      const result = await transaction.runAsync(
+        `UPDATE gallery_scan SET active = 0, lease_owner = NULL, lease_until = NULL
+         WHERE id = 1 AND active = 1 AND generation = ?
+           AND (lease_owner IS NULL OR lease_until < ?)`,
+        [generation, Date.now()],
+      );
+      aborted = result.changes === 1;
+    });
+    return aborted;
+  }
+
+  async abortScan(generation: number, owner?: string): Promise<void> {
     const database = await this.getDatabase();
     try {
       await database.withExclusiveTransactionAsync(async (transaction) => {
         await transaction.runAsync(
-          'UPDATE gallery_scan SET active = 0 WHERE id = 1 AND active = 1 AND generation = ?',
-          [generation],
+          `UPDATE gallery_scan SET active = 0, lease_owner = NULL, lease_until = NULL
+           WHERE id = 1 AND active = 1 AND generation = ?
+             AND ${owner ? 'lease_owner = ?' : '(lease_owner IS NULL OR lease_until < ?)'}`,
+          [generation, owner ?? Date.now()],
         );
       });
     } catch (cause) {
@@ -397,38 +468,45 @@ export class FaceSearchRepository {
     }
   }
 
-  async markAssetSeen(assetId: string, generation: number): Promise<void> {
+  async markAssetSeen(assetId: string, generation: number, owner?: string): Promise<void> {
     const database = await this.getDatabase();
     await database.withExclusiveTransactionAsync(async (transaction) => {
-      const active = await transaction.getFirstAsync<{ generation: number }>(
-        'SELECT generation FROM gallery_scan WHERE id = 1 AND active = 1',
+      const active = await transaction.getFirstAsync<{ generation: number; lease_owner: string | null; lease_until: number | null }>(
+        'SELECT generation, lease_owner, lease_until FROM gallery_scan WHERE id = 1 AND active = 1',
       );
-      if (active?.generation !== generation) {
+      if (active?.generation !== generation ||
+        active.lease_owner !== (owner ?? null) ||
+        (owner && (active.lease_until ?? 0) < Date.now())) {
         throw storageError('A geração da varredura foi interrompida.');
       }
       await transaction.runAsync(
         'UPDATE indexed_photos SET last_seen_generation = ? WHERE id_media_library = ?',
         [generation, assetId],
       );
+      if (owner) {
+        await transaction.runAsync('UPDATE gallery_scan SET lease_until = ? WHERE id = 1', [Date.now() + 120_000]);
+      }
     });
   }
 
-  async completeScan(generation: number): Promise<number> {
+  async completeScan(generation: number, owner?: string): Promise<number> {
     const database = await this.getDatabase();
     try {
       let deletedRows = 0;
       await database.withExclusiveTransactionAsync(async (transaction) => {
-        const active = await transaction.getFirstAsync<{ generation: number }>(
-          'SELECT generation FROM gallery_scan WHERE id = 1 AND active = 1',
+        const active = await transaction.getFirstAsync<{ generation: number; lease_owner: string | null; lease_until: number | null }>(
+          'SELECT generation, lease_owner, lease_until FROM gallery_scan WHERE id = 1 AND active = 1',
         );
-        if (active?.generation !== generation) {
+        if (active?.generation !== generation ||
+          active.lease_owner !== (owner ?? null) ||
+          (owner && (active.lease_until ?? 0) < Date.now())) {
           throw storageError('A geração da varredura foi interrompida.');
         }
         const result = await transaction.runAsync(
           'DELETE FROM indexed_photos WHERE last_seen_generation IS NULL OR last_seen_generation != ?',
           [generation],
         );
-        await transaction.runAsync('UPDATE gallery_scan SET active = 0 WHERE id = 1');
+        await transaction.runAsync('UPDATE gallery_scan SET active = 0, lease_owner = NULL, lease_until = NULL WHERE id = 1');
         deletedRows = result.changes;
       });
       return deletedRows;
@@ -441,12 +519,24 @@ export class FaceSearchRepository {
   async saveIndexedPhoto(
     photo: IndexedPhoto,
     faces: IndexedFace[],
+    generation?: number,
+    owner?: string,
   ): Promise<void> {
     const database = await this.getDatabase();
     const dimensions = serializeDimensions(photo.width, photo.height);
 
     try {
       await database.withExclusiveTransactionAsync(async (transaction) => {
+        if (generation !== undefined) {
+          const active = await transaction.getFirstAsync<{ generation: number; lease_owner: string | null; lease_until: number | null }>(
+            'SELECT generation, lease_owner, lease_until FROM gallery_scan WHERE id = 1 AND active = 1',
+          );
+          if (active?.generation !== generation ||
+            active.lease_owner !== (owner ?? null) ||
+            (owner && (active.lease_until ?? 0) < Date.now())) {
+            throw storageError('A geração da varredura foi interrompida.');
+          }
+        }
         await transaction.runAsync(
           `
             INSERT INTO indexed_photos (
@@ -457,8 +547,9 @@ export class FaceSearchRepository {
               updated_at,
               dimensions,
               indexing_status,
-              model_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              model_version,
+              last_seen_generation
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id_media_library) DO UPDATE SET
               uri_local = excluded.uri_local,
               file_name = excluded.file_name,
@@ -466,7 +557,8 @@ export class FaceSearchRepository {
               updated_at = excluded.updated_at,
               dimensions = excluded.dimensions,
               indexing_status = excluded.indexing_status,
-              model_version = excluded.model_version
+              model_version = excluded.model_version,
+              last_seen_generation = COALESCE(excluded.last_seen_generation, indexed_photos.last_seen_generation)
           `,
           [
             photo.assetId,
@@ -477,6 +569,7 @@ export class FaceSearchRepository {
             dimensions,
             INDEXED_STATUS,
             photo.modelVersion,
+            generation ?? null,
           ],
         );
 
@@ -524,6 +617,9 @@ export class FaceSearchRepository {
               face.indexedAt,
             ],
           );
+        }
+        if (owner) {
+          await transaction.runAsync('UPDATE gallery_scan SET lease_until = ? WHERE id = 1', [Date.now() + 120_000]);
         }
       });
     } catch (cause) {
