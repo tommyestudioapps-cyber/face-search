@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -887,6 +887,7 @@ export default function HomeScreen() {
   const [backgroundIndexStatus, setBackgroundIndexStatus] =
     useState<BackgroundIndexStatus>('idle');
   const [isUpdatingBackgroundIndex, setIsUpdatingBackgroundIndex] = useState(false);
+  const mountedRef = useRef(true);
   const colors = useColors();
   const {
     faces,
@@ -930,6 +931,38 @@ export default function HomeScreen() {
       await import('@/services/backgroundIndexing/scheduler');
     await syncBackgroundIndexRegistration();
   };
+
+  const runImmediateBackgroundIndex = useCallback(async (): Promise<void> => {
+    if (Platform.OS === 'web') return;
+
+    if (mountedRef.current) {
+      setBackgroundIndexStatus('running');
+    }
+
+    try {
+      const [batchRunner, faceSearchModule] = await Promise.all([
+        import('@/services/backgroundIndexing/batchRunner'),
+        import('@/services/faceSearch'),
+      ]);
+      try {
+        await batchRunner.runBackgroundIndexBatch();
+      } catch (error) {
+        console.error('[BackgroundIndex] o primeiro lote falhou', error);
+      } finally {
+        try {
+          const nextState = await faceSearchModule.getBackgroundIndexState();
+          if (mountedRef.current) {
+            setBackgroundIndexStatus(nextState.status);
+          }
+        } catch (error) {
+          console.error('[BackgroundIndex] não foi possível atualizar o estado visual', error);
+        }
+        await refreshIndexedPhotos();
+      }
+    } catch (error) {
+      console.error('[BackgroundIndex] não foi possível iniciar o primeiro lote', error);
+    }
+  }, [refreshIndexedPhotos]);
 
   useEffect(() => {
     if (__DEV__) {
@@ -983,6 +1016,13 @@ export default function HomeScreen() {
     });
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
     };
   }, []);
 
@@ -1050,9 +1090,11 @@ export default function HomeScreen() {
       }
       await clearBackgroundIndexCursor();
       await setBackgroundIndexConsent('accepted');
-      setHasGalleryPhotoAccess(true);
-      setBackgroundIndexConsentState('accepted');
-      setShowBackgroundIndexConsent(false);
+      if (mountedRef.current) {
+        setHasGalleryPhotoAccess(true);
+        setBackgroundIndexConsentState('accepted');
+        setShowBackgroundIndexConsent(false);
+      }
     } catch (error) {
       if (__DEV__) {
         console.error('[BackgroundIndex] não foi possível salvar a aceitação', error);
@@ -1064,7 +1106,15 @@ export default function HomeScreen() {
       return;
     }
     try {
-      await syncBackgroundTask();
+      const registration = syncBackgroundTask();
+      const immediateBatch = runImmediateBackgroundIndex();
+      const [registrationResult] = await Promise.allSettled([
+        registration,
+        immediateBatch,
+      ]);
+      if (registrationResult.status === 'rejected') {
+        throw registrationResult.reason;
+      }
     } catch (error) {
       console.error('[BackgroundIndex] agendamento indisponível', error);
       Alert.alert(
@@ -1077,8 +1127,10 @@ export default function HomeScreen() {
   const declineBackgroundIndex = async () => {
     try {
       await setBackgroundIndexConsent('declined');
-      setBackgroundIndexConsentState('declined');
-      setShowBackgroundIndexConsent(false);
+      if (mountedRef.current) {
+        setBackgroundIndexConsentState('declined');
+        setShowBackgroundIndexConsent(false);
+      }
       await clearBackgroundIndexCursor();
       try {
         await syncBackgroundTask();
@@ -1104,10 +1156,21 @@ export default function HomeScreen() {
         await requestGalleryPhotoPermission();
         await clearBackgroundIndexCursor();
         await setBackgroundIndexConsent('accepted');
-        setHasGalleryPhotoAccess(true);
-        setBackgroundIndexConsentState('accepted');
+        if (mountedRef.current) {
+          setHasGalleryPhotoAccess(true);
+          setBackgroundIndexConsentState('accepted');
+          setBackgroundIndexStatus('running');
+        }
         try {
-          await syncBackgroundTask();
+          const registration = syncBackgroundTask();
+          const immediateBatch = runImmediateBackgroundIndex();
+          const [registrationResult] = await Promise.allSettled([
+            registration,
+            immediateBatch,
+          ]);
+          if (registrationResult.status === 'rejected') {
+            throw registrationResult.reason;
+          }
         } catch (error) {
           console.error('[BackgroundIndex] agendamento indisponível', error);
           Alert.alert(
@@ -1120,7 +1183,9 @@ export default function HomeScreen() {
 
       cancelIndexing();
       await setBackgroundIndexConsent('declined');
-      setBackgroundIndexConsentState('declined');
+      if (mountedRef.current) {
+        setBackgroundIndexConsentState('declined');
+      }
       await clearBackgroundIndexCursor();
       try {
         await syncBackgroundTask();
@@ -1144,7 +1209,9 @@ export default function HomeScreen() {
         );
       }
     } finally {
-      setIsUpdatingBackgroundIndex(false);
+      if (mountedRef.current) {
+        setIsUpdatingBackgroundIndex(false);
+      }
     }
   };
 

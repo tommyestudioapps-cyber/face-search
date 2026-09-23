@@ -396,9 +396,13 @@ export function useFaceSearch(): UseFaceSearchResult {
       }
       try {
         const faceSearchModule = await getFaceSearchModule();
-        const photos = await faceSearchModule.readIndexedPhotosWithFaceCounts();
+        const [photos, nextStats] = await Promise.all([
+          faceSearchModule.readIndexedPhotosWithFaceCounts(),
+          faceSearchModule.getStoredIndexStats(),
+        ]);
         if (mountedRef.current) {
           setIndexedPhotos(photos);
+          setStoredIndexStats(nextStats);
         }
       } catch (caught) {
         const nextError = toFaceSearchError(
