@@ -46,10 +46,10 @@ import {
 } from '@/components/AlbumPicker';
 import { useFaceSearch, type FaceSearchStatus } from '@/hooks/useFaceSearch';
 import type {
+  BackgroundIndexState,
   FaceIndexProgress,
   FaceRecognitionError,
   FaceSearchResult,
-  BackgroundIndexStatus,
 } from '@/services/faceSearch';
 import type {
   DetectedFace,
@@ -60,6 +60,17 @@ import type {
 type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results' | 'indexed';
 
 const ALBUM_STORAGE_KEY = 'visage.index.album';
+
+const initialBackgroundIndexState: BackgroundIndexState = {
+  status: 'idle',
+  scope: 'gallery',
+  processedAssets: 0,
+  totalAssets: null,
+  lastAssetId: null,
+  lastStartedAt: null,
+  lastCompletedAt: null,
+  lastError: null,
+};
 
 function IconCircle({
   name,
@@ -884,8 +895,8 @@ export default function HomeScreen() {
   const [backgroundIndexConsent, setBackgroundIndexConsentState] =
     useState<BackgroundIndexConsentStatus>('unknown');
   const [hasGalleryPhotoAccess, setHasGalleryPhotoAccess] = useState(false);
-  const [backgroundIndexStatus, setBackgroundIndexStatus] =
-    useState<BackgroundIndexStatus>('idle');
+  const [backgroundIndexState, setBackgroundIndexState] =
+    useState<BackgroundIndexState>(initialBackgroundIndexState);
   const [isUpdatingBackgroundIndex, setIsUpdatingBackgroundIndex] = useState(false);
   const mountedRef = useRef(true);
   const colors = useColors();
@@ -936,7 +947,11 @@ export default function HomeScreen() {
     if (Platform.OS === 'web') return;
 
     if (mountedRef.current) {
-      setBackgroundIndexStatus('running');
+      setBackgroundIndexState((current) => ({
+        ...current,
+        status: 'running',
+        lastError: null,
+      }));
     }
 
     try {
@@ -952,7 +967,7 @@ export default function HomeScreen() {
         try {
           const nextState = await faceSearchModule.getBackgroundIndexState();
           if (mountedRef.current) {
-            setBackgroundIndexStatus(nextState.status);
+            setBackgroundIndexState(nextState);
           }
         } catch (error) {
           console.error('[BackgroundIndex] não foi possível atualizar o estado visual', error);
@@ -992,7 +1007,7 @@ export default function HomeScreen() {
 
       setHasGalleryPhotoAccess(galleryPermissionGranted);
       if (persistedIndexState) {
-        setBackgroundIndexStatus(persistedIndexState.status);
+        setBackgroundIndexState(persistedIndexState);
       }
       if (onboardingValue === 'true') {
         const canAskForConsent = consent === 'unknown' && galleryPermissionGranted;
@@ -1159,7 +1174,11 @@ export default function HomeScreen() {
         if (mountedRef.current) {
           setHasGalleryPhotoAccess(true);
           setBackgroundIndexConsentState('accepted');
-          setBackgroundIndexStatus('running');
+          setBackgroundIndexState((current) => ({
+            ...current,
+            status: 'running',
+            lastError: null,
+          }));
         }
         try {
           const registration = syncBackgroundTask();
@@ -1516,7 +1535,7 @@ export default function HomeScreen() {
         backgroundIndexEnabled={
           backgroundIndexConsent === 'accepted' && hasGalleryPhotoAccess
         }
-        backgroundIndexStatus={backgroundIndexStatus}
+        backgroundIndexState={backgroundIndexState}
         hasGalleryPhotoPermission={hasGalleryPhotoAccess}
         isBackgroundIndexUpdating={isUpdatingBackgroundIndex}
         onBackgroundIndexToggle={toggleBackgroundIndex}
