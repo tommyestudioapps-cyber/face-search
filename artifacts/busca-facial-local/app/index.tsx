@@ -862,6 +862,7 @@ export default function HomeScreen() {
     useState<string>('Todo o dispositivo');
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [rewardCountdown, setRewardCountdown] = useState(3);
+  const [matchesReturnScreen, setMatchesReturnScreen] = useState<AppScreen | null>(null);
   const colors = useColors();
   const {
     faces,
@@ -1085,6 +1086,7 @@ export default function HomeScreen() {
     try {
       const searchSummary = await indexAndSearch(alignedFace, selectedAlbumId);
       if (searchSummary) {
+        setMatchesReturnScreen(null);
         setScreen('results');
       }
     } catch {
@@ -1096,10 +1098,18 @@ export default function HomeScreen() {
     if (__DEV__) {
       console.log(`[Matches] abrindo ${results.length} resultados`);
     }
+    setMatchesReturnScreen(screen);
     setScreen('results');
   };
 
+  const returnFromMatches = () => {
+    const destination = matchesReturnScreen ?? 'home';
+    setMatchesReturnScreen(null);
+    setScreen(destination);
+  };
+
   const goHome = () => {
+    setMatchesReturnScreen(null);
     setScreen('home');
   };
 
@@ -1152,7 +1162,12 @@ export default function HomeScreen() {
           />
         );
       case 'results':
-        return <Results results={results} onNewSearch={goHome} />;
+        return (
+          <Results
+            results={results}
+            onNewSearch={matchesReturnScreen ? returnFromMatches : goHome}
+          />
+        );
       case 'indexed': {
         const visiblePhotos =
           indexedFilter === 'withFaces'
@@ -1212,6 +1227,7 @@ export default function HomeScreen() {
     handleSelectAlbum,
     cancelIndexing,
     results,
+    matchesReturnScreen,
   ]);
 
   return (
