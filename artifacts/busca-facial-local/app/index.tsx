@@ -34,6 +34,10 @@ import {
   type BackgroundIndexConsentStatus,
 } from '@/services/backgroundIndexing/consent';
 import {
+  hasGalleryPhotoPermission,
+  requestGalleryPhotoPermission,
+} from '@/services/backgroundIndexing/galleryPermission';
+import {
   AlbumPicker,
   type AlbumOption,
 } from '@/components/AlbumPicker';
@@ -927,7 +931,11 @@ export default function HomeScreen() {
       setBackgroundIndexConsentState(consent);
       if (onboardingValue === 'true') {
         setScreen('home');
-        setShowBackgroundIndexConsent(consent === 'unknown');
+        const canAskForConsent =
+          consent === 'unknown' && (await hasGalleryPhotoPermission());
+        if (!cancelled) {
+          setShowBackgroundIndexConsent(canAskForConsent);
+        }
       }
     })().catch((error) => {
       if (__DEV__) {
@@ -991,9 +999,18 @@ export default function HomeScreen() {
   const handleOnboarding = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await ImagePicker.requestMediaLibraryPermissionsAsync();
+    let galleryPermissionGranted = false;
+    try {
+      await requestGalleryPhotoPermission();
+      galleryPermissionGranted = true;
+    } catch (error) {
+      if (__DEV__) {
+        console.error('[BackgroundIndex] permissão da galeria não concedida', error);
+      }
+    }
     await AsyncStorage.setItem('visage.onboarding.complete', 'true');
     setScreen('home');
-    if (backgroundIndexConsent === 'unknown') {
+    if (backgroundIndexConsent === 'unknown' && galleryPermissionGranted) {
       setShowBackgroundIndexConsent(true);
     }
   };

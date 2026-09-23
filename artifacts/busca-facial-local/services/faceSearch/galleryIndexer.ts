@@ -35,6 +35,7 @@ import {
   logPhotoTiming,
   yieldToEventLoop,
 } from '../observability/logger';
+import { requestGalleryPhotoPermission } from '../backgroundIndexing/galleryPermission';
 
 export interface GalleryIndexOptions {
   onProgress?: (progress: FaceIndexProgress) => void;
@@ -280,35 +281,6 @@ async function indexAsset(
   }
 }
 
-async function requestGalleryPermission(): Promise<void> {
-  if (Platform.OS === 'web') {
-    throw new FaceRecognitionError(
-      'web-unsupported',
-      'A indexação da galeria está disponível somente no APK.',
-    );
-  }
-
-  const available = await MediaLibrary.isAvailableAsync();
-  if (!available) {
-    throw new FaceRecognitionError(
-      'permission-denied',
-      'A galeria de fotos não está disponível neste dispositivo.',
-    );
-  }
-
-  let permission = await MediaLibrary.getPermissionsAsync(false, ['photo']);
-  if (!permission.granted || permission.accessPrivileges === 'none') {
-    permission = await MediaLibrary.requestPermissionsAsync(false, ['photo']);
-  }
-
-  if (!permission.granted || permission.accessPrivileges === 'none') {
-    throw new FaceRecognitionError(
-      'permission-denied',
-      'A permissão para ler a galeria de fotos foi negada.',
-    );
-  }
-}
-
 export async function indexGallery(
   options: GalleryIndexOptions = {},
 ): Promise<GalleryIndexResult> {
@@ -351,7 +323,7 @@ export async function indexGallery(
     }
 
     emitProgress({ status: 'requesting-permission' });
-    await requestGalleryPermission();
+    await requestGalleryPhotoPermission();
     throwIfCancelled(cancellation);
 
     await faceSearchRepository.initialize();
