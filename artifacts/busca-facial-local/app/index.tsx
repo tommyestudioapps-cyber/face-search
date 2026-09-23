@@ -27,6 +27,7 @@ import { FaceSearchProgress } from '@/components/FaceSearchProgress';
 import { IndexSettings } from '@/components/IndexSettings';
 import { IndexedGallery } from '@/components/IndexedGallery';
 import { GlobalMatchesPanel } from '@/components/GlobalMatchesPanel';
+import { BackgroundIndexConsent } from '@/components/BackgroundIndexConsent';
 import {
   AlbumPicker,
   type AlbumOption,
@@ -866,6 +867,7 @@ export default function HomeScreen() {
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [rewardCountdown, setRewardCountdown] = useState(3);
   const [matchesReturnScreen, setMatchesReturnScreen] = useState<AppScreen | null>(null);
+  const [showBackgroundIndexConsent, setShowBackgroundIndexConsent] = useState(false);
   const colors = useColors();
   const {
     faces,
@@ -910,6 +912,7 @@ export default function HomeScreen() {
     void AsyncStorage.getItem('visage.onboarding.complete').then((value) => {
       if (value === 'true') {
         setScreen('home');
+        setShowBackgroundIndexConsent(true);
       }
     });
     void AsyncStorage.getItem(ALBUM_STORAGE_KEY).then((value) => {
@@ -968,6 +971,7 @@ export default function HomeScreen() {
     await ImagePicker.requestMediaLibraryPermissionsAsync();
     await AsyncStorage.setItem('visage.onboarding.complete', 'true');
     setScreen('home');
+    setShowBackgroundIndexConsent(true);
   };
 
   const pickFromLibrary = async () => {
@@ -1252,6 +1256,11 @@ export default function HomeScreen() {
             void startAnalysis();
           }
         }}
+      />
+      <BackgroundIndexConsent
+        visible={showBackgroundIndexConsent}
+        onAccept={() => setShowBackgroundIndexConsent(false)}
+        onDecline={() => setShowBackgroundIndexConsent(false)}
       />
       <OfflineModal visible={showOffline} onClose={() => setShowOffline(false)} />
       <IndexSettings
