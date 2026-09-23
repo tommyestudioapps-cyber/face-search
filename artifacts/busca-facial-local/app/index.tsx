@@ -508,20 +508,24 @@ function SelectPhoto({
                 style={styles.selectedImage}
               />
               {faces.length === 0 ? (
-                <>
-                  <View style={styles.cropOverlay}>
-                    <View style={styles.cropCornerTopLeft} />
-                    <View style={styles.cropCornerTopRight} />
-                    <View style={styles.cropCornerBottomLeft} />
-                    <View style={styles.cropCornerBottomRight} />
-                    <View style={styles.cropFaceRing} />
-                  </View>
-                  <View style={styles.cropHint}>
-                    <Feather name="move" size={13} color={colors.foreground} />
-                    <Text style={styles.cropHintText}>Detectando o rosto</Text>
-                  </View>
-                </>
+                <View style={styles.cropOverlay}>
+                  <View style={styles.cropCornerTopLeft} />
+                  <View style={styles.cropCornerTopRight} />
+                  <View style={styles.cropCornerBottomLeft} />
+                  <View style={styles.cropCornerBottomRight} />
+                  <View style={styles.cropFaceRing} />
+                </View>
               ) : null}
+              <View style={styles.cropHint}>
+                <Feather
+                  name={faces.length > 0 ? 'check-circle' : 'move'}
+                  size={13}
+                  color={faces.length > 0 ? '#34D399' : colors.foreground}
+                />
+                <Text style={styles.cropHintText}>
+                  {faces.length > 0 ? 'Rosto detectado' : 'Detectando o rosto'}
+                </Text>
+              </View>
               {imageWidth && imageHeight ? (
                 <FaceSelectionOverlay
                   faces={faces}
