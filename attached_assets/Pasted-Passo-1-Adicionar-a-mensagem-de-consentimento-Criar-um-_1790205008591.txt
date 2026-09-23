@@ -1,0 +1,335 @@
+Passo 1 — Adicionar a mensagem de consentimento
+Criar um componente separado:
+
+components/BackgroundIndexConsent.tsx
+
+Ele exibirá:
+
+Preparar índice local?
+O índice organiza os dados dos rostos da sua galeria para acelerar as próximas buscas. Ao aceitar, a preparação acontece em segundo plano e suas fotos não saem deste aparelho.
+
+Botões:
+
+Aceitar
+Recusar
+O componente não deve iniciar diretamente o processamento. Ele apenas chama uma função como:
+
+onAccept()
+
+ou:
+
+onDecline()
+
+Passo 2 — Salvar a escolha do usuário
+Criar:
+
+services/backgroundIndexing/consent.ts
+
+Esse arquivo controlará algo como:
+
+type BackgroundIndexConsent = 'unknown' | 'accepted' | 'declined';
+
+Usaremos AsyncStorage para salvar:
+
+visage.background-index.consent
+
+Comportamento:
+
+unknown: mostrar a mensagem;
+accepted: preparar ou reagendar a indexação sem perguntar novamente;
+declined: não iniciar a indexação automática;
+permitir mudar essa decisão posteriormente em Configurações.
+Depois que o usuário aceitar, cada nova abertura do app deve apenas verificar se a tarefa está registrada, sem exibir a mensagem novamente.
+
+Passo 3 — Garantir a permissão da galeria antes do agendamento
+Hoje a permissão da galeria é solicitada dentro de:
+
+services/faceSearch/galleryIndexer.ts
+
+O problema é que uma tarefa em segundo plano não deve abrir uma caixa de permissão.
+
+A mudança será:
+
+Enquanto o app está aberto
+solicitar a permissão da galeria;
+confirmar que o usuário autorizou;
+mostrar a mensagem de consentimento;
+somente depois registrar a tarefa em segundo plano.
+Enquanto estiver em segundo plano
+A tarefa apenas verifica:
+
+const permission = await MediaLibrary.getPermissionsAsync(false, ['photo']);
+
+Se a permissão tiver sido removida, a tarefa encerra sem tentar abrir nenhum diálogo.
+
+Passo 4 — Adicionar o agendador do sistema
+Adicionar as bibliotecas compatíveis com o SDK Expo atual:
+
+expo-background-task
+expo-task-manager
+
+Os arquivos envolvidos serão:
+
+package.json
+app.json
+
+Usaremos:
+
+expo-task-manager para declarar a tarefa;
+expo-background-task para registrá-la no sistema.
+Criar:
+
+services/backgroundIndexing/backgroundIndexTask.ts
+
+A tarefa terá uma estrutura semelhante a esta:
+
+TaskManager.defineTask(BACKGROUND_INDEX_TASK, async () => {
+  const consent = await getBackgroundIndexConsent();
+  if (consent !== 'accepted') {
+    return;
+  }
+  const permission = await getPhotoPermission();
+  if (!permission.granted) {
+    return;
+  }
+  await initializeFaceSearch();
+  await runBackgroundIndexBatch({
+    albumId: null,
+  });
+});
+
+Esse código é apenas a estrutura conceitual. A tarefa real também precisará:
+
+evitar duas indexações simultâneas;
+capturar erros;
+salvar o status;
+retornar sucesso ou falha ao sistema;
+continuar em outra execução quando ainda houver fotos pendentes.
+A tarefa deve ser definida fora de componentes React, porque o sistema pode carregar o JavaScript sem montar a interface.
+
+Passo 5 — Tornar a indexação executável em blocos
+Hoje indexGallery() tende a percorrer toda a galeria em uma única execução.
+
+Para o segundo plano, ela precisa aceitar limites, por exemplo:
+
+interface GalleryIndexOptions {
+  albumId?: string | null;
+  maxAssetsPerRun?: number;
+  timeBudgetMs?: number;
+}
+
+Exemplo:
+
+await indexGallery({
+  albumId: null,
+  maxAssetsPerRun: 20,
+  timeBudgetMs: 20_000,
+});
+
+Arquivos tocados:
+
+services/faceSearch/galleryIndexer.ts
+services/faceSearch/index.ts
+
+A cada execução:
+
+busca uma página de fotos;
+ignora fotos já indexadas e inalteradas;
+processa um lote limitado;
+salva cada foto em uma transação SQLite;
+encerra antes do limite de tempo;
+agenda ou aguarda a próxima execução.
+Isso evita que uma tarefa longa seja interrompida no meio de uma operação pesada.
+
+Passo 6 — Usar o índice atual para decidir o que falta
+A lógica existente em galleryIndexer.ts já verifica:
+
+assetId
+modificationTime
+modelVersion
+
+Essa lógica deve continuar sendo a fonte de verdade:
+
+foto já analisada e sem alteração: pula;
+foto nova: indexa;
+foto modificada: reindexa;
+modelo alterado: invalida e recria;
+foto removida: remove do SQLite.
+Não será necessário armazenar cópias das imagens.
+
+A vantagem é que, mesmo se o Android interromper a tarefa, a próxima execução poderá começar novamente a varredura e ignorar rapidamente o que já foi concluído.
+
+Passo 7 — Criar um coordenador único de indexação
+Hoje existe um controle em memória:
+
+let activeIndexing = false;
+
+Ele protege o processo enquanto o mesmo JavaScript está ativo, mas não é suficiente para coordenar:
+
+indexação iniciada pela tela;
+indexação iniciada pelo sistema;
+nova busca iniciada pelo usuário;
+tarefa retomada depois de uma interrupção.
+Criar:
+
+services/backgroundIndexing/indexCoordinator.ts
+
+Responsabilidades:
+
+impedir duas indexações ao mesmo tempo;
+fazer a tarefa de segundo plano aguardar uma busca manual;
+permitir que uma busca manual tenha prioridade;
+salvar o último status;
+evitar iniciar o trabalho se já existir uma operação ativa.
+A lógica visual existente em:
+
+hooks/useFaceSearch.ts
+
+deve continuar cuidando da tela, mas não deve ser o único lugar que controla concorrência.
+
+Passo 8 — Salvar o estado do trabalho
+Adicionar ao SQLite uma tabela pequena, por exemplo:
+
+CREATE TABLE IF NOT EXISTS background_index_state (
+  id INTEGER PRIMARY KEY NOT NULL,
+  status TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  processed_assets INTEGER NOT NULL DEFAULT 0,
+  total_assets INTEGER,
+  last_asset_id TEXT,
+  last_started_at INTEGER,
+  last_completed_at INTEGER,
+  last_error TEXT
+);
+
+Arquivo:
+
+services/faceSearch/repository.ts
+
+Esse estado permite exibir:
+
+índice preparado;
+preparando índice;
+pausado;
+aguardando o sistema;
+erro na última tentativa.
+Os dados principais dos rostos continuam nas tabelas existentes:
+
+indexed_photos
+face_embeddings
+
+Passo 9 — Registrar a tarefa em cada abertura do app
+No carregamento inicial, provavelmente em:
+
+app/_layout.tsx
+
+ou no fluxo inicial de:
+
+app/index.tsx
+
+o app deve:
+
+inicializar a persistência;
+ler o consentimento;
+verificar a permissão da galeria;
+garantir que a tarefa esteja registrada;
+atualizar o status na interface.
+O comportamento será:
+
+Usuário aceitou anteriormente?
+  ├─ Não → mostrar mensagem
+  └─ Sim → registrar novamente, sem mostrar mensagem
+
+Registrar novamente deve ser idempotente: não pode criar várias tarefas iguais.
+
+Passo 10 — Iniciar o primeiro lote imediatamente
+Depois de aceitar, o ideal é:
+
+iniciar um primeiro lote enquanto o app está aberto;
+salvar o progresso;
+registrar a tarefa periódica para continuar depois.
+Assim o usuário não precisa esperar o sistema decidir quando executar a primeira tarefa.
+
+A execução posterior será usada para:
+
+continuar fotos restantes;
+detectar fotos novas;
+reprocessar fotos modificadas;
+atualizar o índice conforme a galeria muda.
+A detecção de novas fotos não será instantânea. O sistema fará verificações periódicas, comparando os ativos da galeria com o SQLite.
+
+Passo 11 — Adicionar estado nas configurações
+Alterar:
+
+components/IndexSettings.tsx
+
+Adicionar uma seção simples mostrando:
+
+Índice local preparado;
+Preparando índice;
+Última atualização;
+Fotos analisadas;
+Rostos encontrados;
+botão Pausar preparação;
+botão Preparar novamente.
+Também será possível colocar ali a opção para o usuário alterar a decisão de aceitar ou recusar.
+
+Passo 12 — Configurar o Expo
+Alterar:
+
+app.json
+package.json
+
+O app já possui configurações nativas para:
+
+expo-sqlite;
+expo-media-library;
+react-native-fast-tflite;
+MediaPipe.
+Será necessário adicionar a configuração do agendador em segundo plano, mantendo tudo no app.json estático. A funcionalidade deverá ser validada em um APK/dev client, não apenas no preview web.
+
+O Expo Go não é suficiente para validar corretamente:
+
+execução com o app fechado;
+inicialização headless;
+tarefas nativas;
+comportamento específico da Oppo;
+carregamento dos modelos faciais fora da tela.
+Arquivos envolvidos
+Arquivos existentes que serão alterados
+artifacts/busca-facial-local/app/index.tsx
+artifacts/busca-facial-local/app/_layout.tsx
+artifacts/busca-facial-local/components/IndexSettings.tsx
+artifacts/busca-facial-local/services/faceSearch/galleryIndexer.ts
+artifacts/busca-facial-local/services/faceSearch/index.ts
+artifacts/busca-facial-local/services/faceSearch/repository.ts
+artifacts/busca-facial-local/hooks/useFaceSearch.ts
+artifacts/busca-facial-local/package.json
+artifacts/busca-facial-local/app.json
+
+Arquivos novos
+components/BackgroundIndexConsent.tsx
+services/backgroundIndexing/consent.ts
+services/backgroundIndexing/backgroundIndexTask.ts
+services/backgroundIndexing/indexCoordinator.ts
+services/backgroundIndexing/status.ts
+
+Testes novos
+services/backgroundIndexing/__tests__/consent.test.mjs
+services/backgroundIndexing/__tests__/task-guard.test.mjs
+services/faceSearch/__tests__/background-index-resume.test.mjs
+
+Cenários obrigatórios de teste
+Usuário aceita e o primeiro lote começa.
+Usuário recusa e nenhuma tarefa é registrada.
+App é fechado durante o processamento.
+App é aberto novamente e continua do ponto anterior.
+Uma foto nova é adicionada à galeria.
+Uma foto existente é modificada.
+Uma foto é removida.
+A permissão da galeria é revogada.
+O usuário inicia uma busca manual enquanto há indexação em segundo plano.
+O índice é limpo nas configurações.
+O modelo facial muda de versão.
+A tarefa é executada repetidamente sem duplicar registros.
+Teste real em um Oppo A78 com bateria otimizada e app fechado.
