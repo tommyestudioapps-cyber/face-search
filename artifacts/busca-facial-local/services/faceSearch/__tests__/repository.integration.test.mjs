@@ -227,6 +227,37 @@ test('uma varredura interrompida antes de qualquer foto mantém todo o índice',
   }
 });
 
+test('cancelar uma indexação manual libera a próxima sem apagar resultados', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-cancel-'));
+  const repository = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () => createNativeSQLiteAdapter(path.join(directory, 'index.sqlite')),
+  });
+
+  try {
+    await repository.saveIndexedPhoto(createPhoto('saved-result'), [createFace('saved-result')]);
+    const cancelledGeneration = await repository.beginScan();
+    await repository.abortScan(cancelledGeneration);
+
+    assert.equal(await repository.getActiveScanGeneration(), null);
+    assert.deepEqual(await repository.getStoredIndexStats(), {
+      indexedPhotos: 1,
+      indexedFaces: 1,
+    });
+
+    const nextGeneration = await repository.beginScan();
+    await repository.markAssetSeen('saved-result', nextGeneration);
+    assert.equal(await repository.completeScan(nextGeneration), 0);
+    assert.deepEqual(await repository.getStoredIndexStats(), {
+      indexedPhotos: 1,
+      indexedFaces: 1,
+    });
+  } finally {
+    await repository.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('duas conexões não iniciam gerações concorrentes nem alteram a primeira', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-concurrent-'));
   const databasePath = path.join(directory, 'index.sqlite');
