@@ -214,11 +214,13 @@ function Onboarding({
 function Header({
   onSettings,
   onBack,
+  onNext,
   title,
   subtitle,
 }: {
   onSettings?: () => void;
   onBack?: () => void;
+  onNext?: () => void;
   title: string;
   subtitle?: string;
 }) {
@@ -240,13 +242,18 @@ function Header({
         <Pressable onPress={onBack} hitSlop={14} testID="header-back">
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </Pressable>
+      ) : onSettings ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Abrir configurações do índice"
+          onPress={onSettings}
+          style={[styles.headerAction, { backgroundColor: colors.card }]}
+          testID="settings-button"
+        >
+          <Feather name="sliders" size={18} color={colors.mutedForeground} />
+        </Pressable>
       ) : (
-        <View style={styles.headerBrand}>
-          <LinearGradient colors={[colors.primary, '#8B5CF6']} style={styles.smallBrandMark}>
-            <Feather name="maximize" size={14} color={colors.primaryForeground} />
-          </LinearGradient>
-          <Text style={[styles.headerBrandText, { color: colors.foreground }]}>visage</Text>
-        </View>
+        <View style={styles.headerActionPlaceholder} />
       )}
       <View style={styles.headerTitleWrap}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>{title}</Text>
@@ -254,14 +261,15 @@ function Header({
           <Text style={[styles.headerSubtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
         ) : null}
       </View>
-      {onSettings ? (
+      {onNext ? (
         <Pressable
           accessibilityRole="button"
-          onPress={onSettings}
-          style={[styles.headerAction, { backgroundColor: colors.card }]}
-          testID="settings-button"
+          accessibilityLabel="Escolher uma foto"
+          onPress={onNext}
+          style={[styles.headerAction, { backgroundColor: colors.primary }]}
+          testID="header-next"
         >
-          <Feather name="sliders" size={18} color={colors.mutedForeground} />
+          <Feather name="arrow-right" size={19} color={colors.primaryForeground} />
         </Pressable>
       ) : (
         <View style={styles.headerActionPlaceholder} />
@@ -289,7 +297,12 @@ function Home({
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <Header title="Busca facial" subtitle="Seu índice privado" onSettings={onSettings} />
+      <Header
+        title="Busca facial"
+        subtitle="Seu índice privado"
+        onSettings={onSettings}
+        onNext={onSelect}
+      />
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
         showsVerticalScrollIndicator={false}
@@ -1311,9 +1324,6 @@ const styles = StyleSheet.create({
   disabledButton: { opacity: 0.38 },
   legalNote: { textAlign: 'center', fontSize: 11, lineHeight: 16, marginTop: 12, paddingHorizontal: 17 },
   header: { minHeight: 78, paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerBrand: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  smallBrandMark: { width: 29, height: 29, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  headerBrandText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   headerTitleWrap: { flex: 1 },
   headerTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
   headerSubtitle: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
