@@ -188,14 +188,6 @@ export function IndexSettings({
             </View>
           </View>
 
-          <View style={[styles.infoCard, { backgroundColor: colors.background }]}>
-            <Feather name="shield" size={17} color="#34D399" />
-            <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-              Limpar o índice remove somente os dados processados. As fotos da
-              galeria permanecem intactas.
-            </Text>
-          </View>
-
           {onOpenIndexed && stats.indexedPhotos > 0 ? (
             <Pressable
               accessibilityRole="button"
@@ -290,6 +282,14 @@ export function IndexSettings({
                 testID={INDEX_SETTINGS_TEST_IDS.backgroundIndexToggle}
               />
             </View>
+          </View>
+
+          <View style={[styles.infoCard, { backgroundColor: colors.background }]}>
+            <Feather name="shield" size={17} color="#34D399" />
+            <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
+              Limpar o índice remove somente os dados processados. As fotos da
+              galeria permanecem intactas.
+            </Text>
           </View>
 
           <Pressable
