@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import test, { mock } from 'node:test';
+import { FaceRecognitionError } from '../../faceSearch/types.ts';
 
 globalThis.__DEV__ = false;
 
@@ -41,13 +42,17 @@ registerModuleLoadMock('@react-native-async-storage/async-storage', storageMock)
 const mediaLibrary = {
   accessPrivileges: 'all',
   assetReads: 0,
+  invalidCursor: null,
   async getPermissionsAsync() {
     return {
       granted: this.accessPrivileges !== 'none',
       accessPrivileges: this.accessPrivileges,
     };
   },
-  async getAssetsAsync() {
+  async getAssetsAsync(options = {}) {
+    if (options.after === this.invalidCursor) {
+      throw new Error('The saved gallery cursor is no longer valid.');
+    }
     this.assetReads += 1;
     return {
       assets: [{
@@ -183,6 +188,18 @@ const galleryIndexerMock = {
       };
     }
 
+    if (batch.after === 'stale-cursor') {
+      try {
+        await mediaLibrary.getAssetsAsync({ after: batch.after });
+      } catch (cause) {
+        throw new FaceRecognitionError(
+          'invalid-cursor',
+          'Não foi possível retomar a página da galeria.',
+          cause,
+        );
+      }
+    }
+
     const page = await mediaLibrary.getAssetsAsync();
     if (batch.generation === 1) {
       await repository.saveIndexedPhoto(
@@ -268,4 +285,37 @@ test('interrompe ao perder acesso integral e só remove órfãs no ciclo seguint
   } finally {
     repository.completeScan = originalCompleteScan;
   }
+});
+
+test('cursor inválido é limpo sem perder resultados e permite uma nova geração segura', async () => {
+  await repository.saveIndexedPhoto(createPhoto('deleted-before-restart'), []);
+  const interruptedGeneration = await repository.beginScan();
+  const { saveBackgroundIndexCursor } = await import('../checkpoint.ts');
+  await saveBackgroundIndexCursor('stale-cursor', interruptedGeneration);
+  mediaLibrary.invalidCursor = 'stale-cursor';
+
+  try {
+    await assert.rejects(
+      runBackgroundIndexBatch(),
+      (error) => error instanceof FaceRecognitionError &&
+        error.code === 'invalid-cursor',
+    );
+  } finally {
+    mediaLibrary.invalidCursor = null;
+  }
+
+  assert.equal(await loadBackgroundIndexCursor(), undefined);
+  assert.deepEqual(
+    (await repository.getIndexedPhotos()).map((photo) => photo.assetId),
+    ['deleted-before-restart', 'kept-after-limited-access'],
+  );
+  assert.equal(await repository.getActiveScanGeneration(), interruptedGeneration);
+
+  await runBackgroundIndexBatch();
+
+  assert.equal(await repository.getActiveScanGeneration(), null);
+  assert.deepEqual(
+    (await repository.getIndexedPhotos()).map((photo) => photo.assetId),
+    ['kept-after-limited-access'],
+  );
 });
