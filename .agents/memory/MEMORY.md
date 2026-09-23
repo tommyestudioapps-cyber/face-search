@@ -9,3 +9,4 @@
 - [Expo FileSystem no monorepo](expo-filesystem-path.md) — o pacote pode não existir na raiz; use o link dentro do artifact para verificar a API moderna `File`/`Directory`.
 - [Instalação de pacotes no app móvel](monorepo-package-install.md) — o instalador automático tenta a raiz do pnpm; dependências do artefato exigem instalação filtrada.
 - [Varredura da galeria](gallery-scan-safety.md) — cursor e geração do SQLite devem coincidir; acesso limitado ou ciclo incompleto nunca autorizam excluir resultados.
+- [Mocks nativos em testes Node](node-native-test-mocks.md) — no Expo monorepo, isole o contrato do batchRunner quando TSX tenta transformar módulos nativos durante mocks.
