@@ -118,11 +118,30 @@ export async function getStoredIndexStats(): Promise<StoredIndexStats> {
   return faceSearchRepository.getStoredIndexStats();
 }
 
+export async function getBackgroundIndexState() {
+  await faceSearchRepository.initialize();
+  return faceSearchRepository.getBackgroundIndexState();
+}
+
 export async function clearStoredIndex(): Promise<void> {
   await indexCoordinator.run('clear', async () => {
     await clearAfterGalleryIndexStops(async () => {
       await faceSearchRepository.initialize();
       await faceSearchRepository.clearIndex();
+      try {
+        await faceSearchRepository.updateBackgroundIndexState({
+          status: 'idle',
+          scope: 'gallery',
+          processedAssets: 0,
+          totalAssets: null,
+          lastAssetId: null,
+          lastStartedAt: null,
+          lastCompletedAt: null,
+          lastError: null,
+        });
+      } catch (error) {
+        console.warn('[Index] Não foi possível resetar o estado persistido.', error);
+      }
       await clearBackgroundIndexCursor();
     });
   });
@@ -130,4 +149,9 @@ export async function clearStoredIndex(): Promise<void> {
 
 export * from './types';
 export * from './galleryIndexer';
+export type {
+  BackgroundIndexScope,
+  BackgroundIndexState,
+  BackgroundIndexStatus,
+} from '../backgroundIndexing/status';
 export { searchAlignedFace };

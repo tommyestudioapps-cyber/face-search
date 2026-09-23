@@ -186,6 +186,7 @@ const galleryIndexerMock = {
         status: 'cancelled',
         processedAssets: 0,
         totalAssets: 1,
+        lastAssetId: null,
         indexedPhotos: 0,
         skippedAssets: 0,
         indexedFaces: 0,
@@ -216,6 +217,7 @@ const galleryIndexerMock = {
           status: 'paused',
           processedAssets: 1,
           totalAssets: 2,
+            lastAssetId: page.assets[0].id,
           indexedPhotos: 1,
           skippedAssets: 0,
           indexedFaces: 0,
@@ -247,6 +249,7 @@ const galleryIndexerMock = {
         status: 'cancelled',
         processedAssets: 1,
         totalAssets: 1,
+        lastAssetId: page.assets[0].id,
         indexedPhotos: 1,
         skippedAssets: 0,
         indexedFaces: 0,
@@ -260,6 +263,7 @@ const galleryIndexerMock = {
       status: 'completed',
       processedAssets: 1,
       totalAssets: 1,
+      lastAssetId: page.assets[0].id,
       indexedPhotos: 0,
       skippedAssets: 0,
       indexedFaces: 0,
@@ -302,11 +306,13 @@ test('interrompe ao perder acesso integral e só remove órfãs no ciclo seguint
     assert.equal(await loadBackgroundIndexCursor(), undefined);
     assert.equal(completeScanCalls, 0);
     assert.equal(await repository.getActiveScanGeneration(), null);
+    assert.equal((await repository.getBackgroundIndexState()).status, 'cancelled');
 
     mediaLibrary.accessPrivileges = 'limited';
     await runBackgroundIndexBatch();
     assert.equal(mediaLibrary.assetReads, 1);
     assert.equal(completeScanCalls, 0);
+    assert.equal((await repository.getBackgroundIndexState()).status, 'waiting');
 
     mediaLibrary.accessPrivileges = 'all';
     await runBackgroundIndexBatch();
@@ -314,6 +320,7 @@ test('interrompe ao perder acesso integral e só remove órfãs no ciclo seguint
     assert.equal(mediaLibrary.assetReads, 2);
     assert.equal(completeScanCalls, 1);
     assert.equal(await repository.getActiveScanGeneration(), null);
+    assert.equal((await repository.getBackgroundIndexState()).status, 'completed');
     assert.deepEqual(
       (await repository.getIndexedPhotos()).map((photo) => photo.assetId),
       ['kept-after-limited-access'],
@@ -346,10 +353,12 @@ test('cursor inválido é limpo sem perder resultados e permite uma nova geraç�
     ['deleted-before-restart', 'kept-after-limited-access'],
   );
   assert.equal(await repository.getActiveScanGeneration(), null);
+  assert.equal((await repository.getBackgroundIndexState()).status, 'error');
 
   await runBackgroundIndexBatch();
 
   assert.equal(await repository.getActiveScanGeneration(), null);
+  assert.equal((await repository.getBackgroundIndexState()).status, 'completed');
   assert.deepEqual(
     (await repository.getIndexedPhotos()).map((photo) => photo.assetId),
     ['kept-after-limited-access'],

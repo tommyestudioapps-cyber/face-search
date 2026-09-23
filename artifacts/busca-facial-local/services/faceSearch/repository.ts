@@ -453,6 +453,115 @@ export class FaceSearchRepository {
     return row?.generation ?? null;
   }
 
+  async getBackgroundIndexState(): Promise<BackgroundIndexState> {
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<BackgroundIndexStateRow>(
+      `SELECT
+         status,
+         scope,
+         processed_assets,
+         total_assets,
+         last_asset_id,
+         last_started_at,
+         last_completed_at,
+         last_error
+       FROM background_index_state
+       WHERE id = 1`,
+    );
+    if (!row) return { ...DEFAULT_BACKGROUND_INDEX_STATE };
+    if (
+      !['idle', 'running', 'paused', 'waiting', 'completed', 'cancelled', 'error'].includes(row.status) ||
+      !['gallery', 'album'].includes(row.scope) ||
+      !Number.isSafeInteger(Number(row.processed_assets)) ||
+      Number(row.processed_assets) < 0
+    ) {
+      throw storageError('O estado persistido da indexação está inválido.');
+    }
+    return {
+      status: row.status as BackgroundIndexStatus,
+      scope: row.scope as BackgroundIndexScope,
+      processedAssets: Number(row.processed_assets),
+      totalAssets: row.total_assets === null ? null : Number(row.total_assets),
+      lastAssetId: row.last_asset_id,
+      lastStartedAt: row.last_started_at,
+      lastCompletedAt: row.last_completed_at,
+      lastError: row.last_error,
+    };
+  }
+
+  async updateBackgroundIndexState(
+    patch: BackgroundIndexStatePatch,
+  ): Promise<BackgroundIndexState> {
+    const database = await this.getDatabase();
+    try {
+      let nextState: BackgroundIndexState = DEFAULT_BACKGROUND_INDEX_STATE;
+      await database.withExclusiveTransactionAsync(async (transaction) => {
+        const row = await transaction.getFirstAsync<BackgroundIndexStateRow>(
+          `SELECT
+             status,
+             scope,
+             processed_assets,
+             total_assets,
+             last_asset_id,
+             last_started_at,
+             last_completed_at,
+             last_error
+           FROM background_index_state
+           WHERE id = 1`,
+        );
+        const current = row
+          ? {
+              status: row.status as BackgroundIndexStatus,
+              scope: row.scope as BackgroundIndexScope,
+              processedAssets: Number(row.processed_assets),
+              totalAssets: row.total_assets === null ? null : Number(row.total_assets),
+              lastAssetId: row.last_asset_id,
+              lastStartedAt: row.last_started_at,
+              lastCompletedAt: row.last_completed_at,
+              lastError: row.last_error,
+            }
+          : DEFAULT_BACKGROUND_INDEX_STATE;
+        nextState = { ...current, ...patch };
+        await transaction.runAsync(
+          `INSERT INTO background_index_state (
+             id,
+             status,
+             scope,
+             processed_assets,
+             total_assets,
+             last_asset_id,
+             last_started_at,
+             last_completed_at,
+             last_error
+           ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             status = excluded.status,
+             scope = excluded.scope,
+             processed_assets = excluded.processed_assets,
+             total_assets = excluded.total_assets,
+             last_asset_id = excluded.last_asset_id,
+             last_started_at = excluded.last_started_at,
+             last_completed_at = excluded.last_completed_at,
+             last_error = excluded.last_error`,
+          [
+            nextState.status,
+            nextState.scope,
+            nextState.processedAssets,
+            nextState.totalAssets,
+            nextState.lastAssetId,
+            nextState.lastStartedAt,
+            nextState.lastCompletedAt,
+            nextState.lastError,
+          ],
+        );
+      });
+      return nextState;
+    } catch (cause) {
+      if (cause instanceof FaceRecognitionError) throw cause;
+      throw storageError('Não foi possível salvar o estado da indexação.', cause);
+    }
+  }
+
   async beginScan(owner?: string): Promise<number> {
     const database = await this.getDatabase();
     try {

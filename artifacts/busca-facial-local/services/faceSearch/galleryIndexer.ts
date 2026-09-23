@@ -67,6 +67,7 @@ export interface GalleryIndexResult {
   nextCursor?: string;
   processedAssets: number;
   totalAssets: number;
+  lastAssetId: string | null;
   indexedPhotos: number;
   skippedAssets: number;
   indexedFaces: number;
@@ -358,6 +359,7 @@ async function runGalleryIndex(
   let skippedAssets = 0;
   let indexedFaceCount = 0;
   let removedPhotos = 0;
+  let lastAssetId: string | null = null;
   let scanGeneration: number | null = null;
   const manualOwner = batch ? undefined : `${Date.now()}-${Math.random()}`;
   let manualLeaseHeartbeat: ReturnType<typeof setInterval> | null = null;
@@ -464,6 +466,7 @@ async function runGalleryIndex(
           nextCursor: cursor,
           processedAssets: progress.processedAssets,
           totalAssets,
+          lastAssetId,
           indexedPhotos: indexedPhotoCount,
           skippedAssets,
           indexedFaces: indexedFaceCount,
@@ -536,6 +539,7 @@ async function runGalleryIndex(
           skippedAssets,
           currentAssetId: null,
         };
+        lastAssetId = asset.id;
         options.onProgress?.(progress);
         if (progress.processedAssets % 20 === 0) {
           logIndexProgress(
@@ -581,6 +585,7 @@ async function runGalleryIndex(
       status: 'completed',
       processedAssets: progress.processedAssets,
       totalAssets,
+      lastAssetId,
       indexedPhotos: indexedPhotoCount,
       skippedAssets,
       indexedFaces: indexedFaceCount,
@@ -605,6 +610,7 @@ async function runGalleryIndex(
         status: 'cancelled',
         processedAssets: progress.processedAssets,
         totalAssets,
+        lastAssetId,
         indexedPhotos: indexedPhotoCount,
         skippedAssets,
         indexedFaces: indexedFaceCount,

@@ -13,6 +13,16 @@ import { indexCoordinator } from './indexCoordinator';
 const MAX_ASSETS_PER_RUN = 16;
 const TIME_BUDGET_MS = 15_000;
 
+async function persistBackgroundState(
+  patch: Parameters<typeof faceSearchRepository.updateBackgroundIndexState>[0],
+): Promise<void> {
+  try {
+    await faceSearchRepository.updateBackgroundIndexState(patch);
+  } catch (error) {
+    console.warn('[BackgroundIndex] Não foi possível salvar o estado persistido.', error);
+  }
+}
+
 async function canContinue(): Promise<boolean> {
   return (
     (await getBackgroundIndexConsent()) === 'accepted' &&
@@ -33,6 +43,11 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
     if (checkpoint && checkpoint.generation === activeGeneration) {
       await faceSearchRepository.abortScanIfUnleased(activeGeneration);
     }
+    await persistBackgroundState({
+      status: 'waiting',
+      scope: 'gallery',
+      lastError: null,
+    });
     return;
   }
   const checkpoint = await loadBackgroundIndexCursor();
@@ -47,7 +62,14 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
     await clearBackgroundIndexCursor();
   }
   if (!checkpoint && activeGeneration !== null) {
-    if (!(await faceSearchRepository.abortScanIfUnleased(activeGeneration))) return;
+    if (!(await faceSearchRepository.abortScanIfUnleased(activeGeneration))) {
+      await persistBackgroundState({
+        status: 'waiting',
+        scope: 'gallery',
+        lastError: null,
+      });
+      return;
+    }
   }
   const leaseOwner = `${Date.now()}-${Math.random()}`;
   const generation = resume ? resume.generation : await faceSearchRepository.beginScan(leaseOwner);
@@ -55,6 +77,24 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
   if (resume && !(await faceSearchRepository.claimScan(generation, leaseOwner))) {
     return; // Another runtime owns this execution; it will keep the checkpoint.
   }
+
+  await persistBackgroundState(resume
+    ? {
+        status: 'running',
+        scope: 'gallery',
+        lastStartedAt: Date.now(),
+        lastError: null,
+      }
+    : {
+        status: 'running',
+        scope: 'gallery',
+        processedAssets: 0,
+        totalAssets: null,
+        lastAssetId: null,
+        lastStartedAt: Date.now(),
+        lastCompletedAt: null,
+        lastError: null,
+      });
 
   let leaseHealthy = true;
   const heartbeat = setInterval(() => {
@@ -87,9 +127,35 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
     });
     if (result.status === 'completed') {
       await clearBackgroundIndexCursor();
+      await persistBackgroundState({
+        status: 'completed',
+        scope: 'gallery',
+        processedAssets: result.processedAssets,
+        totalAssets: result.totalAssets,
+        lastAssetId: result.lastAssetId ?? null,
+        lastCompletedAt: Date.now(),
+        lastError: null,
+      });
+    } else if (result.status === 'paused') {
+      await persistBackgroundState({
+        status: 'paused',
+        scope: 'gallery',
+        processedAssets: result.processedAssets,
+        totalAssets: result.totalAssets,
+        lastAssetId: result.lastAssetId ?? null,
+        lastError: null,
+      });
     }
     if (result.status === 'cancelled') {
       await faceSearchRepository.abortScan(generation, leaseOwner);
+      await persistBackgroundState({
+        status: 'cancelled',
+        scope: 'gallery',
+        processedAssets: result.processedAssets,
+        totalAssets: result.totalAssets,
+        lastAssetId: result.lastAssetId ?? null,
+        lastError: null,
+      });
     }
     // A cancelled batch leaves its last completed page checkpoint intact.
   } catch (error) {
@@ -99,6 +165,11 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
       await clearBackgroundIndexCursor();
       await faceSearchRepository.abortScan(generation, leaseOwner);
     }
+    await persistBackgroundState({
+      status: 'error',
+      scope: 'gallery',
+      lastError: error instanceof Error ? error.message : 'Falha desconhecida na indexação.',
+    });
     throw error;
   } finally {
     clearInterval(heartbeat);

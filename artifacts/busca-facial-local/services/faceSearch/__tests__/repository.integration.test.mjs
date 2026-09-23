@@ -169,6 +169,62 @@ test('limpa o índice, reabre o mesmo SQLite e preserva a galeria', async () => 
   }
 });
 
+test('persiste o estado da indexação e o mantém após reabrir o SQLite', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'face-index-state-'));
+  const databasePath = path.join(directory, 'index.sqlite');
+  const repository = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () => createNativeSQLiteAdapter(databasePath),
+  });
+
+  try {
+    assert.deepEqual(await repository.getBackgroundIndexState(), {
+      status: 'idle',
+      scope: 'gallery',
+      processedAssets: 0,
+      totalAssets: null,
+      lastAssetId: null,
+      lastStartedAt: null,
+      lastCompletedAt: null,
+      lastError: null,
+    });
+    await repository.updateBackgroundIndexState({
+      status: 'paused',
+      scope: 'gallery',
+      processedAssets: 12,
+      totalAssets: 80,
+      lastAssetId: 'asset-12',
+      lastStartedAt: 100,
+      lastError: null,
+    });
+    assert.deepEqual(await repository.getBackgroundIndexState(), {
+      status: 'paused',
+      scope: 'gallery',
+      processedAssets: 12,
+      totalAssets: 80,
+      lastAssetId: 'asset-12',
+      lastStartedAt: 100,
+      lastCompletedAt: null,
+      lastError: null,
+    });
+
+    await repository.close();
+    assert.deepEqual(await repository.getBackgroundIndexState(), {
+      status: 'paused',
+      scope: 'gallery',
+      processedAssets: 12,
+      totalAssets: 80,
+      lastAssetId: 'asset-12',
+      lastStartedAt: 100,
+      lastCompletedAt: null,
+      lastError: null,
+    });
+  } finally {
+    await repository.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('lotes parciais não excluem resultados; ao concluir, apenas fotos não vistas e seus rostos somem', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-'));
   const databasePath = path.join(directory, 'index.sqlite');
@@ -362,6 +418,7 @@ test('migra um índice da versão 2 sem remover fotos ao adicionar a reserva', a
   });
   try {
     assert.deepEqual((await repository.getIndexedPhotos()).map((photo) => photo.assetId), ['saved']);
+    assert.equal((await repository.getBackgroundIndexState()).status, 'idle');
     const generation = await repository.beginScan('foreground');
     assert.equal(await repository.claimScan(generation, 'background'), false);
     await repository.abortScan(generation, 'foreground');

@@ -14,3 +14,9 @@ A reserva da geração e a exclusividade da execução são garantias diferentes
 **Why:** Um segundo runtime pode retomar a mesma geração sem chamar o início de uma geração nova; uma flag em memória ou só a reserva de geração não impede isso. Uma limpeza concorrente também poderia ser seguida por uma gravação tardia.
 
 **How to apply:** Em mudanças nas operações faciais, mantenha a posse temporária da execução, a validação transacional das escritas e a recuperação quando o processo morre antes do primeiro checkpoint. Não apague o único cursor antes de invalidar a geração no SQLite.
+
+O estado resumido da tarefa deve ser persistido no SQLite, mas a falha isolada dessa gravação não pode interromper a indexação ou fazer uma limpeza bem-sucedida parecer falha.
+
+**Why:** O estado é necessário para recuperação e UI, porém é metadado; as fotos e embeddings continuam sendo a fonte de dados do índice e não devem ficar indisponíveis por uma falha transitória ao atualizar o resumo.
+
+**How to apply:** Atualize o estado em transações pequenas e valide valores ao ler. Nos fluxos de trabalho, trate a persistência do resumo como best-effort, mantendo o erro real da operação separado.
