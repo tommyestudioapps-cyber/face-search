@@ -188,6 +188,7 @@ test('lotes parciais não excluem resultados; ao concluir, apenas fotos não vis
     assert.deepEqual((await repository.getIndexedPhotos()).map((p) => p.assetId), ['deleted', 'no-face', 'unchanged']);
 
     // Cursor inválido: recomeçar uma nova geração impede que marcas antigas contem.
+    await repository.abortScan(first);
     const restarted = await repository.beginScan();
     assert.notEqual(restarted, first);
     await assert.rejects(repository.completeScan(first), /geração da varredura/);
@@ -213,14 +214,44 @@ test('uma varredura interrompida antes de qualquer foto mantém todo o índice',
   });
   try {
     await repository.saveIndexedPhoto(createPhoto('keep'), [createFace('keep')]);
-    await repository.beginScan();
+    const interrupted = await repository.beginScan();
     await repository.close();
     assert.deepEqual(await repository.getStoredIndexStats(), { indexedPhotos: 1, indexedFaces: 1 });
+    await repository.abortScan(interrupted);
     const newScan = await repository.beginScan();
     await repository.markAssetSeen('keep', newScan);
     assert.equal(await repository.completeScan(newScan), 0);
   } finally {
     await repository.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('duas conexões não iniciam gerações concorrentes nem alteram a primeira', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-concurrent-'));
+  const databasePath = path.join(directory, 'index.sqlite');
+  const firstRepository = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () => createNativeSQLiteAdapter(databasePath),
+  });
+  const secondRepository = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () => createNativeSQLiteAdapter(databasePath),
+  });
+
+  try {
+    const firstGeneration = await firstRepository.beginScan();
+    await assert.rejects(
+      secondRepository.beginScan(),
+      /Já existe uma varredura da galeria em andamento/,
+    );
+    assert.equal(await firstRepository.getActiveScanGeneration(), firstGeneration);
+    assert.equal(await secondRepository.getActiveScanGeneration(), firstGeneration);
+    await firstRepository.completeScan(firstGeneration);
+    assert.equal(await secondRepository.getActiveScanGeneration(), null);
+  } finally {
+    await firstRepository.close();
+    await secondRepository.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

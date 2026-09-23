@@ -265,7 +265,7 @@ test('interrompe ao perder acesso integral e só remove órfãs no ciclo seguint
     );
     assert.equal(await loadBackgroundIndexCursor(), undefined);
     assert.equal(completeScanCalls, 0);
-    assert.equal(await repository.getActiveScanGeneration(), 1);
+    assert.equal(await repository.getActiveScanGeneration(), null);
 
     mediaLibrary.accessPrivileges = 'limited';
     await runBackgroundIndexBatch();
@@ -309,7 +309,7 @@ test('cursor inválido é limpo sem perder resultados e permite uma nova geraç�
     (await repository.getIndexedPhotos()).map((photo) => photo.assetId),
     ['deleted-before-restart', 'kept-after-limited-access'],
   );
-  assert.equal(await repository.getActiveScanGeneration(), interruptedGeneration);
+  assert.equal(await repository.getActiveScanGeneration(), null);
 
   await runBackgroundIndexBatch();
 

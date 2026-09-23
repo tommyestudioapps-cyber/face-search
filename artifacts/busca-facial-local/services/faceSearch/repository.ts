@@ -356,6 +356,15 @@ export class FaceSearchRepository {
     try {
       let generation = 0;
       await database.withExclusiveTransactionAsync(async (transaction) => {
+        const active = await transaction.getFirstAsync<{ generation: number }>(
+          'SELECT generation FROM gallery_scan WHERE id = 1 AND active = 1',
+        );
+        if (active) {
+          throw new FaceRecognitionError(
+            'indexing-failed',
+            'Já existe uma varredura da galeria em andamento.',
+          );
+        }
         await transaction.runAsync(
           'UPDATE gallery_scan SET generation = generation + 1, active = 1 WHERE id = 1',
         );
@@ -367,7 +376,24 @@ export class FaceSearchRepository {
       });
       return generation;
     } catch (cause) {
+      if (cause instanceof FaceRecognitionError) {
+        throw cause;
+      }
       throw storageError('Não foi possível iniciar a varredura da galeria.', cause);
+    }
+  }
+
+  async abortScan(generation: number): Promise<void> {
+    const database = await this.getDatabase();
+    try {
+      await database.withExclusiveTransactionAsync(async (transaction) => {
+        await transaction.runAsync(
+          'UPDATE gallery_scan SET active = 0 WHERE id = 1 AND active = 1 AND generation = ?',
+          [generation],
+        );
+      });
+    } catch (cause) {
+      throw storageError('Não foi possível interromper a varredura da galeria.', cause);
     }
   }
 

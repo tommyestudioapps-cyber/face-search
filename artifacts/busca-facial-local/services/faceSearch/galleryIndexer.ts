@@ -343,6 +343,7 @@ export async function indexGallery(
   let skippedAssets = 0;
   let indexedFaceCount = 0;
   let removedPhotos = 0;
+  let scanGeneration: number | null = null;
 
   const emitProgress = (
     patch: Partial<FaceIndexProgress>,
@@ -396,6 +397,7 @@ export async function indexGallery(
     const generation = canPrune
       ? batch ? batch.generation : await faceSearchRepository.beginScan()
       : null;
+    scanGeneration = generation;
     if (batch && (
       generation === null ||
       !Number.isSafeInteger(generation) ||
@@ -545,6 +547,9 @@ export async function indexGallery(
       removedPhotos,
     };
   } catch (error) {
+    if (!batch && scanGeneration !== null) {
+      await faceSearchRepository.abortScan(scanGeneration);
+    }
     if (isCancellationError(error)) {
       const cancelled = toIndexError(error);
       emitProgress({
