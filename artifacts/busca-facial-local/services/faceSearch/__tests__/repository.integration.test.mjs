@@ -168,3 +168,101 @@ test('limpa o índice, reabre o mesmo SQLite e preserva a galeria', async () => 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('lotes parciais não excluem resultados; ao concluir, apenas fotos não vistas e seus rostos somem', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-'));
+  const databasePath = path.join(directory, 'index.sqlite');
+  const repository = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () => createNativeSQLiteAdapter(databasePath),
+  });
+  try {
+    await repository.saveIndexedPhoto(createPhoto('unchanged'), [createFace('unchanged')]);
+    await repository.saveIndexedPhoto(createPhoto('deleted'), [createFace('deleted')]);
+    await repository.saveIndexedPhoto(createPhoto('no-face'), []);
+
+    const first = await repository.beginScan();
+    await repository.markAssetSeen('unchanged', first);
+    await repository.close(); // simula interrupção entre lotes
+    assert.equal(await repository.getActiveScanGeneration(), first);
+    assert.deepEqual((await repository.getIndexedPhotos()).map((p) => p.assetId), ['deleted', 'no-face', 'unchanged']);
+
+    // Cursor inválido: recomeçar uma nova geração impede que marcas antigas contem.
+    const restarted = await repository.beginScan();
+    assert.notEqual(restarted, first);
+    await assert.rejects(repository.completeScan(first), /geração da varredura/);
+    await repository.markAssetSeen('unchanged', restarted);
+    await repository.markAssetSeen('no-face', restarted);
+    assert.deepEqual(await repository.getStoredIndexStats(), { indexedPhotos: 3, indexedFaces: 2 });
+    assert.equal(await repository.completeScan(restarted), 1);
+    assert.deepEqual(await repository.getStoredIndexStats(), { indexedPhotos: 2, indexedFaces: 1 });
+    assert.deepEqual((await repository.getIndexedPhotos()).map((p) => p.assetId), ['no-face', 'unchanged']);
+    assert.equal(await repository.getActiveScanGeneration(), null);
+    await assert.rejects(repository.completeScan(restarted), /geração da varredura/);
+  } finally {
+    await repository.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('uma varredura interrompida antes de qualquer foto mantém todo o índice', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-empty-'));
+  const repository = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () => createNativeSQLiteAdapter(path.join(directory, 'index.sqlite')),
+  });
+  try {
+    await repository.saveIndexedPhoto(createPhoto('keep'), [createFace('keep')]);
+    await repository.beginScan();
+    await repository.close();
+    assert.deepEqual(await repository.getStoredIndexStats(), { indexedPhotos: 1, indexedFaces: 1 });
+    const newScan = await repository.beginScan();
+    await repository.markAssetSeen('keep', newScan);
+    assert.equal(await repository.completeScan(newScan), 0);
+  } finally {
+    await repository.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('migra um índice antigo sem perder as fotos e só remove órfãs após ciclo completo', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-migration-'));
+  const databasePath = path.join(directory, 'index.sqlite');
+  const legacy = new DatabaseSync(databasePath);
+  legacy.exec(`
+    PRAGMA user_version = 1;
+    CREATE TABLE indexed_photos (
+      id_media_library TEXT PRIMARY KEY NOT NULL,
+      uri_local TEXT NOT NULL, file_name TEXT, created_at INTEGER,
+      updated_at INTEGER, dimensions TEXT NOT NULL,
+      indexing_status TEXT NOT NULL, model_version TEXT NOT NULL
+    );
+    CREATE TABLE face_embeddings (
+      id TEXT PRIMARY KEY NOT NULL, photo_id TEXT NOT NULL,
+      face_index INTEGER NOT NULL, bounding_box_json TEXT NOT NULL,
+      embedding_blob BLOB NOT NULL, model_version TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (photo_id) REFERENCES indexed_photos (id_media_library) ON DELETE CASCADE,
+      UNIQUE (photo_id, face_index)
+    );
+    INSERT INTO indexed_photos VALUES (
+      'old', 'file:///photos/old.jpg', 'old.jpg', 1, 2,
+      '{"width":1200,"height":800}', 'indexed', 'model'
+    );
+  `);
+  legacy.close();
+  const repository = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () => createNativeSQLiteAdapter(databasePath),
+  });
+  try {
+    assert.equal((await repository.getIndexedPhotos()).length, 1);
+    const generation = await repository.beginScan();
+    assert.equal((await repository.getIndexedPhotos()).length, 1);
+    assert.equal(await repository.completeScan(generation), 1);
+    assert.deepEqual(await repository.getIndexedPhotos(), []);
+  } finally {
+    await repository.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

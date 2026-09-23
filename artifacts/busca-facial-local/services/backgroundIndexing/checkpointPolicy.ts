@@ -1,7 +1,7 @@
 export function parseCheckpoint(
   stored: string | null,
   version: string,
-): string | undefined {
+): { cursor: string; generation: number } | undefined {
   if (!stored) return undefined;
   try {
     const checkpoint: unknown = JSON.parse(stored);
@@ -10,11 +10,15 @@ export function parseCheckpoint(
       checkpoint !== null &&
       'version' in checkpoint &&
       'cursor' in checkpoint &&
+      'generation' in checkpoint &&
       checkpoint.version === version &&
       typeof checkpoint.cursor === 'string' &&
-      checkpoint.cursor.length > 0
+      checkpoint.cursor.length > 0 &&
+      typeof checkpoint.generation === 'number' &&
+      Number.isSafeInteger(checkpoint.generation) &&
+      checkpoint.generation > 0
     ) {
-      return checkpoint.cursor;
+      return { cursor: checkpoint.cursor, generation: checkpoint.generation };
     }
   } catch {
     // Invalid checkpoint: safely restart from the first photo.

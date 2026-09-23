@@ -16,6 +16,12 @@ export async function hasGalleryPhotoPermission(): Promise<boolean> {
   return permission.granted && permission.accessPrivileges !== 'none';
 }
 
+export async function hasFullGalleryPhotoPermission(): Promise<boolean> {
+  if (!(await hasGalleryPhotoPermission())) return false;
+  const permission = await MediaLibrary.getPermissionsAsync(false, ['photo']);
+  return permission.granted && permission.accessPrivileges === 'all';
+}
+
 export async function requestGalleryPhotoPermission(): Promise<void> {
   if (Platform.OS === 'web') {
     throw new FaceRecognitionError(

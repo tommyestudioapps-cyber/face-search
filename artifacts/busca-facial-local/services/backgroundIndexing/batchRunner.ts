@@ -1,12 +1,13 @@
 import { indexGallery } from '@/services/faceSearch/galleryIndexer';
 import { FaceRecognitionError } from '@/services/faceSearch/types';
+import { faceSearchRepository } from '@/services/faceSearch/repository';
 import {
   clearBackgroundIndexCursor,
   loadBackgroundIndexCursor,
   saveBackgroundIndexCursor,
 } from './checkpoint';
 import { getBackgroundIndexConsent } from './consent';
-import { hasGalleryPhotoPermission } from './galleryPermission';
+import { hasFullGalleryPhotoPermission } from './galleryPermission';
 
 const MAX_ASSETS_PER_RUN = 16;
 const TIME_BUDGET_MS = 15_000;
@@ -14,24 +15,37 @@ const TIME_BUDGET_MS = 15_000;
 async function canContinue(): Promise<boolean> {
   return (
     (await getBackgroundIndexConsent()) === 'accepted' &&
-    (await hasGalleryPhotoPermission())
+    (await hasFullGalleryPhotoPermission())
   );
 }
 
 export async function runBackgroundIndexBatch(): Promise<void> {
-  if (!(await canContinue())) return;
-  const after = await loadBackgroundIndexCursor();
+  if (!(await canContinue())) {
+    // Permission could have been reduced to a limited selection since the last page.
+    await clearBackgroundIndexCursor();
+    return;
+  }
+  const checkpoint = await loadBackgroundIndexCursor();
+  const activeGeneration = await faceSearchRepository.getActiveScanGeneration();
+  const resume = checkpoint?.generation === activeGeneration ? checkpoint : undefined;
+  if (checkpoint && !resume) await clearBackgroundIndexCursor();
+  const generation = resume ? resume.generation : await faceSearchRepository.beginScan();
+  const after = resume?.cursor;
 
   try {
     const result = await indexGallery({
       batch: {
         after,
+        generation,
         maxAssets: MAX_ASSETS_PER_RUN,
         timeBudgetMs: TIME_BUDGET_MS,
         shouldContinue: canContinue,
         onCheckpoint: async (cursor) => {
-          if (!(await canContinue())) return;
-          await saveBackgroundIndexCursor(cursor);
+          if (!(await canContinue())) {
+            await clearBackgroundIndexCursor();
+            return;
+          }
+          await saveBackgroundIndexCursor(cursor, generation);
           if (!(await canContinue())) await clearBackgroundIndexCursor();
         },
       },
@@ -41,9 +55,9 @@ export async function runBackgroundIndexBatch(): Promise<void> {
     }
     // A cancelled batch leaves its last completed page checkpoint intact.
   } catch (error) {
-    // Only a failed gallery page/cursor resets the checkpoint. Model/SQLite
-    // failures keep it, so the next run can retry instead of starting over.
-    if (after && error instanceof FaceRecognitionError && error.code === 'invalid-cursor') {
+    // Other errors can retry the saved page; an invalid cursor must restart
+    // the generation from the beginning on the next run.
+    if (error instanceof FaceRecognitionError && error.code === 'invalid-cursor') {
       await clearBackgroundIndexCursor();
     }
     throw error;

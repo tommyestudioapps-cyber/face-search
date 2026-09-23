@@ -10,7 +10,7 @@ import {
 } from './types';
 
 const DATABASE_NAME = 'face-search.sqlite';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const INDEXED_STATUS = 'indexed';
 
 interface Dimensions {
@@ -228,7 +228,8 @@ async function migrateSchema(database: SQLiteDatabase): Promise<void> {
           updated_at INTEGER,
           dimensions TEXT NOT NULL,
           indexing_status TEXT NOT NULL,
-          model_version TEXT NOT NULL
+          model_version TEXT NOT NULL,
+          last_seen_generation INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS face_embeddings (
@@ -251,6 +252,27 @@ async function migrateSchema(database: SQLiteDatabase): Promise<void> {
         CREATE INDEX IF NOT EXISTS face_embeddings_photo_id_idx
           ON face_embeddings (photo_id);
 
+      `);
+      await transaction.execAsync(`
+        CREATE TABLE IF NOT EXISTS gallery_scan (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          generation INTEGER NOT NULL,
+          active INTEGER NOT NULL
+        );
+        INSERT OR IGNORE INTO gallery_scan (id, generation, active) VALUES (1, 0, 0);
+        PRAGMA user_version = ${SCHEMA_VERSION};
+      `);
+    });
+  } else if (currentVersion === 1) {
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.execAsync(`
+        ALTER TABLE indexed_photos ADD COLUMN last_seen_generation INTEGER;
+        CREATE TABLE gallery_scan (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          generation INTEGER NOT NULL,
+          active INTEGER NOT NULL
+        );
+        INSERT INTO gallery_scan (id, generation, active) VALUES (1, 0, 0);
         PRAGMA user_version = ${SCHEMA_VERSION};
       `);
     });
@@ -319,6 +341,75 @@ export class FaceSearchRepository {
 
   async initialize(): Promise<void> {
     await this.getDatabase();
+  }
+
+  async getActiveScanGeneration(): Promise<number | null> {
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<{ generation: number }>(
+      'SELECT generation FROM gallery_scan WHERE id = 1 AND active = 1',
+    );
+    return row?.generation ?? null;
+  }
+
+  async beginScan(): Promise<number> {
+    const database = await this.getDatabase();
+    try {
+      let generation = 0;
+      await database.withExclusiveTransactionAsync(async (transaction) => {
+        await transaction.runAsync(
+          'UPDATE gallery_scan SET generation = generation + 1, active = 1 WHERE id = 1',
+        );
+        const row = await transaction.getFirstAsync<{ generation: number }>(
+          'SELECT generation FROM gallery_scan WHERE id = 1',
+        );
+        if (!row) throw storageError('O estado da varredura não está disponível.');
+        generation = row.generation;
+      });
+      return generation;
+    } catch (cause) {
+      throw storageError('Não foi possível iniciar a varredura da galeria.', cause);
+    }
+  }
+
+  async markAssetSeen(assetId: string, generation: number): Promise<void> {
+    const database = await this.getDatabase();
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      const active = await transaction.getFirstAsync<{ generation: number }>(
+        'SELECT generation FROM gallery_scan WHERE id = 1 AND active = 1',
+      );
+      if (active?.generation !== generation) {
+        throw storageError('A geração da varredura foi interrompida.');
+      }
+      await transaction.runAsync(
+        'UPDATE indexed_photos SET last_seen_generation = ? WHERE id_media_library = ?',
+        [generation, assetId],
+      );
+    });
+  }
+
+  async completeScan(generation: number): Promise<number> {
+    const database = await this.getDatabase();
+    try {
+      let deletedRows = 0;
+      await database.withExclusiveTransactionAsync(async (transaction) => {
+        const active = await transaction.getFirstAsync<{ generation: number }>(
+          'SELECT generation FROM gallery_scan WHERE id = 1 AND active = 1',
+        );
+        if (active?.generation !== generation) {
+          throw storageError('A geração da varredura foi interrompida.');
+        }
+        const result = await transaction.runAsync(
+          'DELETE FROM indexed_photos WHERE last_seen_generation IS NULL OR last_seen_generation != ?',
+          [generation],
+        );
+        await transaction.runAsync('UPDATE gallery_scan SET active = 0 WHERE id = 1');
+        deletedRows = result.changes;
+      });
+      return deletedRows;
+    } catch (cause) {
+      if (cause instanceof FaceRecognitionError) throw cause;
+      throw storageError('Não foi possível concluir a limpeza do índice local.', cause);
+    }
   }
 
   async saveIndexedPhoto(
@@ -596,25 +687,13 @@ export class FaceSearchRepository {
     return true;
   }
 
-  async removeOrphanedPhotos(assetIds: string[]): Promise<number> {
-    const database = await this.getDatabase();
-
-    try {
-      return await this.deleteOutsideAssetSet(database, assetIds);
-    } catch (cause) {
-      if (cause instanceof FaceRecognitionError) {
-        throw cause;
-      }
-      throw storageError('Não foi possível limpar fotos órfãs do índice local.', cause);
-    }
-  }
-
   async clearIndex(): Promise<void> {
     const database = await this.getDatabase();
     try {
       await database.withExclusiveTransactionAsync(async (transaction) => {
         await transaction.runAsync('DELETE FROM face_embeddings');
         await transaction.runAsync('DELETE FROM indexed_photos');
+        await transaction.runAsync('UPDATE gallery_scan SET active = 0 WHERE id = 1');
       });
     } catch (cause) {
       throw storageError('Não foi possível invalidar o índice facial local.', cause);
@@ -631,36 +710,6 @@ export class FaceSearchRepository {
     this.databasePromise = null;
   }
 
-  private async deleteOutsideAssetSet(
-    database: SQLiteDatabase,
-    assetIds: string[],
-  ): Promise<number> {
-    let deletedRows = 0;
-    await database.withExclusiveTransactionAsync(async (transaction) => {
-      if (assetIds.length === 0) {
-        const result = await transaction.runAsync('DELETE FROM indexed_photos');
-        deletedRows = result.changes;
-        return;
-      }
-
-      const indexedRows = await transaction.getAllAsync<{ id_media_library: string }>(
-        'SELECT id_media_library FROM indexed_photos',
-      );
-      const currentAssetIds = new Set(assetIds);
-
-      for (const row of indexedRows) {
-        if (currentAssetIds.has(row.id_media_library)) {
-          continue;
-        }
-        const result = await transaction.runAsync(
-          'DELETE FROM indexed_photos WHERE id_media_library = ?',
-          [row.id_media_library],
-        );
-        deletedRows += result.changes;
-      }
-    });
-    return deletedRows;
-  }
 }
 
 export const faceSearchRepository = new FaceSearchRepository();

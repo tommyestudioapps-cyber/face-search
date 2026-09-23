@@ -11,7 +11,7 @@ const INDEX_VERSION = [
   faceSearch.input.channels,
 ].join(':');
 
-export async function loadBackgroundIndexCursor(): Promise<string | undefined> {
+export async function loadBackgroundIndexCursor(): Promise<{ cursor: string; generation: number } | undefined> {
   const stored = await AsyncStorage.getItem(CURSOR_KEY);
   const cursor = parseCheckpoint(stored, INDEX_VERSION);
   if (stored && !cursor) {
@@ -20,10 +20,11 @@ export async function loadBackgroundIndexCursor(): Promise<string | undefined> {
   return cursor;
 }
 
-export function saveBackgroundIndexCursor(cursor: string): Promise<void> {
+export function saveBackgroundIndexCursor(cursor: string, generation: number): Promise<void> {
   return AsyncStorage.setItem(CURSOR_KEY, JSON.stringify({
     version: INDEX_VERSION,
     cursor,
+    generation,
   }));
 }
 

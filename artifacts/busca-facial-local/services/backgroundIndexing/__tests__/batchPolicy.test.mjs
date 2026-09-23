@@ -12,9 +12,11 @@ test('um lote não inicia trabalho novo após o prazo ou limite de fotos', () =>
 });
 
 test('cursor válido é retomado; modelo diferente ou dado inválido reinicia a varredura', () => {
-  const cursor = JSON.stringify({ version: 'model:192', cursor: 'page-7' });
-  assert.equal(parseCheckpoint(cursor, 'model:192'), 'page-7');
+  const cursor = JSON.stringify({ version: 'model:192', cursor: 'page-7', generation: 2 });
+  assert.deepEqual(parseCheckpoint(cursor, 'model:192'), { cursor: 'page-7', generation: 2 });
   assert.equal(parseCheckpoint(cursor, 'model:128'), undefined);
   assert.equal(parseCheckpoint('not json', 'model:192'), undefined);
   assert.equal(parseCheckpoint(JSON.stringify({ version: 'model:192', cursor: '' }), 'model:192'), undefined);
+  assert.equal(parseCheckpoint(JSON.stringify({ version: 'model:192', cursor: 'page-7' }), 'model:192'), undefined);
+  assert.equal(parseCheckpoint(JSON.stringify({ version: 'model:192', cursor: 'page-7', generation: 0 }), 'model:192'), undefined);
 });
