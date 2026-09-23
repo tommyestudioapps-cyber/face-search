@@ -42,3 +42,17 @@ mtime_ms = 1789831381176
 storage_uri = "gcs://replit-rams-assets-reed/rams/assets/repl:2a4d4a8e-7c22-4ff1-a93e-6196ada332df/fee94d63-a8c8-4e57-8fbf-9361d41f3199/5fdbcd90-53e8-48d0-8dc7-dfb1fd30e37f"
 storage_version_token = "1789831381666107"
 content_type = "image/png"
+
+[[outputs]]
+id = "tIRBtEaNO6_kJ8czCmykA"
+uri = "file://artifacts/busca-facial-local/dev-build-qr.svg"
+type = "image"
+title = "QR code da dev build"
+description = "Escaneie com o development build do Busca Facial Local enquanto o Metro estiver ativo."
+logical_id = "6afb3b22-df60-4c23-9528-9ff533258358"
+content_hash = "sha256:8766b271a85f468bb6ffc937aeaeb47e7c7652841df55bc3f9af71dfdb3e58fc"
+size = 46404
+mtime_ms = 1790194334178
+storage_uri = "gcs://replit-rams-assets-reed/rams/assets/repl:2a4d4a8e-7c22-4ff1-a93e-6196ada332df/6afb3b22-df60-4c23-9528-9ff533258358/5392757c-9705-4ffe-8b78-6897e5cffcce"
+storage_version_token = "1790194337717759"
+content_type = "image/svg+xml"
