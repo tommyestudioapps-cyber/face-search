@@ -80,50 +80,53 @@ const databaseDirectory = await mkdtemp(
   path.join(os.tmpdir(), 'background-index-integration-'),
 );
 const databasePath = path.join(databaseDirectory, 'face-search.sqlite');
-const database = new DatabaseSync(databasePath);
 
 function parameters(values = []) {
   return Array.isArray(values) ? values : [values];
 }
 
-const databaseAdapter = {
-  async execAsync(source) {
-    database.exec(source);
-  },
-  async getFirstAsync(source, values = []) {
-    return database.prepare(source).get(...parameters(values)) ?? null;
-  },
-  async getAllAsync(source, values = []) {
-    return database.prepare(source).all(...parameters(values));
-  },
-  async runAsync(source, values = []) {
-    const result = database.prepare(source).run(...parameters(values));
-    return {
-      changes: Number(result.changes),
-      lastInsertRowId: Number(result.lastInsertRowid),
-    };
-  },
-  async withExclusiveTransactionAsync(callback) {
-    database.exec('BEGIN IMMEDIATE');
-    try {
-      await callback(databaseAdapter);
-      database.exec('COMMIT');
-    } catch (error) {
-      database.exec('ROLLBACK');
-      throw error;
-    }
-  },
-  async closeAsync() {
-    database.close();
-  },
-};
+function createDatabaseAdapter() {
+  const database = new DatabaseSync(databasePath);
+  const adapter = {
+    async execAsync(source) {
+      database.exec(source);
+    },
+    async getFirstAsync(source, values = []) {
+      return database.prepare(source).get(...parameters(values)) ?? null;
+    },
+    async getAllAsync(source, values = []) {
+      return database.prepare(source).all(...parameters(values));
+    },
+    async runAsync(source, values = []) {
+      const result = database.prepare(source).run(...parameters(values));
+      return {
+        changes: Number(result.changes),
+        lastInsertRowId: Number(result.lastInsertRowid),
+      };
+    },
+    async withExclusiveTransactionAsync(callback) {
+      database.exec('BEGIN IMMEDIATE');
+      try {
+        await callback(adapter);
+        database.exec('COMMIT');
+      } catch (error) {
+        database.exec('ROLLBACK');
+        throw error;
+      }
+    },
+    async closeAsync() {
+      database.close();
+    },
+  };
+  return adapter;
+}
 
 const { FaceSearchRepository, getModelStorageVersion } = await import(
   '../../faceSearch/repository.ts'
 );
 const repository = new FaceSearchRepository({
   platformOS: 'android',
-  openDatabase: async () => databaseAdapter,
+  openDatabase: async () => createDatabaseAdapter(),
 });
 
 const galleryPermissionMock = {
@@ -175,6 +178,7 @@ function createPhoto(assetId) {
 
 const galleryIndexerMock = {
   indexGallery: async ({ batch }) => {
+    mediaLibrary.lastBatchAfter = batch.after ?? null;
     const permission = await mediaLibrary.getPermissionsAsync();
     if (!permission.granted || permission.accessPrivileges !== 'all') {
       return {
@@ -201,6 +205,14 @@ const galleryIndexerMock = {
     }
 
     const page = await mediaLibrary.getAssetsAsync();
+    if (mediaLibrary.crashAfterCheckpoint) {
+      await repository.saveIndexedPhoto(
+        createPhoto(page.assets[0].id),
+        [],
+      );
+      await batch.onCheckpoint('cursor-before-process-restart');
+      throw new Error('simulated abrupt process termination');
+    }
     if (batch.generation === 1) {
       await repository.saveIndexedPhoto(
         createPhoto(page.assets[0].id),
@@ -313,6 +325,36 @@ test('cursor inválido é limpo sem perder resultados e permite uma nova geraç�
 
   await runBackgroundIndexBatch();
 
+  assert.equal(await repository.getActiveScanGeneration(), null);
+  assert.deepEqual(
+    (await repository.getIndexedPhotos()).map((photo) => photo.assetId),
+    ['kept-after-limited-access'],
+  );
+});
+
+test('retoma após encerramento entre checkpoint e conclusão sem apagar resultados', async () => {
+  await repository.saveIndexedPhoto(createPhoto('deleted-before-process-restart'), []);
+  mediaLibrary.crashAfterCheckpoint = true;
+
+  await assert.rejects(
+    runBackgroundIndexBatch(),
+    /simulated abrupt process termination/,
+  );
+
+  mediaLibrary.crashAfterCheckpoint = false;
+  const savedCheckpoint = await loadBackgroundIndexCursor();
+  assert.deepEqual(savedCheckpoint?.cursor, 'cursor-before-process-restart');
+  assert.equal(await repository.getActiveScanGeneration(), savedCheckpoint?.generation);
+  assert.deepEqual(
+    (await repository.getIndexedPhotos()).map((photo) => photo.assetId),
+    ['deleted-before-process-restart', 'kept-after-limited-access'],
+  );
+
+  await repository.close();
+  await runBackgroundIndexBatch();
+
+  assert.equal(mediaLibrary.lastBatchAfter, 'cursor-before-process-restart');
+  assert.equal(await loadBackgroundIndexCursor(), undefined);
   assert.equal(await repository.getActiveScanGeneration(), null);
   assert.deepEqual(
     (await repository.getIndexedPhotos()).map((photo) => photo.assetId),
