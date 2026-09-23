@@ -35,6 +35,7 @@
       "expo-font",
       "expo-web-browser",
       "expo-sqlite",
+      "expo-background-task",
       [
         "react-native-vision-camera",
         {

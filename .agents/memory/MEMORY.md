@@ -7,3 +7,4 @@
 - [Inicialização do Dev Client](dev-client-startup.md) — montar o provedor global de teclado fechava o app Android ao carregar o bundle; mantenha-o fora da raiz enquanto não for necessário.
 - [Testes Node com TypeScript](node-strip-types-tests.md) — imports de runtime entre arquivos `.ts` podem exigir extensão explícita no executor `node --experimental-strip-types --test`.
 - [Expo FileSystem no monorepo](expo-filesystem-path.md) — o pacote pode não existir na raiz; use o link dentro do artifact para verificar a API moderna `File`/`Directory`.
+- [Instalação de pacotes no app móvel](monorepo-package-install.md) — o instalador automático tenta a raiz do pnpm; dependências do artefato exigem instalação filtrada.

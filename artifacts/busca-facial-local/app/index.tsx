@@ -920,6 +920,13 @@ export default function HomeScreen() {
     rehydrateSession,
   } = useFaceSearch();
 
+  const syncBackgroundTask = async (): Promise<void> => {
+    if (Platform.OS === 'web') return;
+    const { syncBackgroundIndexRegistration } =
+      await import('@/services/backgroundIndexing/scheduler');
+    await syncBackgroundIndexRegistration();
+  };
+
   useEffect(() => {
     if (__DEV__) {
       console.info('[startup] HomeScreen mounted');
@@ -941,6 +948,9 @@ export default function HomeScreen() {
         setHasGalleryPhotoAccess(galleryPermissionGranted);
         const canAskForConsent = consent === 'unknown' && galleryPermissionGranted;
         setShowBackgroundIndexConsent(canAskForConsent);
+        void syncBackgroundTask().catch((error) => {
+          console.error('[BackgroundIndex] não foi possível sincronizar a tarefa', error);
+        });
       }
     })().catch((error) => {
       if (__DEV__) {
@@ -1025,9 +1035,9 @@ export default function HomeScreen() {
     try {
       if (!(await hasGalleryPhotoPermission())) {
         await requestGalleryPhotoPermission();
-        setHasGalleryPhotoAccess(true);
       }
       await setBackgroundIndexConsent('accepted');
+      setHasGalleryPhotoAccess(true);
       setBackgroundIndexConsentState('accepted');
       setShowBackgroundIndexConsent(false);
     } catch (error) {
@@ -1035,8 +1045,18 @@ export default function HomeScreen() {
         console.error('[BackgroundIndex] não foi possível salvar a aceitação', error);
       }
       Alert.alert(
-        'Permissão necessária',
-        'Permita o acesso às fotos para ativar a preparação do índice.',
+        'Não foi possível ativar o índice',
+        'Verifique a permissão das fotos e tente novamente nos filtros.',
+      );
+      return;
+    }
+    try {
+      await syncBackgroundTask();
+    } catch (error) {
+      console.error('[BackgroundIndex] agendamento indisponível', error);
+      Alert.alert(
+        'Agendamento indisponível',
+        'A autorização foi salva, mas a tarefa em segundo plano não foi registrada. Instale uma versão atualizada do aplicativo e tente novamente.',
       );
     }
   };
@@ -1046,6 +1066,11 @@ export default function HomeScreen() {
       await setBackgroundIndexConsent('declined');
       setBackgroundIndexConsentState('declined');
       setShowBackgroundIndexConsent(false);
+      try {
+        await syncBackgroundTask();
+      } catch (error) {
+        console.error('[BackgroundIndex] falha ao cancelar o agendamento', error);
+      }
       Alert.alert('Índice local desativado', BACKGROUND_INDEX_DECLINED_MESSAGE);
     } catch (error) {
       if (__DEV__) {
@@ -1066,12 +1091,26 @@ export default function HomeScreen() {
         await setBackgroundIndexConsent('accepted');
         setHasGalleryPhotoAccess(true);
         setBackgroundIndexConsentState('accepted');
+        try {
+          await syncBackgroundTask();
+        } catch (error) {
+          console.error('[BackgroundIndex] agendamento indisponível', error);
+          Alert.alert(
+            'Agendamento indisponível',
+            'A autorização foi salva, mas a tarefa em segundo plano não foi registrada. Instale uma versão atualizada do aplicativo e tente novamente.',
+          );
+        }
         return;
       }
 
       cancelIndexing();
       await setBackgroundIndexConsent('declined');
       setBackgroundIndexConsentState('declined');
+      try {
+        await syncBackgroundTask();
+      } catch (error) {
+        console.error('[BackgroundIndex] falha ao cancelar o agendamento', error);
+      }
       Alert.alert('Índice local desativado', BACKGROUND_INDEX_DECLINED_MESSAGE);
     } catch (error) {
       if (__DEV__) {
