@@ -11,8 +11,8 @@ import { useColors } from '@/hooks/useColors';
 
 interface BackgroundIndexConsentProps {
   visible: boolean;
-  onAccept: () => void;
-  onDecline: () => void;
+  onAccept: () => void | Promise<void>;
+  onDecline: () => void | Promise<void>;
 }
 
 export function BackgroundIndexConsent({

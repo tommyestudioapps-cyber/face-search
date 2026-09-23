@@ -29,6 +29,11 @@ import { IndexedGallery } from '@/components/IndexedGallery';
 import { GlobalMatchesPanel } from '@/components/GlobalMatchesPanel';
 import { BackgroundIndexConsent } from '@/components/BackgroundIndexConsent';
 import {
+  getBackgroundIndexConsent,
+  setBackgroundIndexConsent,
+  type BackgroundIndexConsentStatus,
+} from '@/services/backgroundIndexing/consent';
+import {
   AlbumPicker,
   type AlbumOption,
 } from '@/components/AlbumPicker';
@@ -868,6 +873,8 @@ export default function HomeScreen() {
   const [rewardCountdown, setRewardCountdown] = useState(3);
   const [matchesReturnScreen, setMatchesReturnScreen] = useState<AppScreen | null>(null);
   const [showBackgroundIndexConsent, setShowBackgroundIndexConsent] = useState(false);
+  const [backgroundIndexConsent, setBackgroundIndexConsentState] =
+    useState<BackgroundIndexConsentStatus>('unknown');
   const colors = useColors();
   const {
     faces,
@@ -909,10 +916,22 @@ export default function HomeScreen() {
     if (__DEV__) {
       console.info('[startup] HomeScreen mounted');
     }
-    void AsyncStorage.getItem('visage.onboarding.complete').then((value) => {
-      if (value === 'true') {
+    let cancelled = false;
+    void (async () => {
+      const [onboardingValue, consent] = await Promise.all([
+        AsyncStorage.getItem('visage.onboarding.complete'),
+        getBackgroundIndexConsent(),
+      ]);
+      if (cancelled) return;
+
+      setBackgroundIndexConsentState(consent);
+      if (onboardingValue === 'true') {
         setScreen('home');
-        setShowBackgroundIndexConsent(true);
+        setShowBackgroundIndexConsent(consent === 'unknown');
+      }
+    })().catch((error) => {
+      if (__DEV__) {
+        console.error('[BackgroundIndex] não foi possível ler o consentimento', error);
       }
     });
     void AsyncStorage.getItem(ALBUM_STORAGE_KEY).then((value) => {
@@ -927,6 +946,9 @@ export default function HomeScreen() {
         // ignore parse error
       }
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -971,7 +993,33 @@ export default function HomeScreen() {
     await ImagePicker.requestMediaLibraryPermissionsAsync();
     await AsyncStorage.setItem('visage.onboarding.complete', 'true');
     setScreen('home');
-    setShowBackgroundIndexConsent(true);
+    if (backgroundIndexConsent === 'unknown') {
+      setShowBackgroundIndexConsent(true);
+    }
+  };
+
+  const acceptBackgroundIndex = async () => {
+    try {
+      await setBackgroundIndexConsent('accepted');
+      setBackgroundIndexConsentState('accepted');
+      setShowBackgroundIndexConsent(false);
+    } catch (error) {
+      if (__DEV__) {
+        console.error('[BackgroundIndex] não foi possível salvar a aceitação', error);
+      }
+    }
+  };
+
+  const declineBackgroundIndex = async () => {
+    try {
+      await setBackgroundIndexConsent('declined');
+      setBackgroundIndexConsentState('declined');
+      setShowBackgroundIndexConsent(false);
+    } catch (error) {
+      if (__DEV__) {
+        console.error('[BackgroundIndex] não foi possível salvar a recusa', error);
+      }
+    }
   };
 
   const pickFromLibrary = async () => {
@@ -1259,8 +1307,8 @@ export default function HomeScreen() {
       />
       <BackgroundIndexConsent
         visible={showBackgroundIndexConsent}
-        onAccept={() => setShowBackgroundIndexConsent(false)}
-        onDecline={() => setShowBackgroundIndexConsent(false)}
+        onAccept={acceptBackgroundIndex}
+        onDecline={declineBackgroundIndex}
       />
       <OfflineModal visible={showOffline} onClose={() => setShowOffline(false)} />
       <IndexSettings
