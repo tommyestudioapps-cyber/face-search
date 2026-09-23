@@ -555,20 +555,6 @@ function SelectPhoto({
           hasAlignedFace={Boolean(alignedImageUri)}
         />
 
-        {alignedImageUri ? (
-          <View style={[styles.alignedPreview, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.alignedPreviewCopy}>
-              <Text style={[styles.alignedPreviewTitle, { color: colors.foreground }]}>
-                Recorte alinhado
-              </Text>
-              <Text style={[styles.alignedPreviewBody, { color: colors.mutedForeground }]}>
-                Este recorte será usado na próxima etapa.
-              </Text>
-            </View>
-            <Image source={{ uri: alignedImageUri }} style={styles.alignedPreviewImage} />
-          </View>
-        ) : null}
-
         <Text style={[styles.helperText, { color: colors.mutedForeground }]}>
           Para melhores resultados, use uma foto nítida e com boa iluminação.
         </Text>
@@ -1398,11 +1384,6 @@ const styles = StyleSheet.create({
   emptyCropTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15, textAlign: 'center' },
   emptyCropBody: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 7 },
   helperText: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18, textAlign: 'center', paddingHorizontal: 23, marginTop: 14 },
-  alignedPreview: { minHeight: 86, borderRadius: 17, borderWidth: 1, padding: 11, marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 11 },
-  alignedPreviewCopy: { flex: 1 },
-  alignedPreviewTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
-  alignedPreviewBody: { fontFamily: 'Inter_400Regular', fontSize: 10, lineHeight: 14, marginTop: 4 },
-  alignedPreviewImage: { width: 64, height: 64, borderRadius: 14, resizeMode: 'cover' },
   sourceButtons: { flexDirection: 'row', gap: 12, marginTop: 25, marginBottom: 17 },
   sourceButton: { flex: 1, minHeight: 52, borderRadius: 16, borderWidth: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   sourceButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },

@@ -98,7 +98,14 @@ export function FaceCaptureFeedback({
     return (
       <View style={[styles.feedback, styles.successFeedback, { borderColor: colors.border }]}>
         <Feather name="check-circle" size={17} color="#34D399" />
-        <Text style={[styles.text, { color: colors.foreground }]}>Rosto capturado e alinhado.</Text>
+        <View style={styles.successCopy}>
+          <Text style={[styles.text, { color: colors.foreground }]}>
+            Rosto capturado e alinhado
+          </Text>
+          <Text style={[styles.successSubtext, { color: colors.mutedForeground }]}>
+            Este recorte será usado em novas buscas.
+          </Text>
+        </View>
       </View>
     );
   }
@@ -137,6 +144,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     fontSize: 12,
     lineHeight: 17,
+  },
+  successCopy: {
+    flex: 1,
+  },
+  successSubtext: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 1,
   },
   faceBox: {
     position: 'absolute',
