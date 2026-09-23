@@ -1,6 +1,7 @@
 export const INDEX_SETTINGS_TEST_IDS = {
   close: 'close-index-settings',
   clear: 'clear-local-index',
+  backgroundIndexToggle: 'background-index-toggle',
 } as const;
 
 export interface IndexClearAlertOption {

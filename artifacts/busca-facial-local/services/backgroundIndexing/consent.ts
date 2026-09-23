@@ -2,6 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BACKGROUND_INDEX_CONSENT_KEY = 'visage.background-index.consent';
 
+export const BACKGROUND_INDEX_DECLINED_MESSAGE =
+  'Sua busca não será otimizada, você poderá ativar o índice manualmente em seus filtros.';
+
 export type BackgroundIndexConsentStatus =
   | 'unknown'
   | 'accepted'

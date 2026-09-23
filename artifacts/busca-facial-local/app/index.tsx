@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Image,
   Modal,
@@ -29,6 +30,7 @@ import { IndexedGallery } from '@/components/IndexedGallery';
 import { GlobalMatchesPanel } from '@/components/GlobalMatchesPanel';
 import { BackgroundIndexConsent } from '@/components/BackgroundIndexConsent';
 import {
+  BACKGROUND_INDEX_DECLINED_MESSAGE,
   getBackgroundIndexConsent,
   setBackgroundIndexConsent,
   type BackgroundIndexConsentStatus,
@@ -879,6 +881,8 @@ export default function HomeScreen() {
   const [showBackgroundIndexConsent, setShowBackgroundIndexConsent] = useState(false);
   const [backgroundIndexConsent, setBackgroundIndexConsentState] =
     useState<BackgroundIndexConsentStatus>('unknown');
+  const [hasGalleryPhotoAccess, setHasGalleryPhotoAccess] = useState(false);
+  const [isUpdatingBackgroundIndex, setIsUpdatingBackgroundIndex] = useState(false);
   const colors = useColors();
   const {
     faces,
@@ -930,12 +934,13 @@ export default function HomeScreen() {
 
       setBackgroundIndexConsentState(consent);
       if (onboardingValue === 'true') {
+        if (cancelled) return;
         setScreen('home');
-        const canAskForConsent =
-          consent === 'unknown' && (await hasGalleryPhotoPermission());
-        if (!cancelled) {
-          setShowBackgroundIndexConsent(canAskForConsent);
-        }
+        const galleryPermissionGranted = await hasGalleryPhotoPermission();
+        if (cancelled) return;
+        setHasGalleryPhotoAccess(galleryPermissionGranted);
+        const canAskForConsent = consent === 'unknown' && galleryPermissionGranted;
+        setShowBackgroundIndexConsent(canAskForConsent);
       }
     })().catch((error) => {
       if (__DEV__) {
@@ -1003,6 +1008,7 @@ export default function HomeScreen() {
     try {
       await requestGalleryPhotoPermission();
       galleryPermissionGranted = true;
+      setHasGalleryPhotoAccess(true);
     } catch (error) {
       if (__DEV__) {
         console.error('[BackgroundIndex] permissão da galeria não concedida', error);
@@ -1017,6 +1023,10 @@ export default function HomeScreen() {
 
   const acceptBackgroundIndex = async () => {
     try {
+      if (!(await hasGalleryPhotoPermission())) {
+        await requestGalleryPhotoPermission();
+        setHasGalleryPhotoAccess(true);
+      }
       await setBackgroundIndexConsent('accepted');
       setBackgroundIndexConsentState('accepted');
       setShowBackgroundIndexConsent(false);
@@ -1024,6 +1034,10 @@ export default function HomeScreen() {
       if (__DEV__) {
         console.error('[BackgroundIndex] não foi possível salvar a aceitação', error);
       }
+      Alert.alert(
+        'Permissão necessária',
+        'Permita o acesso às fotos para ativar a preparação do índice.',
+      );
     }
   };
 
@@ -1032,10 +1046,50 @@ export default function HomeScreen() {
       await setBackgroundIndexConsent('declined');
       setBackgroundIndexConsentState('declined');
       setShowBackgroundIndexConsent(false);
+      Alert.alert('Índice local desativado', BACKGROUND_INDEX_DECLINED_MESSAGE);
     } catch (error) {
       if (__DEV__) {
         console.error('[BackgroundIndex] não foi possível salvar a recusa', error);
       }
+    }
+  };
+
+  const toggleBackgroundIndex = async (enabled: boolean) => {
+    if (isUpdatingBackgroundIndex) {
+      return;
+    }
+
+    setIsUpdatingBackgroundIndex(true);
+    try {
+      if (enabled) {
+        await requestGalleryPhotoPermission();
+        await setBackgroundIndexConsent('accepted');
+        setHasGalleryPhotoAccess(true);
+        setBackgroundIndexConsentState('accepted');
+        return;
+      }
+
+      cancelIndexing();
+      await setBackgroundIndexConsent('declined');
+      setBackgroundIndexConsentState('declined');
+      Alert.alert('Índice local desativado', BACKGROUND_INDEX_DECLINED_MESSAGE);
+    } catch (error) {
+      if (__DEV__) {
+        console.error('[BackgroundIndex] não foi possível alterar o índice', error);
+      }
+      if (enabled) {
+        Alert.alert(
+          'Permissão necessária',
+          'Permita o acesso às fotos para ativar a preparação do índice.',
+        );
+      } else {
+        Alert.alert(
+          'Não foi possível parar o índice',
+          'Tente novamente em alguns instantes.',
+        );
+      }
+    } finally {
+      setIsUpdatingBackgroundIndex(false);
     }
   };
 
@@ -1337,6 +1391,12 @@ export default function HomeScreen() {
         progress={faceSearchProgress}
         onClose={() => setShowIndexSettings(false)}
         onClearIndex={clearIndex}
+        backgroundIndexEnabled={
+          backgroundIndexConsent === 'accepted' && hasGalleryPhotoAccess
+        }
+        hasGalleryPhotoPermission={hasGalleryPhotoAccess}
+        isBackgroundIndexUpdating={isUpdatingBackgroundIndex}
+        onBackgroundIndexToggle={toggleBackgroundIndex}
         onOpenIndexed={() => {
           setShowIndexSettings(false);
           openIndexed();

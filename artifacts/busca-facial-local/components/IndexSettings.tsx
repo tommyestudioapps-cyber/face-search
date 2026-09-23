@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -38,6 +39,10 @@ interface IndexSettingsProps {
   isOperationActive: boolean;
   clearState: FaceSearchClearState;
   progress: FaceIndexProgress;
+  backgroundIndexEnabled: boolean;
+  hasGalleryPhotoPermission: boolean;
+  isBackgroundIndexUpdating: boolean;
+  onBackgroundIndexToggle: (enabled: boolean) => void | Promise<void>;
 }
 
 export function IndexSettings({
@@ -50,6 +55,10 @@ export function IndexSettings({
   isOperationActive,
   clearState,
   progress,
+  backgroundIndexEnabled,
+  hasGalleryPhotoPermission,
+  isBackgroundIndexUpdating,
+  onBackgroundIndexToggle,
 }: IndexSettingsProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -237,6 +246,52 @@ export function IndexSettings({
             </Text>
           ) : null}
 
+          <View
+            style={[
+              styles.backgroundIndexCard,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={[styles.backgroundIndexIcon, { backgroundColor: colors.accent }]}>
+              <Feather
+                name={backgroundIndexEnabled ? 'activity' : 'pause-circle'}
+                size={17}
+                color={colors.primary}
+              />
+            </View>
+            <View style={styles.backgroundIndexCopy}>
+              <Text style={[styles.backgroundIndexTitle, { color: colors.foreground }]}>
+                {backgroundIndexEnabled ? 'Índice ativo' : 'Índice pausado'}
+              </Text>
+              <Text style={[styles.backgroundIndexBody, { color: colors.mutedForeground }]}>
+                {backgroundIndexEnabled
+                  ? 'A preparação automática está autorizada.'
+                  : hasGalleryPhotoPermission
+                    ? 'Ative para autorizar a preparação automática.'
+                    : 'Ative para permitir o acesso à sua galeria.'}
+              </Text>
+            </View>
+            <View style={styles.backgroundIndexControl}>
+              <Text style={[styles.backgroundIndexControlLabel, { color: colors.mutedForeground }]}>
+                {backgroundIndexEnabled ? 'Parar índice' : 'Ativar índice'}
+              </Text>
+              <Switch
+                accessibilityLabel={
+                  backgroundIndexEnabled ? 'Parar índice' : 'Ativar índice'
+                }
+                disabled={isBackgroundIndexUpdating}
+                onValueChange={onBackgroundIndexToggle}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={backgroundIndexEnabled ? colors.primaryForeground : colors.mutedForeground}
+                value={backgroundIndexEnabled}
+                testID={INDEX_SETTINGS_TEST_IDS.backgroundIndexToggle}
+              />
+            </View>
+          </View>
+
           <Pressable
             accessibilityRole="button"
             disabled={clearBlocked}
@@ -377,6 +432,43 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginTop: 12,
+  },
+  backgroundIndexCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 17,
+    marginTop: 14,
+    padding: 12,
+    gap: 10,
+  },
+  backgroundIndexIcon: {
+    width: 35,
+    height: 35,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backgroundIndexCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  backgroundIndexTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+  },
+  backgroundIndexBody: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  backgroundIndexControl: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  backgroundIndexControlLabel: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 9,
   },
   viewPhotosButton: {
     minHeight: 48,

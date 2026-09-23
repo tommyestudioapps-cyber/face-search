@@ -15,6 +15,7 @@ test('usa os identificadores do painel de configurações no roteiro', () => {
   assert.deepEqual(INDEX_SETTINGS_TEST_IDS, {
     close: 'close-index-settings',
     clear: 'clear-local-index',
+    backgroundIndexToggle: 'background-index-toggle',
   });
   assert.equal(INDEX_CLEAR_ALERT_TITLE, 'Limpar índice local?');
   assert.match(INDEX_CLEAR_ALERT_MESSAGE, /fotos originais.*não serão apagadas/);
