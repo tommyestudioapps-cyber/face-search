@@ -26,10 +26,7 @@ export function GlobalMatchesPanel({
   const photoLabel = matchCount === 1 ? 'foto encontrada' : 'fotos encontradas';
 
   return (
-    <View
-      pointerEvents="box-none"
-      style={[styles.positioner, { bottom: Math.max(bottomInset + 10, 22) }]}
-    >
+    <View style={[styles.positioner, { paddingBottom: bottomInset + 10 }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${matchCount} ${photoLabel}. Abrir fotos encontradas`}
@@ -44,13 +41,12 @@ export function GlobalMatchesPanel({
           {
             backgroundColor: colors.card,
             borderColor: colors.border,
-            shadowColor: colors.foreground,
           },
           pressed ? styles.pressed : null,
         ]}
       >
         <View style={[styles.iconWrap, { backgroundColor: colors.accent }]}>
-          <Feather name="images" size={19} color={colors.primary} />
+          <Feather name="image" size={19} color={colors.primary} />
         </View>
         <View style={styles.copy}>
           <Text style={[styles.eyebrow, { color: colors.mutedForeground }]}>
@@ -73,11 +69,10 @@ export function GlobalMatchesPanel({
 
 const styles = StyleSheet.create({
   positioner: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
+    width: '100%',
     alignItems: 'center',
     paddingHorizontal: 16,
+    paddingTop: 8,
   },
   panel: {
     width: '100%',
@@ -90,9 +85,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 11,
-    shadowOffset: { width: 0, height: 7 },
-    shadowOpacity: 0.24,
-    shadowRadius: 16,
     elevation: 8,
   },
   pressed: {

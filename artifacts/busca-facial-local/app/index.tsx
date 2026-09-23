@@ -26,7 +26,7 @@ import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
 import { FaceSearchProgress } from '@/components/FaceSearchProgress';
 import { IndexSettings } from '@/components/IndexSettings';
 import { IndexedGallery } from '@/components/IndexedGallery';
-import { IndexStatsCards } from '@/components/IndexStatsCards';
+import { GlobalMatchesPanel } from '@/components/GlobalMatchesPanel';
 import {
   AlbumPicker,
   type AlbumOption,
@@ -276,16 +276,12 @@ function Home({
   onOpenIndexed,
   onContinueFace,
   hasActiveFace,
-  matchCount,
-  onOpenMatches,
 }: {
   onSelect: () => void;
   onSettings: () => void;
   onOpenIndexed: () => void;
   onContinueFace: () => void;
   hasActiveFace: boolean;
-  matchCount: number;
-  onOpenMatches: () => void;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -370,12 +366,6 @@ function Home({
             </Pressable>
           ) : null}
 
-          <IndexStatsCards
-            matchCount={matchCount}
-            hasQuery={Boolean(hasActiveFace)}
-            onPressMatches={onOpenMatches}
-          />
-
           <View style={[styles.privacyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <IconCircle name="shield" color="#34D399" backgroundColor="#123429" size={18} />
             <View style={styles.privacyCardCopy}>
@@ -387,18 +377,49 @@ function Home({
             <Feather name="check" size={18} color="#34D399" />
           </View>
 
-          <View style={styles.adSlot}>
-            <View style={styles.adSlotTop}>
-              <Feather name="layout" size={14} color={colors.mutedForeground} />
-              <Text style={[styles.adLabel, { color: colors.mutedForeground }]}>ESPAÇO PARA ANÚNCIO</Text>
-              <Text style={[styles.adLabel, { color: colors.mutedForeground }]}>BANNER</Text>
-            </View>
-            <Text style={[styles.adHint, { color: colors.mutedForeground }]}>
-              Seu apoio mantém a busca gratuita.
-            </Text>
-          </View>
         </View>
       </ScrollView>
+    </View>
+  );
+}
+
+function AdFooter() {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Platform.OS === 'web' ? 34 : insets.bottom;
+
+  return (
+    <View
+      style={[
+        styles.adFooter,
+        {
+          backgroundColor: colors.background,
+          paddingBottom: bottomInset + 8,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.adSlot,
+          {
+            backgroundColor: colors.background,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.adSlotTop}>
+          <Feather name="layout" size={14} color={colors.mutedForeground} />
+          <Text style={[styles.adLabel, { color: colors.mutedForeground }]}>
+            ESPAÇO PARA ANÚNCIO
+          </Text>
+          <Text style={[styles.adLabel, { color: colors.mutedForeground }]}>
+            BANNER
+          </Text>
+        </View>
+        <Text style={[styles.adHint, { color: colors.mutedForeground }]}>
+          Seu apoio mantém a busca gratuita.
+        </Text>
+      </View>
     </View>
   );
 }
@@ -414,12 +435,10 @@ function SelectPhoto({
   captureError,
   captureProcessing,
   captureStatus,
-  matchCount,
   onPickLibrary,
   onTakePhoto,
   onSelectFace,
   onSearch,
-  onOpenMatches,
   albumLabel,
   onPressAlbum,
   onBack,
@@ -434,12 +453,10 @@ function SelectPhoto({
   captureError: FaceCaptureError | null;
   captureProcessing: boolean;
   captureStatus: FaceCaptureStatus;
-  matchCount: number;
   onPickLibrary: () => void;
   onTakePhoto: () => void;
   onSelectFace: (faceId: number) => void;
   onSearch: () => void;
-  onOpenMatches: () => void;
   albumLabel: string;
   onPressAlbum: () => void;
   onBack: () => void;
@@ -524,16 +541,6 @@ function SelectPhoto({
           faceCount={faces.length}
           hasAlignedFace={Boolean(alignedImageUri)}
         />
-
-        {alignedImageUri ? (
-          <View style={styles.selectStatsWrap}>
-            <IndexStatsCards
-              matchCount={matchCount}
-              hasQuery={true}
-              onPressMatches={onOpenMatches}
-            />
-          </View>
-        ) : null}
 
         {alignedImageUri ? (
           <View style={[styles.alignedPreview, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -1127,7 +1134,6 @@ export default function HomeScreen() {
             captureError={captureError}
             captureProcessing={captureProcessing}
             captureStatus={captureStatus}
-            matchCount={results.length}
             onPickLibrary={pickFromLibrary}
             onTakePhoto={takePhoto}
             onSelectFace={(faceId) => {
@@ -1135,7 +1141,6 @@ export default function HomeScreen() {
               void alignFace(faceId);
             }}
             onSearch={beginSearch}
-            onOpenMatches={openMatches}
             albumLabel={selectedAlbumTitle}
             onPressAlbum={() => setShowAlbumPicker(true)}
             onBack={leaveSelection}
@@ -1181,8 +1186,6 @@ export default function HomeScreen() {
             onOpenIndexed={openIndexed}
             onContinueFace={continueFaceSearch}
             hasActiveFace={Boolean(alignedFace)}
-            matchCount={results.length}
-            onOpenMatches={openMatches}
           />
         );
     }
@@ -1218,7 +1221,14 @@ export default function HomeScreen() {
 
   return (
     <>
-      {content}
+      <View style={[styles.appShell, { backgroundColor: colors.background }]}>
+        {content}
+        <GlobalMatchesPanel
+          matchCount={results.length}
+          onPress={openMatches}
+        />
+        <AdFooter />
+      </View>
       <RewardModal
         visible={showReward}
         countdown={rewardCountdown}
@@ -1255,6 +1265,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  appShell: { flex: 1 },
   screen: { flex: 1 },
   onboardingContent: { flexGrow: 1 },
   contentFrame: { alignSelf: 'center' },
@@ -1345,7 +1356,8 @@ const styles = StyleSheet.create({
   privacyCardCopy: { flex: 1 },
   privacyCardTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
   privacyCardBody: { fontSize: 10, lineHeight: 15, marginTop: 3, fontFamily: 'Inter_400Regular' },
-  adSlot: { minHeight: 77, borderRadius: 17, marginTop: 26, borderWidth: 1, borderStyle: 'dashed', borderColor: '#303A53', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  adFooter: { width: '100%', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8 },
+  adSlot: { width: '100%', maxWidth: 480, minHeight: 64, borderRadius: 17, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10 },
   adSlotTop: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   adLabel: { fontSize: 9, letterSpacing: 0.8, fontFamily: 'Inter_600SemiBold' },
   adHint: { fontSize: 10, fontFamily: 'Inter_400Regular' },
