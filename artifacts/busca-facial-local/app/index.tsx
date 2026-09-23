@@ -39,6 +39,7 @@ import {
   hasGalleryPhotoPermission,
   requestGalleryPhotoPermission,
 } from '@/services/backgroundIndexing/galleryPermission';
+import { clearBackgroundIndexCursor } from '@/services/backgroundIndexing/checkpoint';
 import {
   AlbumPicker,
   type AlbumOption,
@@ -1036,6 +1037,7 @@ export default function HomeScreen() {
       if (!(await hasGalleryPhotoPermission())) {
         await requestGalleryPhotoPermission();
       }
+      await clearBackgroundIndexCursor();
       await setBackgroundIndexConsent('accepted');
       setHasGalleryPhotoAccess(true);
       setBackgroundIndexConsentState('accepted');
@@ -1066,6 +1068,7 @@ export default function HomeScreen() {
       await setBackgroundIndexConsent('declined');
       setBackgroundIndexConsentState('declined');
       setShowBackgroundIndexConsent(false);
+      await clearBackgroundIndexCursor();
       try {
         await syncBackgroundTask();
       } catch (error) {
@@ -1088,6 +1091,7 @@ export default function HomeScreen() {
     try {
       if (enabled) {
         await requestGalleryPhotoPermission();
+        await clearBackgroundIndexCursor();
         await setBackgroundIndexConsent('accepted');
         setHasGalleryPhotoAccess(true);
         setBackgroundIndexConsentState('accepted');
@@ -1106,6 +1110,7 @@ export default function HomeScreen() {
       cancelIndexing();
       await setBackgroundIndexConsent('declined');
       setBackgroundIndexConsentState('declined');
+      await clearBackgroundIndexCursor();
       try {
         await syncBackgroundTask();
       } catch (error) {

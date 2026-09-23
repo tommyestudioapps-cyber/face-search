@@ -4,6 +4,7 @@ import {
 import {
   indexGallery as runGalleryIndex,
   startGalleryIndex as startGalleryIndexTask,
+  clearAfterGalleryIndexStops,
   type GalleryIndexOptions,
   type GalleryIndexResult,
   type GalleryIndexTask,
@@ -20,6 +21,7 @@ import type {
   StoredIndexStats,
 } from './types';
 import type { AlignedFace } from '../faceCapture/types';
+import { clearBackgroundIndexCursor } from '../backgroundIndexing/checkpoint';
 
 let latestProgress: FaceIndexProgress = {
   status: 'idle',
@@ -112,8 +114,11 @@ export async function getStoredIndexStats(): Promise<StoredIndexStats> {
 }
 
 export async function clearStoredIndex(): Promise<void> {
-  await faceSearchRepository.initialize();
-  await faceSearchRepository.clearIndex();
+  await clearAfterGalleryIndexStops(async () => {
+    await clearBackgroundIndexCursor();
+    await faceSearchRepository.initialize();
+    await faceSearchRepository.clearIndex();
+  });
 }
 
 export * from './types';

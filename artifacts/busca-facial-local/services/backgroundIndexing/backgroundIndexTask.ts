@@ -19,8 +19,8 @@ TaskManager.defineTask(BACKGROUND_INDEX_TASK_NAME, async ({ error }) => {
       return BackgroundTask.BackgroundTaskResult.Success;
     }
 
-    // The bounded, resumable gallery batch is connected in step 5.
-    // Do not run indexGallery here: it currently processes the entire gallery.
+    const { runBackgroundIndexBatch } = await import('./batchRunner');
+    await runBackgroundIndexBatch();
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch (cause) {
     console.error('[BackgroundIndex] Task preparation failed', cause);

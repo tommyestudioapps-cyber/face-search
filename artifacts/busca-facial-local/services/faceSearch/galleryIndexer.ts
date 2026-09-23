@@ -35,16 +35,30 @@ import {
   logPhotoTiming,
   yieldToEventLoop,
 } from '../observability/logger';
-import { requestGalleryPhotoPermission } from '../backgroundIndexing/galleryPermission';
+import {
+  hasGalleryPhotoPermission,
+  requestGalleryPhotoPermission,
+} from '../backgroundIndexing/galleryPermission';
+import { shouldPauseBatch } from '../backgroundIndexing/batchPolicy';
+
+export interface GalleryIndexBatch {
+  after?: string;
+  maxAssets: number;
+  timeBudgetMs: number;
+  onCheckpoint: (cursor: string) => Promise<void>;
+  shouldContinue: () => Promise<boolean>;
+}
 
 export interface GalleryIndexOptions {
   onProgress?: (progress: FaceIndexProgress) => void;
   cancellation?: GalleryIndexCancellation;
   albumId?: string | null;
+  batch?: GalleryIndexBatch;
 }
 
 export interface GalleryIndexResult {
-  status: 'completed' | 'cancelled';
+  status: 'completed' | 'cancelled' | 'paused';
+  nextCursor?: string;
   processedAssets: number;
   totalAssets: number;
   indexedPhotos: number;
@@ -77,6 +91,24 @@ interface AssetIndexResult {
 }
 
 let activeIndexing = false;
+let activeIndexingFinished: Promise<void> | null = null;
+let finishActiveIndexing: (() => void) | null = null;
+let clearingIndex = false;
+
+export async function clearAfterGalleryIndexStops(
+  clear: () => Promise<void>,
+): Promise<void> {
+  if (clearingIndex) {
+    throw new FaceRecognitionError('indexing-failed', 'A limpeza do índice já está em andamento.');
+  }
+  clearingIndex = true;
+  try {
+    await activeIndexingFinished;
+    await clear();
+  } finally {
+    clearingIndex = false;
+  }
+}
 
 function getCurrentModelMetadata(): FaceSearchModelMetadata {
   return {
@@ -192,6 +224,7 @@ async function indexAsset(
   asset: MediaLibrary.Asset,
   indexedPhoto: IndexedPhoto | undefined,
   cancellation: GalleryIndexCancellation,
+  shouldContinue?: () => Promise<boolean>,
 ): Promise<AssetIndexResult> {
   throwIfCancelled(cancellation);
 
@@ -255,6 +288,10 @@ async function indexAsset(
     }
 
     throwIfCancelled(cancellation);
+    if (shouldContinue && !(await shouldContinue())) {
+      cancellation.cancel();
+      throwIfCancelled(cancellation);
+    }
     await faceSearchRepository.saveIndexedPhoto(
       createIndexedPhoto(asset, indexedFaces.length),
       indexedFaces,
@@ -286,6 +323,15 @@ export async function indexGallery(
 ): Promise<GalleryIndexResult> {
   const cancellation = options.cancellation ?? new GalleryIndexCancellation();
   const albumId = options.albumId ?? null;
+  const batch = options.batch;
+  if (batch && (
+    !Number.isInteger(batch.maxAssets) ||
+    batch.maxAssets < 1 ||
+    !Number.isFinite(batch.timeBudgetMs) ||
+    batch.timeBudgetMs <= 0
+  )) {
+    throw new FaceRecognitionError('invalid-input', 'Limites inválidos para o lote do índice.');
+  }
   if (__DEV__) {
     console.log(`[Index] albumId=${albumId ?? 'todo o dispositivo'}`);
   }
@@ -303,7 +349,7 @@ export async function indexGallery(
     options.onProgress?.(progress);
   };
 
-  if (activeIndexing) {
+  if (activeIndexing || clearingIndex) {
     const error = new FaceRecognitionError(
       'indexing-failed',
       'Já existe uma indexação da galeria em andamento.',
@@ -313,6 +359,9 @@ export async function indexGallery(
   }
 
   activeIndexing = true;
+  activeIndexingFinished = new Promise<void>((resolve) => {
+    finishActiveIndexing = resolve;
+  });
   const indexStartedAt = Date.now();
   try {
     if (Platform.OS === 'web') {
@@ -323,7 +372,13 @@ export async function indexGallery(
     }
 
     emitProgress({ status: 'requesting-permission' });
-    await requestGalleryPhotoPermission();
+    if (batch) {
+      if (!(await hasGalleryPhotoPermission())) {
+        throw new FaceRecognitionError('permission-denied', 'A permissão para ler a galeria foi revogada.');
+      }
+    } else {
+      await requestGalleryPhotoPermission();
+    }
     throwIfCancelled(cancellation);
 
     await faceSearchRepository.initialize();
@@ -335,19 +390,50 @@ export async function indexGallery(
       indexedPhotos.map((photo) => [photo.assetId, photo]),
     );
     const galleryAssetIds: string[] = [];
-    let cursor: string | undefined;
+    let cursor: string | undefined = batch?.after;
     let hasNextPage = true;
 
     while (hasNextPage) {
       throwIfCancelled(cancellation);
+      if (batch && !(await batch.shouldContinue())) {
+        cancellation.cancel();
+        throwIfCancelled(cancellation);
+      }
+      if (batch && shouldPauseBatch(
+        progress.processedAssets,
+        batch.maxAssets,
+        Date.now() - indexStartedAt,
+        batch.timeBudgetMs,
+      )) {
+        return {
+          status: 'paused',
+          nextCursor: cursor,
+          processedAssets: progress.processedAssets,
+          totalAssets,
+          indexedPhotos: indexedPhotoCount,
+          skippedAssets,
+          indexedFaces: indexedFaceCount,
+          removedPhotos: 0,
+        };
+      }
 
-      const page = await MediaLibrary.getAssetsAsync({
-        first: faceSearch.indexing.batchSize,
-        after: cursor,
-        mediaType: MediaLibrary.MediaType.photo,
-        sortBy: [MediaLibrary.SortBy.modificationTime],
-        ...(albumId ? { album: albumId } : {}),
-      });
+      let page: MediaLibrary.PagedInfo<MediaLibrary.Asset>;
+      try {
+        page = await MediaLibrary.getAssetsAsync({
+          first: batch ? 1 : faceSearch.indexing.batchSize,
+          after: cursor,
+          mediaType: MediaLibrary.MediaType.photo,
+          sortBy: [MediaLibrary.SortBy.modificationTime],
+          ...(albumId ? { album: albumId } : {}),
+        });
+      } catch (cause) {
+        if (!batch || !cursor) throw cause;
+        throw new FaceRecognitionError(
+          'invalid-cursor',
+          'Não foi possível retomar a página da galeria.',
+          cause,
+        );
+      }
       totalAssets = page.totalCount;
       emitProgress({
         status: 'indexing',
@@ -361,6 +447,10 @@ export async function indexGallery(
 
       for (const asset of page.assets) {
         throwIfCancelled(cancellation);
+        if (batch && !(await batch.shouldContinue())) {
+          cancellation.cancel();
+          throwIfCancelled(cancellation);
+        }
         galleryAssetIds.push(asset.id);
         emitProgress({ currentAssetId: asset.id });
 
@@ -368,6 +458,7 @@ export async function indexGallery(
           asset,
           indexedById.get(asset.id),
           cancellation,
+          batch?.shouldContinue,
         );
         if (result.indexed) {
           indexedPhotoCount += 1;
@@ -396,14 +487,26 @@ export async function indexGallery(
         await yieldToEventLoop();
       }
 
+      const previousCursor = cursor;
       cursor = page.endCursor;
       hasNextPage = page.hasNextPage;
+      if (batch && hasNextPage) {
+        if (!cursor || cursor === previousCursor) {
+          throw new FaceRecognitionError(
+            'invalid-cursor',
+            'A galeria não retornou um cursor válido para continuar o índice.',
+          );
+        }
+        await batch.onCheckpoint(cursor);
+      }
     }
 
     throwIfCancelled(cancellation);
-    removedPhotos = await faceSearchRepository.removeOrphanedPhotos(
-      galleryAssetIds,
-    );
+    if (!batch) {
+      removedPhotos = await faceSearchRepository.removeOrphanedPhotos(
+        galleryAssetIds,
+      );
+    }
     emitProgress({
       status: 'completed',
       totalAssets,
@@ -449,6 +552,9 @@ export async function indexGallery(
   } finally {
     releaseRecognitionModel();
     activeIndexing = false;
+    finishActiveIndexing?.();
+    finishActiveIndexing = null;
+    activeIndexingFinished = null;
   }
 }
 

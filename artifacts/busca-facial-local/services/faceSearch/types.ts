@@ -110,6 +110,7 @@ export type FaceRecognitionErrorCode =
   | 'inference-failed'
   | 'permission-denied'
   | 'indexing-failed'
+  | 'invalid-cursor'
   | 'storage-failed'
   | 'cancelled';
 
