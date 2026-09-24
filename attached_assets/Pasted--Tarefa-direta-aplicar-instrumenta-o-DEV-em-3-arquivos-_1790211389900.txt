@@ -1,0 +1,87 @@
+# Tarefa direta: aplicar instrumentação DEV em 3 arquivos
+
+Autorizo editar os 3 arquivos abaixo agora. Não é necessário pedir permissão nem revisar contexto. Não altere testes. Não altere `galleryPermission.ts`. Não crie funções novas.
+
+## Arquivo 1 — services/backgroundIndexing/backgroundIndexTask.ts
+
+Substituir o corpo de `TaskManager.defineTask(...)` por:
+
+```ts
+TaskManager.defineTask(BACKGROUND_INDEX_TASK_NAME, async ({ error }) => {
+  if (error) {
+    console.error('[BackgroundIndex] Native task error', error);
+    return BackgroundTask.BackgroundTaskResult.Failed;
+  }
+  const consent = await getBackgroundIndexConsent();
+  const hasAny = await hasGalleryPhotoPermission();
+  if (__DEV__) {
+    console.log(`[Perm:diag] ctx=task-entry consent=${consent} any=${hasAny}`);
+  }
+  if (consent !== 'accepted' || !hasAny) {
+    return BackgroundTask.BackgroundTaskResult.Success;
+  }
+  try {
+    const { runBackgroundIndexBatch } = await import('./batchRunner');
+    await runBackgroundIndexBatch();
+    return BackgroundTask.BackgroundTaskResult.Success;
+  } catch (cause) {
+    console.error('[BackgroundIndex] Task preparation failed', cause);
+    return BackgroundTask.BackgroundTaskResult.Failed;
+  }
+});
+Se hasGalleryPhotoPermission não estiver importado, adicione ao import existente de ./galleryPermission.
+
+Arquivo 2 — services/backgroundIndexing/batchRunner.ts
+Mudança A: substituir o corpo de canContinue() por:
+
+ts
+async function canContinue(): Promise<boolean> {
+  const consentOk = (await getBackgroundIndexConsent()) === 'accepted';
+  const hasAny = await hasGalleryPhotoPermission();
+  const hasFull = await hasFullGalleryPhotoPermission();
+  if (__DEV__) {
+    console.log(`[Perm:diag] ctx=batch-canContinue consent=${consentOk} any=${hasAny} full=${hasFull}`);
+  }
+  return consentOk && hasFull;
+}
+Se hasGalleryPhotoPermission não estiver importado, adicione ao import existente de ./galleryPermission.
+
+Mudança B: dentro de runCoordinatedBackgroundIndexBatch, logo após a primeira linha, adicionar:
+
+ts
+let cachedFullPermission: boolean | null = null;
+const checkFullPermissionOnce = async (): Promise<boolean> => {
+  if (cachedFullPermission === null) {
+    cachedFullPermission = await hasFullGalleryPhotoPermission();
+  }
+  return cachedFullPermission;
+};
+Trocar, dentro desta função apenas, todas as chamadas a hasFullGalleryPhotoPermission() por checkFullPermissionOnce().
+
+Arquivo 3 — app/index.tsx
+Dentro de acceptBackgroundIndex e de toggleBackgroundIndex, logo após o await syncBackgroundTask() bem-sucedido, adicionar:
+
+ts
+if (__DEV__) {
+  console.log(`[Perm:diag] ctx=after-sync consent=${backgroundIndexConsent} hasPhotoAccess=${hasGalleryPhotoAccess}`);
+}
+Nada mais.
+
+Depois de editar, rodar e colar saída literal:
+text
+pnpm run test:background-indexing
+pnpm run test:face-search
+pnpm run typecheck
+git diff HEAD~1 --stat
+Esperado: 10/10, 15/15, PASS.
+
+Não fazer:
+Não alterar nenhum arquivo de teste.
+
+Não alterar galleryPermission.ts.
+
+Não alterar repository.ts, scheduler.ts, consent.ts, checkpoint.ts, indexCoordinator.ts.
+
+Não criar funções exportadas novas.
+
+Se algum dos 3 comandos falhar, pare e cole o erro literal.
