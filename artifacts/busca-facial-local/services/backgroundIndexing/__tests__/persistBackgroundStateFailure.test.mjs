@@ -1,4 +1,7 @@
-// Reprodução do C3a: persistBackgroundState engole erro de escrita e deixa o estado preso em 'running'. Este teste descreve o comportamento atual; a correção do C3a deve ser acompanhada da atualização deste teste.
+// C3a: quando a persistência do estado terminal falha, runBackgroundIndexBatch
+// agora propaga o erro em vez de engolir. O estado persistido permanece
+// 'running' até o próximo launch, quando o reconcileOrphanRunning o converte
+// para 'paused' (coberto pelo C3b).
 
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -144,7 +147,7 @@ test.after(async () => {
   moduleApi._load = originalModuleLoad;
 });
 
-test('mantém running quando a persistência do estado terminal falha silenciosamente', async () => {
+test('propaga o erro quando a persistência do estado terminal falha', async () => {
   await repository.initialize();
   await repository.updateBackgroundIndexState({ status: 'running' });
 
@@ -156,7 +159,10 @@ test('mantém running quando a persistência do estado terminal falha silenciosa
     return originalUpdate(patch);
   };
 
-  await runBackgroundIndexBatch();
+  await assert.rejects(
+    () => runBackgroundIndexBatch(),
+    /simulated storage failure/,
+  );
 
   const persistedState = await repository.getBackgroundIndexState();
   assert.equal(persistedState.status, 'running');

@@ -18,11 +18,7 @@ const TIME_BUDGET_MS = 15_000;
 async function persistBackgroundState(
   patch: Parameters<typeof faceSearchRepository.updateBackgroundIndexState>[0],
 ): Promise<void> {
-  try {
-    await faceSearchRepository.updateBackgroundIndexState(patch);
-  } catch (error) {
-    console.warn('[BackgroundIndex] Não foi possível salvar o estado persistido.', error);
-  }
+  await faceSearchRepository.updateBackgroundIndexState(patch);
 }
 
 async function canContinue(): Promise<boolean> {
@@ -176,11 +172,18 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
       await clearBackgroundIndexCursor();
       await faceSearchRepository.abortScan(generation, leaseOwner);
     }
-    await persistBackgroundState({
-      status: 'error',
-      scope: 'gallery',
-      lastError: error instanceof Error ? error.message : 'Falha desconhecida na indexação.',
-    });
+    try {
+      await persistBackgroundState({
+        status: 'error',
+        scope: 'gallery',
+        lastError: error instanceof Error ? error.message : 'Falha desconhecida na indexação.',
+      });
+    } catch (persistError) {
+      console.warn(
+        '[BackgroundIndex] Não foi possível persistir o estado de erro.',
+        persistError,
+      );
+    }
     throw error;
   } finally {
     clearInterval(heartbeat);

@@ -1,0 +1,134 @@
+[Fix C3a] persistBackgroundState deixa de engolir erro
+
+Aplicar as 3 ações abaixo. Não pedir autorização, não revisar contexto, não alterar nada fora do escopo. Sem commit manual.
+
+## Contexto
+
+Hoje `persistBackgroundState` em `services/backgroundIndexing/batchRunner.ts` engole qualquer erro de escrita com `console.warn`. Isso significa que o caller nunca sabe que o estado terminal (`completed`/`paused`/`cancelled`/`error`) não foi persistido. O sintoma visível já é mitigado no próximo launch pelo C3b (reconciliação de `running` órfão), mas o caller continua cego e o erro vira falso positivo de "tudo ok".
+
+Opção A: rethrow. Exceção do `persistBackgroundState` deve propagar. No caminho de erro do próprio batch runner, a tentativa de persistir `status: 'error'` deve ser envolvida em try/catch próprio para **não mascarar o erro original**.
+
+## Ação 1 — Mudar `persistBackgroundState` em `services/backgroundIndexing/batchRunner.ts`
+
+Substituir a função atual por (mesma assinatura, sem try/catch interno):
+
+```ts
+async function persistBackgroundState(
+  patch: Parameters<typeof faceSearchRepository.updateBackgroundIndexState>[0],
+): Promise<void> {
+  await faceSearchRepository.updateBackgroundIndexState(patch);
+}
+Ação 2 — Proteger a persistência de erro no catch externo, no mesmo arquivo
+No bloco catch (error) de runCoordinatedBackgroundIndexBatch, envolver a chamada a persistBackgroundState({ status: 'error', ... }) em try/catch próprio para que a exceção da escrita não substitua o erro original. O trecho deve ficar:
+
+ts
+} catch (error) {
+  if (error instanceof FaceRecognitionError && error.code === 'invalid-cursor') {
+    await clearBackgroundIndexCursor();
+    await faceSearchRepository.abortScan(generation, leaseOwner);
+  }
+  try {
+    await persistBackgroundState({
+      status: 'error',
+      scope: 'gallery',
+      lastError: error instanceof Error ? error.message : 'Falha desconhecida na indexação.',
+    });
+  } catch (persistError) {
+    console.warn(
+      '[BackgroundIndex] Não foi possível persistir o estado de erro.',
+      persistError,
+    );
+  }
+  throw error;
+}
+Nenhuma outra chamada a persistBackgroundState deve ser alterada. Todas as demais agora propagam por padrão.
+
+Ação 3 — Atualizar o teste de regressão
+Renomear services/backgroundIndexing/__tests__/persistBackgroundStateSwallow.test.mjs para services/backgroundIndexing/__tests__/persistBackgroundStateFailure.test.mjs (o nome antigo descrevia o bug que não existe mais).
+
+Atualizar o conteúdo: trocar o cabeçalho e o corpo do teste para refletir o novo comportamento. Manter toda a infraestrutura de mocks (module._load, storageMock, adapter SQLite, mocks de galleryPermission/galleryIndexer/repository) exatamente como está.
+
+Cabeçalho novo:
+
+js
+// C3a: quando a persistência do estado terminal falha, runBackgroundIndexBatch
+// agora propaga o erro em vez de engolir. O estado persistido permanece
+// 'running' até o próximo launch, quando o reconcileOrphanRunning o converte
+// para 'paused' (coberto pelo C3b).
+Corpo do teste (substituir o test(...) inteiro):
+
+js
+test('propaga o erro quando a persistência do estado terminal falha', async () => {
+  await repository.initialize();
+  await repository.updateBackgroundIndexState({ status: 'running' });
+
+  const originalUpdate = repository.updateBackgroundIndexState.bind(repository);
+  repository.updateBackgroundIndexState = async (patch) => {
+    if (patch.status !== 'running') {
+      throw new Error('simulated storage failure');
+    }
+    return originalUpdate(patch);
+  };
+
+  await assert.rejects(
+    () => runBackgroundIndexBatch(),
+    /simulated storage failure/,
+  );
+
+  const persistedState = await repository.getBackgroundIndexState();
+  assert.equal(persistedState.status, 'running');
+});
+Não fazer
+Não alterar reconcileOrphanRunning.ts nem reconcileOrphanRunning.test.mjs.
+
+Não alterar app/index.tsx.
+
+Não alterar repository.ts, scheduler.ts, consent.ts, checkpoint.ts, backgroundIndexTask.ts, galleryPermission.ts.
+
+Não alterar backgroundIndex.integration.test.mjs nem qualquer outro teste existente.
+
+Não alterar package.json.
+
+Não adicionar novas funções exportadas em batchRunner.ts.
+
+Verificação — colar saída literal
+Teste renomeado explicitamente:
+
+text
+cd artifacts/busca-facial-local && node --experimental-sqlite --experimental-test-module-mocks --import tsx --test services/backgroundIndexing/__tests__/persistBackgroundStateFailure.test.mjs
+Esperado: 1 pass, 0 fail.
+
+Suite de background indexing (confirma que os testes existentes seguem verdes):
+
+text
+pnpm run test:background-indexing
+Esperado: 10 pass, 0 fail.
+
+Suite de busca e typecheck:
+
+text
+pnpm run test:face-search
+pnpm run typecheck
+Esperado: 15 pass, 0 fail / PASS.
+
+git diff HEAD --stat e git diff HEAD -- services/backgroundIndexing/batchRunner.ts services/backgroundIndexing/__tests__/persistBackgroundStateFailure.test.mjs.
+
+Confirmações (sim/não)
+persistBackgroundState não tem mais try/catch interno?
+
+O catch externo do batch runner protege a persistência de erro com try/catch próprio?
+
+Nenhum outro ponto do batchRunner.ts foi alterado?
+
+Teste renomeado e atualizado conforme especificado?
+
+reconcileOrphanRunning.ts e app/index.tsx intactos?
+
+Todos os checks verdes?
+
+Sem commit manual?
+
+Regras
+Se algum teste existente ficar vermelho, pare e cole a saída literal — não tente consertar.
+
+Se o git diff mostrar alteração em arquivo fora do escopo, reverta e reaplique.
