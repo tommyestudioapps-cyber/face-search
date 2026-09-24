@@ -26,10 +26,12 @@ async function persistBackgroundState(
   }
 }
 
-async function canContinue(): Promise<boolean> {
+async function canContinue(
+  checkFullPermission: () => Promise<boolean> = hasFullGalleryPhotoPermission,
+): Promise<boolean> {
   const consentOk = (await getBackgroundIndexConsent()) === 'accepted';
   const hasAny = await hasGalleryPhotoPermission();
-  const hasFull = await hasFullGalleryPhotoPermission();
+  const hasFull = await checkFullPermission();
   if (__DEV__) {
     console.log(
       `[Perm:diag] ctx=batch-canContinue consent=${consentOk} any=${hasAny} full=${hasFull}`,
@@ -51,7 +53,7 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
     }
     return cachedFullPermission;
   };
-  if (!(await canContinue())) {
+  if (!(await canContinue(checkFullPermissionOnce))) {
     // Permission could have been reduced to a limited selection since the last page.
     const checkpoint = await loadBackgroundIndexCursor();
     await clearBackgroundIndexCursor();
@@ -128,15 +130,15 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
         leaseOwner,
         maxAssets: MAX_ASSETS_PER_RUN,
         timeBudgetMs: TIME_BUDGET_MS,
-        shouldContinue: async () => leaseHealthy && await canContinue(),
+        shouldContinue: async () => leaseHealthy && await canContinue(checkFullPermissionOnce),
         shouldYield: () => indexCoordinator.shouldYieldBackground(),
         onCheckpoint: async (cursor) => {
-          if (!(await canContinue())) {
+          if (!(await canContinue(checkFullPermissionOnce))) {
             await clearBackgroundIndexCursor();
             return;
           }
           await saveBackgroundIndexCursor(cursor, generation);
-          if (!(await canContinue())) await clearBackgroundIndexCursor();
+          if (!(await canContinue(checkFullPermissionOnce))) await clearBackgroundIndexCursor();
         },
       },
     });
