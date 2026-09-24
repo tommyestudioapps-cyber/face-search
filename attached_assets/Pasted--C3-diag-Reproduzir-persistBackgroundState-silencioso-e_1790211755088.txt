@@ -1,0 +1,43 @@
+# [C3-diag] Reproduzir persistBackgroundState silencioso e mapear reconciliação de 'running' órfão
+
+Contexto: dois comportamentos relacionados podem estar travando a UI em "Preparando índice". Preciso de evidência objetiva antes de corrigir qualquer coisa. Escopo: somente medição e um único teste novo.
+
+## Ação 1 — Pergunta de leitura (não editar nada)
+
+Procure no código por qualquer caminho que, no launch do app, leia `getBackgroundIndexState()` e trate especificamente o caso `status === 'running'` sem batch correspondente em execução. Responda:
+
+- Existe alguma rotina que reconcilia `running` órfão no launch?
+- Se sim, em qual arquivo e linha?
+- Se não, confirme com a lista de arquivos onde `getBackgroundIndexState` é chamado.
+
+## Ação 2 — Criar um teste novo que reproduza o C3a
+
+Criar `artifacts/busca-facial-local/services/backgroundIndexing/__tests__/persistBackgroundStateSwallow.test.mjs`, com o mesmo padrão do `backgroundIndex.integration.test.mjs` (SQLite temporário via `DatabaseSync`, adapter injetado). O teste deve:
+
+1. Inicializar `FaceSearchRepository` e chamar `updateBackgroundIndexState({status: 'running'})` uma vez para gravar `running` no DB.
+2. Injetar uma falha na próxima chamada a `updateBackgroundIndexState` — a forma mais limpa, dado o padrão do arquivo, é envolver a instância do repositório ou substituir o método por um stub que lança `Error('simulated storage failure')`.
+3. Chamar `runBackgroundIndexBatch()` (ou a função que exercita `persistBackgroundState` — escolha a que o código atual expõe).
+4. Ao final, ler `getBackgroundIndexState()` e **assertar** que o estado permanece `'running'` (é o sintoma real). Este teste deve **passar** descrevendo o comportamento defeituoso atual. Comentário no topo do arquivo: `// Reprodução do C3a: persistBackgroundState engole erro de escrita e deixa o estado preso em 'running'. Este teste descreve o comportamento atual; a correção do C3a deve ser acompanhada da atualização deste teste.`
+
+Não alterar nenhum arquivo de produção nesta rodada.
+
+## Ação 3 — Rodar e reportar
+
+Rodar e colar saída literal:
+
+- `pnpm run test:background-indexing 2>&1 | tee /tmp/test-c3-diag.log`
+- `pnpm run typecheck`
+- Saída completa do teste novo (incluindo os asserts).
+- Resposta à pergunta da Ação 1.
+
+## Confirmações (sim/não)
+
+- Nenhum arquivo de produção foi alterado?
+- Nenhum teste existente foi alterado?
+- O teste novo passa descrevendo o comportamento defeituoso?
+
+## Regras
+
+- Sem commit manual.
+- Se a pergunta da Ação 1 revelar que existe reconciliação no launch, **pare antes da Ação 2** e reporte — muda toda a estratégia do C3b.
+- Se a Ação 2 não reproduzir o sintoma (estado vira 'completed'/'paused'/'error' mesmo com falha injetada), pare e reporte — significa que minha hipótese sobre o C3a está errada.
