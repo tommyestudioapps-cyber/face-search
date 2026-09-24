@@ -1,0 +1,55 @@
+Título: [Diagnóstico] Reproduzir geração órfã travada em indexação manual
+
+Contexto (só para você entender o objetivo, não para alterar código): há suspeita de que uma indexação manual interrompida por morte de processo (SIGKILL/OOM) deixa gallery_scan.active = 1 preso, e que beginScan passa a lançar erro permanente em todas as tentativas seguintes, sem caminho de recuperação — porque o fluxo manual nunca grava checkpoint de background. Preciso de evidência literal antes de alterar qualquer arquivo de produção.
+
+FASE 1 — Levantamento (sem alterar nada)
+Liste os arquivos de teste existentes em artifacts/busca-facial-local/services/faceSearch/__tests__/ e artifacts/busca-facial-local/services/backgroundIndexing/__tests__/.
+
+Descreva o helper de abertura de DB de teste (caminho, assinatura, se usa :memory: ou arquivo temporário, se reaproveita FaceSearchRepositoryOptions.openDatabase).
+
+Informe se algum teste atual faz mock de Date.now() ou se existe um utilitário de "avançar relógio" no repositório.
+
+Confirme os comandos exatos para rodar: test:face-capture, test:face-search, test:face-overlay, test:face-settings, test:face-coordination, test:background-indexing, e typecheck.
+
+FASE 2 — Reprodução (adicionar SOMENTE um arquivo de teste, zero alteração em produção)
+Crie artifacts/busca-facial-local/services/faceSearch/__tests__/repositoryOrphanScan.test.mjs que execute, nesta ordem:
+
+Abre uma instância de FaceSearchRepository apontando para DB de teste, no mesmo padrão dos testes existentes.
+
+Chama beginScan('owner-A') e guarda a geração como genA.
+
+Simula morte de processo: não chama releaseScan, não chama abortScan, não chama completeScan. Descarta a referência.
+
+Expira a lease. Escolha o método mais limpo dado o que a FASE 1 revelar (mock de Date.now ou um UPDATE gallery_scan SET lease_until = ? WHERE id = 1 via a própria instância). Deixe um comentário no teste explicando o método escolhido e por quê.
+
+Chama getActiveScanGeneration(). Registre o retorno.
+
+Chama beginScan('owner-B'). Registre se lança, qual code e qual message.
+
+Chama abortScanIfUnleased(genA). Registre o booleano retornado.
+
+Chama beginScan('owner-B') novamente. Registre se agora funciona.
+
+O teste deve FALHAR de propósito na asserção de que beginScan('owner-B') funciona após a lease expirada. Isso é intencional: quero ver a falha reproduzida, não mascarada.
+
+FASE 3 — Relatório (literal, sem resumir)
+Cole aqui:
+
+Saída completa de pnpm run test:face-search 2>&1 | tee /tmp/test-orphan.log (quero as linhas de pass/fail literais).
+
+Conteúdo completo do arquivo de teste criado.
+
+git status --short e git diff --stat.
+
+Saída de pnpm run typecheck (só o veredito final).
+
+Resumo final (última linha) de cada um dos 6 runners + typecheck, para confirmar que nada regrediu.
+
+Regras desta rodada
+Não modifique services/faceSearch/repository.ts, services/faceSearch/galleryIndexer.ts, services/faceSearch/index.ts nem qualquer arquivo de produção. Só o arquivo de teste novo.
+
+Não faça commit manual — o Replit commita automaticamente.
+
+Se a FASE 1 revelar que a infraestrutura de teste não suporta o cenário (por exemplo, sem acesso ao openDatabase ou sem qualquer forma de expirar a lease), PARE e reporte o que encontrou. Não improvise uma solução alternativa.
+
+Se a FASE 2 não reproduzir a falha, reporte assim mesmo. Significa que minha hipótese está errada e eu preciso repensar a causa raiz — informação igualmente valiosa.
