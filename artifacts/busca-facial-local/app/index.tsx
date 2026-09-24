@@ -155,7 +155,13 @@ function Onboarding({
   const insets = useSafeAreaInsets();
   const { contentWidth } = useResponsiveLayout();
   const scrollRef = useRef<ScrollView | null>(null);
-  const scrollMetricsRef = useRef({ viewportHeight: 0, contentHeight: 0 });
+  const scrollMetricsRef = useRef({
+    viewportHeight: 0,
+    contentHeight: 0,
+    contentTop: 0,
+    buttonTop: 0,
+    buttonHeight: 0,
+  });
   const autoScrollStartedRef = useRef(false);
   const autoScrollDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
@@ -174,22 +180,31 @@ function Onboarding({
   const maybeAutoScroll = useCallback(() => {
     if (autoScrollStartedRef.current) return;
 
-    const { viewportHeight, contentHeight } = scrollMetricsRef.current;
-    if (!viewportHeight || !contentHeight) return;
+    const {
+      viewportHeight,
+      contentHeight,
+      contentTop,
+      buttonTop,
+      buttonHeight,
+    } = scrollMetricsRef.current;
+    if (!viewportHeight || !contentHeight || !buttonHeight) return;
 
     const maxOffset = contentHeight - viewportHeight;
-    if (maxOffset <= 8) return;
+    const buttonOffset =
+      contentTop + buttonTop + buttonHeight - viewportHeight + 20;
+    const targetOffset = Math.min(maxOffset, Math.max(0, buttonOffset));
+    if (targetOffset <= 8) return;
 
     autoScrollStartedRef.current = true;
     autoScrollDelayRef.current = setTimeout(() => {
-      const duration = 2200;
+      const duration = 1600;
       let startedAt: number | null = null;
       const animateScroll = (timestamp: number) => {
         startedAt ??= timestamp;
         const progress = Math.min((timestamp - startedAt) / duration, 1);
         const easedProgress = 1 - Math.pow(1 - progress, 3);
         scrollRef.current?.scrollTo({
-          y: maxOffset * easedProgress,
+          y: targetOffset * easedProgress,
           animated: false,
         });
 
@@ -200,7 +215,7 @@ function Onboarding({
         }
       };
       autoScrollFrameRef.current = requestAnimationFrame(animateScroll);
-    }, 550);
+    }, 250);
   }, []);
 
   useEffect(
@@ -212,12 +227,36 @@ function Onboarding({
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.onboardingBrand,
+          {
+            width: contentWidth,
+            alignSelf: 'center',
+            paddingTop: insets.top + 24,
+          },
+        ]}
+      >
+        <Text style={[styles.brandName, { color: colors.foreground }]}>
+          Search Face
+        </Text>
+        <Text
+          style={[
+            styles.eyebrow,
+            styles.onboardingEyebrow,
+            { color: colors.primary },
+          ]}
+        >
+          Privacidade por padrão
+        </Text>
+      </View>
       <ScrollView
         ref={scrollRef}
+        style={styles.onboardingScroll}
         contentContainerStyle={[
           styles.onboardingContent,
           {
-            paddingTop: insets.top + 24,
+            paddingTop: 8,
             paddingBottom: insets.bottom + 24,
           },
         ]}
@@ -235,17 +274,14 @@ function Onboarding({
           cancelAutoScroll();
         }}
       >
-        <View style={[styles.contentFrame, { width: contentWidth }]}>
-          <View style={styles.onboardingBrand}>
-            <Text style={[styles.brandName, { color: colors.foreground }]}>
-              Search Face
-            </Text>
-          </View>
-
+        <View
+          style={[styles.contentFrame, { width: contentWidth }]}
+          onLayout={({ nativeEvent }) => {
+            scrollMetricsRef.current.contentTop = nativeEvent.layout.y;
+            maybeAutoScroll();
+          }}
+        >
           <View style={styles.onboardingCopy}>
-            <Text style={[styles.eyebrow, { color: colors.primary }]}>
-              Privacidade por padrão
-            </Text>
             <Text style={[styles.onboardingTitle, { color: colors.foreground }]}>
               Encontre qualquer rosto.{'\n'}
               <Text style={{ color: colors.primary }}>Sem enviar nada.</Text>
@@ -279,15 +315,23 @@ function Onboarding({
             ))}
           </View>
 
-          <PrimaryButton
-            label="Continuar com segurança"
-            icon="arrow-right"
-            onPress={onContinue}
-            testID="onboarding-continue"
-            backgroundColor="#34D399"
-            foregroundColor="#052019"
-            highlighted
-          />
+          <View
+            onLayout={({ nativeEvent }) => {
+              scrollMetricsRef.current.buttonTop = nativeEvent.layout.y;
+              scrollMetricsRef.current.buttonHeight = nativeEvent.layout.height;
+              maybeAutoScroll();
+            }}
+          >
+            <PrimaryButton
+              label="Continuar com segurança"
+              icon="arrow-right"
+              onPress={onContinue}
+              testID="onboarding-continue"
+              backgroundColor="#34D399"
+              foregroundColor="#052019"
+              highlighted
+            />
+          </View>
           <Text style={[styles.legalNote, { color: colors.mutedForeground }]}>
             Ao continuar, você permite que o Search Face acesse suas fotos para realizar a busca local.
           </Text>
@@ -1640,10 +1684,12 @@ export default function HomeScreen() {
     <>
       <View style={[styles.appShell, { backgroundColor: colors.background }]}>
         {content}
-        <GlobalMatchesPanel
-          matchCount={results.length}
-          onPress={openMatches}
-        />
+        {screen === 'onboarding' ? null : (
+          <GlobalMatchesPanel
+            matchCount={results.length}
+            onPress={openMatches}
+          />
+        )}
         <AdFooter />
       </View>
       <RewardModal
@@ -1696,22 +1742,24 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   appShell: { flex: 1 },
   screen: { flex: 1 },
+  onboardingScroll: { flex: 1 },
   onboardingContent: { flexGrow: 1 },
   contentFrame: { alignSelf: 'center' },
-  onboardingBrand: { alignItems: 'center', marginBottom: 30 },
+  onboardingBrand: { alignItems: 'center', marginBottom: 14 },
+  onboardingEyebrow: { marginTop: 18, marginBottom: 0 },
   brandName: { fontSize: 23, fontFamily: 'Inter_700Bold', letterSpacing: -0.6 },
   onboardingCopy: { marginTop: 0 },
   eyebrow: { fontSize: 14, fontFamily: 'Inter_700Bold', letterSpacing: 0.2, marginBottom: 11 },
-  onboardingTitle: { fontSize: 34, lineHeight: 39, fontFamily: 'Inter_700Bold', letterSpacing: -1.3 },
-  onboardingSubtitle: { fontSize: 15, lineHeight: 23, fontFamily: 'Inter_400Regular', marginTop: 15, maxWidth: 340 },
-  privacyList: { gap: 18, marginTop: 28, marginBottom: 27 },
+  onboardingTitle: { fontSize: 32, lineHeight: 36, fontFamily: 'Inter_700Bold', letterSpacing: -1.3 },
+  onboardingSubtitle: { fontSize: 15, lineHeight: 23, fontFamily: 'Inter_400Regular', marginTop: 12, maxWidth: 340 },
+  privacyList: { gap: 14, marginTop: 24, marginBottom: 20 },
   privacyRow: { flexDirection: 'row', alignItems: 'center', gap: 13 },
   iconCircle: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   privacyText: { flex: 1 },
   privacyTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', marginBottom: 3 },
   privacyDescription: { fontSize: 12, lineHeight: 17, fontFamily: 'Inter_400Regular' },
   primaryButton: { minHeight: 53, borderRadius: 17, paddingHorizontal: 18, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' },
-  highlightedPrimaryButton: { borderWidth: 1, borderColor: '#6EE7B7', shadowColor: '#34D399', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.28, shadowRadius: 12, elevation: 6 },
+  highlightedPrimaryButton: { borderWidth: 1, borderColor: '#6EE7B7', elevation: 6 },
   primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Inter_700Bold' },
   pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
   disabledButton: { opacity: 0.38 },
