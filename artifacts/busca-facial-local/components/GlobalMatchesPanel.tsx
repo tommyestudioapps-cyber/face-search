@@ -2,13 +2,11 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React from 'react';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
 interface GlobalMatchesPanelProps {
@@ -21,12 +19,10 @@ export function GlobalMatchesPanel({
   onPress,
 }: GlobalMatchesPanelProps) {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const bottomInset = Platform.OS === 'web' ? 34 : insets.bottom;
   const photoLabel = matchCount === 1 ? 'foto encontrada' : 'fotos encontradas';
 
   return (
-    <View style={[styles.positioner, { paddingBottom: bottomInset + 10 }]}>
+    <View style={styles.positioner}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${matchCount} ${photoLabel}. Abrir fotos encontradas`}
@@ -72,7 +68,8 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   panel: {
     width: '100%',

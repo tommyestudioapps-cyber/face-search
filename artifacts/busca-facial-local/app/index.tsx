@@ -8,6 +8,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -564,7 +565,17 @@ function SelectPhoto({
               ) : null}
             </>
           ) : (
-            <View style={styles.emptyCrop}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Adicionar foto pela galeria"
+              accessibilityHint="Abre a galeria para escolher uma foto"
+              onPress={onPickLibrary}
+              testID="empty-photo-picker"
+              style={({ pressed }) => [
+                styles.emptyCrop,
+                pressed ? styles.pressed : null,
+              ]}
+            >
               <View style={[styles.emptyCropIcon, { backgroundColor: colors.accent }]}>
                 <Feather name="maximize" size={27} color={colors.primary} />
               </View>
@@ -574,7 +585,7 @@ function SelectPhoto({
               <Text style={[styles.emptyCropBody, { color: colors.mutedForeground }]}>
                 Enquadre apenas a cabeça ou o rosto da pessoa desejada.
               </Text>
-            </View>
+            </Pressable>
           )}
         </View>
 
@@ -1270,22 +1281,55 @@ export default function HomeScreen() {
   };
 
   const pickFromLibrary = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      return;
-    }
-    const selection = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.9,
-    });
-    if (!selection.canceled && selection.assets[0]?.uri) {
-      const uri = selection.assets[0].uri;
-      await clearPersistedSession();
-      await resetCapture();
-      setSelectedImage(uri);
-      void analyzeFace(uri);
+    try {
+      const existingPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+      const permission = existingPermission.granted
+        ? existingPermission
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        if (!permission.canAskAgain) {
+          Alert.alert(
+            'Permissão para fotos necessária',
+            'Permita o acesso à galeria nas configurações do aplicativo para escolher uma foto.',
+            [
+              { text: 'Agora não', style: 'cancel' },
+              {
+                text: 'Configurações',
+                onPress: () => {
+                  void Linking.openSettings().catch((error) => {
+                    console.error('[Gallery] não foi possível abrir configurações', error);
+                  });
+                },
+              },
+            ],
+          );
+        } else {
+          Alert.alert(
+            'Permissão para fotos necessária',
+            'Permita o acesso às fotos para escolher uma imagem da galeria.',
+          );
+        }
+        return;
+      }
+      const selection = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+      if (!selection.canceled && selection.assets[0]?.uri) {
+        const uri = selection.assets[0].uri;
+        await clearPersistedSession();
+        await resetCapture();
+        setSelectedImage(uri);
+        void analyzeFace(uri);
+      }
+    } catch (error) {
+      console.error('[Gallery] não foi possível abrir a galeria', error);
+      Alert.alert(
+        'Não foi possível abrir a galeria',
+        'Confira a permissão de acesso às fotos e tente novamente.',
+      );
     }
   };
 

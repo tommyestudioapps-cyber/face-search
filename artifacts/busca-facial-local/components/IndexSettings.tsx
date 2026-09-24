@@ -110,7 +110,7 @@ export function IndexSettings({
         : backgroundIndexStatus === 'paused'
           ? 'A preparação será retomada quando você ativá-la novamente.'
       : backgroundIndexStatus === 'error'
-        ? 'A última tentativa não terminou. O sistema tentará novamente.'
+        ? 'A última tentativa falhou. Toque em “Preparar novamente” e confirme o acesso às fotos.'
         : backgroundIndexStatus === 'waiting'
           ? 'A tarefa está registrada e aguarda uma oportunidade do sistema.'
           : 'A preparação automática está autorizada.';

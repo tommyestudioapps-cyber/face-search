@@ -9,6 +9,12 @@ A exclusão de registros locais depende de uma varredura completa com acesso int
 
 **How to apply:** Ao alterar checkpoints, permissões ou paginação da galeria, preserve a regra de que somente o fim inequívoco de um ciclo integral exclui registros não vistos.
 
+No Expo Media Library 18, o caminho Android anterior à API 33 considera ausentes as permissões de leitura se `WRITE_EXTERNAL_STORAGE` não estiver declarada/concedida, mesmo ao listar álbuns. Não bloqueie essa permissão legada enquanto esse caminho for usado; o app pode continuar usando a biblioteca apenas para ler fotos.
+
+**Why:** Em Android 9, a verificação nativa de permissões para `getAlbumsAsync` exige leitura e escrita legadas. Bloquear escrita deixa `getPermissionsAsync` e `getAlbumsAsync` em desacordo e a listagem falha com erro de permissão.
+
+**How to apply:** Ao atualizar Expo Media Library ou a configuração Android, confirme o comportamento em Android abaixo da API 33 e mantenha `WRITE_EXTERNAL_STORAGE` disponível para compatibilidade, sem adicionar operações de gravação ao app.
+
 A reserva da geração e a exclusividade da execução são garantias diferentes: uma geração pausada permanece ativa para retomada, mas apenas uma execução pode possuí-la por vez. Escritas de fotos precisam validar a posse da geração na mesma transação em que salvam os resultados.
 
 **Why:** Um segundo runtime pode retomar a mesma geração sem chamar o início de uma geração nova; uma flag em memória ou só a reserva de geração não impede isso. Uma limpeza concorrente também poderia ser seguida por uma gravação tardia.
