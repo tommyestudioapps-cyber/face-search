@@ -415,12 +415,16 @@ function Home({
   onSettings,
   onOpenIndexed,
   onContinueFace,
+  matchCount,
+  onOpenMatches,
   hasActiveFace,
 }: {
   onSelect: () => void;
   onSettings: () => void;
   onOpenIndexed: () => void;
   onContinueFace: () => void;
+  matchCount: number;
+  onOpenMatches: () => void;
   hasActiveFace: boolean;
 }) {
   const colors = useColors();
@@ -511,6 +515,12 @@ function Home({
             </Pressable>
           ) : null}
 
+          <GlobalMatchesPanel
+            inline
+            matchCount={matchCount}
+            onPress={onOpenMatches}
+          />
+
           <View style={[styles.privacyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <IconCircle name="shield" color="#34D399" backgroundColor="#123429" size={18} />
             <View style={styles.privacyCardCopy}>
@@ -580,6 +590,7 @@ function SelectPhoto({
   captureError,
   captureProcessing,
   captureStatus,
+  matchCount,
   onPickLibrary,
   onTakePhoto,
   onSelectFace,
@@ -587,6 +598,7 @@ function SelectPhoto({
   albumLabel,
   onPressAlbum,
   onBack,
+  onOpenMatches,
 }: {
   selectedImage: string | null;
   normalizedImageUri: string | null;
@@ -598,6 +610,7 @@ function SelectPhoto({
   captureError: FaceCaptureError | null;
   captureProcessing: boolean;
   captureStatus: FaceCaptureStatus;
+  matchCount: number;
   onPickLibrary: () => void;
   onTakePhoto: () => void;
   onSelectFace: (faceId: number) => void;
@@ -605,6 +618,7 @@ function SelectPhoto({
   albumLabel: string;
   onPressAlbum: () => void;
   onBack: () => void;
+  onOpenMatches: () => void;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -754,6 +768,12 @@ function SelectPhoto({
           </View>
           <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
         </Pressable>
+
+        <GlobalMatchesPanel
+          inline
+          matchCount={matchCount}
+          onPress={onOpenMatches}
+        />
 
         <PrimaryButton
           label={alignedImageUri ? 'Buscar este rosto na galeria' : 'Aguardando rosto válido'}
@@ -1589,6 +1609,7 @@ export default function HomeScreen() {
             captureError={captureError}
             captureProcessing={captureProcessing}
             captureStatus={captureStatus}
+            matchCount={results.length}
             onPickLibrary={pickFromLibrary}
             onTakePhoto={takePhoto}
             onSelectFace={(faceId) => {
@@ -1599,6 +1620,7 @@ export default function HomeScreen() {
             albumLabel={selectedAlbumTitle}
             onPressAlbum={() => setShowAlbumPicker(true)}
             onBack={leaveSelection}
+            onOpenMatches={openMatches}
           />
         );
       case 'analyzing':
@@ -1645,6 +1667,8 @@ export default function HomeScreen() {
             onSettings={() => setShowIndexSettings(true)}
             onOpenIndexed={openIndexed}
             onContinueFace={continueFaceSearch}
+            matchCount={results.length}
+            onOpenMatches={openMatches}
             hasActiveFace={Boolean(alignedFace)}
           />
         );
@@ -1684,12 +1708,6 @@ export default function HomeScreen() {
     <>
       <View style={[styles.appShell, { backgroundColor: colors.background }]}>
         {content}
-        {screen === 'onboarding' ? null : (
-          <GlobalMatchesPanel
-            matchCount={results.length}
-            onPress={openMatches}
-          />
-        )}
         <AdFooter />
       </View>
       <RewardModal

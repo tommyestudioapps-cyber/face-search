@@ -12,17 +12,24 @@ import { useColors } from '@/hooks/useColors';
 interface GlobalMatchesPanelProps {
   matchCount: number;
   onPress: () => void;
+  inline?: boolean;
 }
 
 export function GlobalMatchesPanel({
   matchCount,
   onPress,
+  inline = false,
 }: GlobalMatchesPanelProps) {
   const colors = useColors();
   const photoLabel = matchCount === 1 ? 'foto encontrada' : 'fotos encontradas';
 
   return (
-    <View style={styles.positioner}>
+      <View
+        style={[
+          styles.positioner,
+          inline ? styles.inlinePositioner : null,
+        ]}
+      >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${matchCount} ${photoLabel}. Abrir fotos encontradas`}
@@ -70,6 +77,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 0,
     paddingBottom: 0,
+  },
+  inlinePositioner: {
+    paddingHorizontal: 0,
   },
   panel: {
     width: '100%',
