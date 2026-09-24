@@ -1,0 +1,153 @@
+# [Fix C3b] Reconciliar estado 'running' órfão no launch
+
+Execute as 3 ações abaixo. Não peça autorização adicional, não revise contexto, não altere nada fora do escopo. Sem commit manual.
+
+## Ação 1 — Criar `services/backgroundIndexing/reconcileOrphanRunning.ts`
+
+Arquivo novo com esta função:
+
+```ts
+import { faceSearchRepository } from '@/services/faceSearch/repository';
+
+export async function reconcileOrphanRunningState(
+  repository: typeof faceSearchRepository = faceSearchRepository,
+): Promise<void> {
+  const state = await repository.getBackgroundIndexState();
+  if (state.status !== 'running') return;
+
+  const generation = await repository.getActiveScanGeneration();
+  if (generation === null) {
+    await repository.updateBackgroundIndexState({
+      status: 'paused',
+      lastError: null,
+    });
+    return;
+  }
+
+  const aborted = await repository.abortScanIfUnleased(generation);
+  if (!aborted) return;
+
+  await repository.updateBackgroundIndexState({
+    status: 'paused',
+    lastError: null,
+  });
+}
+Nenhuma outra função neste arquivo.
+
+Ação 2 — Criar services/backgroundIndexing/__tests__/reconcileOrphanRunning.test.mjs
+Seguir exatamente o padrão de repositoryOrphanScan.test.mjs: DatabaseSync, adapter injetado via openDatabase, mkdtemp, sem mock de módulo. Cobrir 4 cenários em test() separados:
+
+A — running órfão com geração ativa e lease expirada:
+
+beginScan('owner-A').
+
+updateBackgroundIndexState({status: 'running'}).
+
+UPDATE gallery_scan SET lease_until = 0 WHERE id = 1 via database.runAsync.
+
+await reconcileOrphanRunningState(repository).
+
+assert.equal((await repository.getBackgroundIndexState()).status, 'paused').
+
+assert.equal(await repository.getActiveScanGeneration(), null).
+
+B — running sem geração ativa:
+
+updateBackgroundIndexState({status: 'running'}) (sem beginScan).
+
+await reconcileOrphanRunningState(repository).
+
+assert.equal((await repository.getBackgroundIndexState()).status, 'paused').
+
+C — running com lease válida (NÃO deve ser tocado):
+
+beginScan('owner-A').
+
+updateBackgroundIndexState({status: 'running'}).
+
+await reconcileOrphanRunningState(repository).
+
+assert.equal((await repository.getBackgroundIndexState()).status, 'running').
+
+assert.notEqual(await repository.getActiveScanGeneration(), null).
+
+D — estado terminal não é tocado:
+
+updateBackgroundIndexState({status: 'completed'}).
+
+await reconcileOrphanRunningState(repository).
+
+assert.equal((await repository.getBackgroundIndexState()).status, 'completed').
+
+Cada teste deve criar sua própria instância de repositório (mesmo padrão do repositoryOrphanScan.test.mjs), com test.after limpando o diretório temporário.
+
+Ação 3 — Chamar a reconciliação no launch
+Em app/index.tsx, no useEffect de inicialização, no trecho que faz:
+
+ts
+const persistedIndexState = faceSearchModule
+  ? await faceSearchModule.getBackgroundIndexState()
+  : null;
+Substituir por:
+
+ts
+if (faceSearchModule) {
+  const { reconcileOrphanRunningState } = await import(
+    '@/services/backgroundIndexing/reconcileOrphanRunning'
+  );
+  await reconcileOrphanRunningState();
+}
+const persistedIndexState = faceSearchModule
+  ? await faceSearchModule.getBackgroundIndexState()
+  : null;
+Nada mais em app/index.tsx deve mudar.
+
+Não fazer
+Não alterar persistBackgroundState em batchRunner.ts.
+
+Não alterar persistBackgroundStateSwallow.test.mjs.
+
+Não alterar repository.ts, scheduler.ts, consent.ts, checkpoint.ts, backgroundIndexTask.ts, galleryPermission.ts.
+
+Não alterar package.json.
+
+Não alterar nenhum teste existente.
+
+Verificação — colar saída literal
+Rodar o teste novo:
+
+text
+cd artifacts/busca-facial-local && node --experimental-sqlite --import tsx --test services/backgroundIndexing/__tests__/reconcileOrphanRunning.test.mjs
+Esperado: 4 pass, 0 fail.
+
+Rodar a suite de background indexing (não inclui o teste novo, mas confirma que os existentes seguem verdes):
+
+text
+pnpm run test:background-indexing
+Esperado: 10 pass, 0 fail.
+
+Rodar busca e typecheck:
+
+text
+pnpm run test:face-search
+pnpm run typecheck
+Esperado: 15 pass, 0 fail / PASS.
+
+git diff HEAD --stat.
+
+Confirmações (sim/não)
+Novo arquivo reconcileOrphanRunning.ts criado?
+
+Novo teste reconcileOrphanRunning.test.mjs criado?
+
+app/index.tsx modificado apenas no trecho indicado?
+
+persistBackgroundState em batchRunner.ts intacto?
+
+persistBackgroundStateSwallow.test.mjs intacto?
+
+package.json intacto?
+
+Todos os checks verdes?
+
+Sem commit manual?

@@ -1000,6 +1000,12 @@ export default function HomeScreen() {
       const faceSearchModule = Platform.OS === 'web'
         ? null
         : await import('@/services/faceSearch');
+      if (faceSearchModule) {
+        const { reconcileOrphanRunningState } = await import(
+          '@/services/backgroundIndexing/reconcileOrphanRunning'
+        );
+        await reconcileOrphanRunningState();
+      }
       const persistedIndexState = faceSearchModule
         ? await faceSearchModule.getBackgroundIndexState()
         : null;
