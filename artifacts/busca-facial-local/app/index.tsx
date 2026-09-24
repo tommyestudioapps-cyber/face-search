@@ -242,12 +242,14 @@ function Header({
   onNext,
   title,
   subtitle,
+  centeredTitle = false,
 }: {
   onSettings?: () => void;
   onBack?: () => void;
   onNext?: () => void;
   title: string;
   subtitle?: string;
+  centeredTitle?: boolean;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -280,7 +282,7 @@ function Header({
       ) : (
         <View style={styles.headerActionPlaceholder} />
       )}
-      <View style={styles.headerTitleWrap}>
+      <View style={[styles.headerTitleWrap, centeredTitle ? styles.centeredHeaderTitleWrap : null]}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>{title}</Text>
         {subtitle ? (
           <Text style={[styles.headerSubtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
@@ -323,10 +325,10 @@ function Home({
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Header
-        title="Busca facial"
-        subtitle="Seu índice privado"
+        title="Seach Face"
         onSettings={onSettings}
         onNext={onSelect}
+        centeredTitle
       />
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
@@ -1624,6 +1626,7 @@ const styles = StyleSheet.create({
   legalNote: { textAlign: 'center', fontSize: 11, lineHeight: 16, marginTop: 12, paddingHorizontal: 17 },
   header: { minHeight: 78, paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerTitleWrap: { flex: 1 },
+  centeredHeaderTitleWrap: { alignItems: 'center' },
   headerTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
   headerSubtitle: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
   headerAction: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
