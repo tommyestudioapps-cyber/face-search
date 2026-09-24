@@ -64,7 +64,8 @@
     "tsx": "catalog:",
     "typescript": "~5.9.2",
     "zod": "catalog:",
-    "zod-validation-error": "^3.4.0"
+    "zod-validation-error": "^3.4.0",
+    "babel-preset-expo": "~14.0.0"
   },
   "dependencies": {
     "@react-native-community/netinfo": "11.4.1",
