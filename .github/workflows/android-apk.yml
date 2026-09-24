@@ -114,12 +114,13 @@ jobs:
           echo "== signingConfigs =="
           grep -A 20 "signingConfigs" artifacts/busca-facial-local/android/app/build.gradle | head -30
 
-      - name: Build APK (release)
+      - name: Build APK (release, ARM64 only)
         working-directory: artifacts/busca-facial-local/android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload APK
