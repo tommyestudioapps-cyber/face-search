@@ -575,8 +575,9 @@ export class FaceSearchRepository {
           'SELECT generation, lease_owner, lease_until FROM gallery_scan WHERE id = 1 AND active = 1',
         );
         if (active) {
-          const leaseValid = active.lease_until !== null && active.lease_until >= Date.now();
-          if (leaseValid) {
+          const hasExpiredLease =
+            active.lease_until !== null && active.lease_until < Date.now();
+          if (!hasExpiredLease) {
             throw new FaceRecognitionError(
               'indexing-failed',
               'Já existe uma varredura da galeria em andamento.',

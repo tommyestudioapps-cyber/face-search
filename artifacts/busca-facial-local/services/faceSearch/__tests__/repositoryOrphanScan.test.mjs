@@ -54,7 +54,7 @@ function createNativeSQLiteAdapter(databasePath) {
   return adapter;
 }
 
-test('reproduz geração órfã travada após a lease expirar', async () => {
+test('recupera apenas leases expiradas e preserva varreduras protegidas', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'face-scan-orphan-'));
   const databasePath = path.join(directory, 'index.sqlite');
   let database;
@@ -69,65 +69,34 @@ test('reproduz geração órfã travada após a lease expirar', async () => {
   try {
     const genA = await repository.beginScan('owner-A');
 
-    // Simula SIGKILL/OOM: não libera, aborta nem conclui a geração; a referência
-    // da execução interrompida é descartada, mas a geração fica registrada.
-    // O repositório não expõe o relógio nem um helper para avançá-lo, então a
-    // própria conexão SQLite da instância expira a lease diretamente. Usar 0
-    // torna a expiração determinística sem mockar Date.now().
+    // Simula SIGKILL/OOM sem liberar, abortar ou concluir a geração. Como o
+    // repositório não expõe um helper para avançar o relógio, a própria
+    // conexão SQLite expira a lease diretamente com um valor determinístico.
     await database.runAsync(
       'UPDATE gallery_scan SET lease_until = ? WHERE id = 1',
       [0],
     );
 
-    const activeGenerationAfterExpiry = await repository.getActiveScanGeneration();
-    console.log('getActiveScanGeneration() após expirar lease:', activeGenerationAfterExpiry);
+    const genB = await repository.beginScan('owner-B');
+    assert.equal(typeof genB, 'number');
+    assert.notEqual(genB, genA);
+    assert.equal(await repository.getActiveScanGeneration(), genB);
+    assert.equal(await repository.abortScanIfUnleased(genA), false);
 
-    let firstBeginGeneration = null;
-    let firstBeginError = null;
-    try {
-      firstBeginGeneration = await repository.beginScan('owner-B');
-    } catch (error) {
-      firstBeginError = {
-        name: error?.name,
-        code: error?.code,
-        message: error?.message,
-      };
-    }
-    console.log('primeiro beginScan(owner-B):', {
-      generation: firstBeginGeneration,
-      error: firstBeginError,
-    });
+    await repository.abortScan(genB, 'owner-B');
+    const genC = await repository.beginScan();
+    await assert.rejects(
+      repository.beginScan('owner-D'),
+      (error) => error?.code === 'indexing-failed' &&
+        error?.message === 'Já existe uma varredura da galeria em andamento.',
+    );
 
-    const aborted = await repository.abortScanIfUnleased(genA);
-    console.log('abortScanIfUnleased(genA):', aborted);
-
-    let secondBeginGeneration = null;
-    let secondBeginError = null;
-    try {
-      secondBeginGeneration = await repository.beginScan('owner-B');
-    } catch (error) {
-      secondBeginError = {
-        name: error?.name,
-        code: error?.code,
-        message: error?.message,
-      };
-    }
-    console.log('segundo beginScan(owner-B):', {
-      generation: secondBeginGeneration,
-      error: secondBeginError,
-    });
-
-    assert.equal(activeGenerationAfterExpiry, genA);
-    assert.equal(aborted, true);
-    assert.equal(secondBeginError, null);
-    assert.equal(typeof secondBeginGeneration, 'number');
-
-    // Falha intencional: a hipótese reproduzida é que a lease expirada não
-    // libera beginScan por si só; a recuperação só ocorre após o abort explícito.
-    assert.equal(
-      firstBeginError,
-      null,
-      'beginScan(owner-B) deveria funcionar automaticamente após a lease expirar',
+    await repository.abortScan(genC);
+    await repository.beginScan('owner-E');
+    await assert.rejects(
+      repository.beginScan('owner-F'),
+      (error) => error?.code === 'indexing-failed' &&
+        error?.message === 'Já existe uma varredura da galeria em andamento.',
     );
   } finally {
     await repository.close();

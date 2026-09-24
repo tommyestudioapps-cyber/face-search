@@ -1,0 +1,104 @@
+Título: [C1-refino] Recuperar apenas lease expirada (não nula) e atualizar o teste de reprodução
+
+Você identificou corretamente duas incompatibilidades. Elas têm decisões diferentes e este prompt resolve as duas com escopo explícito.
+
+Ação 1 — Apertar beginScan em artifacts/busca-facial-local/services/faceSearch/repository.ts
+Substituir a condição de órfã introduzida na rodada anterior. Onde hoje está:
+
+text
+const leaseValid = active.lease_until !== null && active.lease_until >= Date.now();
+if (leaseValid) {
+  throw new FaceRecognitionError(...);
+}
+// trate como órfã e recupere
+Passar a ser:
+
+text
+// Recupera apenas quando existe lease E ela já expirou.
+// Lease nula (scan iniciado sem owner) preserva o throw: significa que a
+// varredura não pediu proteção de lease e deve ser tratada como viva.
+const hasExpiredLease =
+  active.lease_until !== null && active.lease_until < Date.now();
+if (!hasExpiredLease) {
+  throw new FaceRecognitionError(
+    'indexing-failed',
+    'Já existe uma varredura da galeria em andamento.',
+  );
+}
+// a partir daqui, recuperação como já está implementada
+Nada mais em repository.ts deve mudar. Nenhum outro arquivo de produção deve ser tocado.
+
+Ação 2 — Atualizar artifacts/busca-facial-local/services/faceSearch/__tests__/repositoryOrphanScan.test.mjs
+Este teste foi escrito na rodada de diagnóstico com uma assertiva deliberadamente marcada como "Falha intencional". Agora que a correção está aplicada, o teste deve refletir o comportamento correto, servindo de regressão permanente para C1.
+
+Reescrever o corpo do teste para cobrir dois cenários claramente separados:
+
+Cenário A — lease expirada é recuperada automaticamente
+
+genA = await repository.beginScan('owner-A').
+
+Simular morte: descartar referência, não chamar abort/release/complete.
+
+UPDATE gallery_scan SET lease_until = ? WHERE id = 1 com [0].
+
+genB = await repository.beginScan('owner-B') — deve retornar um número, sem lançar.
+
+assert.notEqual(genB, genA) — é uma geração nova.
+
+Confirmar com getActiveScanGeneration() que a geração ativa agora é genB.
+
+assert.equal(await repository.abortScanIfUnleased(genA), false) — genA não é mais ativa, então o abort não encontra nada.
+
+Cenário B — lease nula preserva o throw (invariante do teste de concorrência)
+
+await repository.beginScan() sem argumento (lease nula).
+
+assert.throws/try-catch em beginScan('owner-D') — deve continuar lançando FaceRecognitionError com code === 'indexing-failed'.
+
+Cenário C — lease válida preserva o throw (proteção real)
+
+await repository.beginScan('owner-E') (lease válida, 120 s no futuro).
+
+assert.throws em beginScan('owner-F') — deve lançar indexing-failed.
+
+Remover os console.log de diagnóstico do teste (eles cumpriram o papel; agora o teste é de regressão, não de diagnóstico).
+
+Manter todos os imports e o helper createNativeSQLiteAdapter como estão.
+
+Ação 3 — Não tocar em nenhum outro teste
+Especificamente: não alterar o teste de concorrência em repository.integration.test.mjs nem qualquer outro teste existente. Se após as Ações 1 e 2 algum outro teste continuar vermelho, pare e reporte em vez de ajustar.
+
+Verificação obrigatória (colar saídas literais)
+Na ordem:
+
+pnpm run test:face-search 2>&1 | tee /tmp/test-c1-refino.log — esperado: 15 pass, 0 fail.
+
+pnpm run test:background-indexing — esperado: 10 pass, 0 fail.
+
+pnpm run test:face-capture — esperado: 25 pass, 0 fail.
+
+pnpm run test:face-overlay — esperado: 2 pass, 0 fail.
+
+pnpm run test:face-settings — esperado: 5 pass, 0 fail.
+
+pnpm run test:face-coordination — esperado: 3 pass, 0 fail.
+
+pnpm run typecheck — esperado: PASS.
+
+git diff HEAD~1 -- services/faceSearch/repository.ts — colar o diff literal para eu confirmar que só o método beginScan mudou.
+
+git diff HEAD~1 -- services/faceSearch/__tests__/repositoryOrphanScan.test.mjs — colar o diff literal do teste atualizado.
+
+Confirmações explícitas (responder sim/não para cada)
+A condição de órfã agora exige lease_until !== null e lease_until < Date.now()?
+
+O teste de concorrência em repository.integration.test.mjs não foi tocado?
+
+Algum outro arquivo de produção além de repository.ts foi tocado?
+
+Todos os 6 runners + typecheck estão verdes com o refinamento?
+
+Regras
+Sem commit manual.
+
+Se algo divergir do esperado, pare e reporte com saída literal em vez de improvisar.
