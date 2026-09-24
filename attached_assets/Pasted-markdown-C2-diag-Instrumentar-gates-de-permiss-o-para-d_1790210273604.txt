@@ -1,0 +1,69 @@
+markdown
+# [C2-diag] Instrumentar gates de permissão para diagnóstico em device
+
+Contexto: suspeita de que a task de background entra quando a permissão de galeria é "limited" (Android 14+), mas `batchRunner.canContinue()` exige `accessPrivileges === 'all'`. O batch abortaria imediatamente e o UI ficaria preso em "Aguardando o sistema" sem explicar. Antes de mudar comportamento, preciso de evidência real do device.
+
+Escopo desta rodada: adicionar apenas logs DEV-only e um cache local de permissão por batch (melhoria segura). Nenhuma mudança de lógica de produção.
+
+## Arquivos a alterar
+
+### 1. `services/backgroundIndexing/galleryPermission.ts`
+
+Adicionar uma função exportada:
+
+```ts
+export async function logGalleryPermissionState(context: string): Promise<void> {
+  if (!__DEV__) return;
+  try {
+    const permission = await MediaLibrary.getPermissionsAsync(false, ['photo']);
+    console.log(
+      `[Perm:diag] ctx=${context} granted=${permission.granted} privileges=${permission.accessPrivileges} status=${permission.status} canAskAgain=${permission.canAskAgain}`,
+    );
+  } catch (error) {
+    console.log(`[Perm:diag] ctx=${context} error=${String(error)}`);
+  }
+}
+Não alterar hasGalleryPhotoPermission, hasFullGalleryPhotoPermission nem requestGalleryPhotoPermission.
+
+2. services/backgroundIndexing/backgroundIndexTask.ts
+No início do handler, antes da checagem de consentimento, chamar:
+
+ts
+await logGalleryPermissionState('task-entry');
+Importar de ./galleryPermission.
+
+3. services/backgroundIndexing/batchRunner.ts
+Duas mudanças:
+
+a) Dentro de canContinue(), antes de retornar, chamar await logGalleryPermissionState('batch-canContinue');.
+
+b) Adicionar cache de permissão por batch. Declarar let cachedFullPermission: boolean | null = null; no topo de runCoordinatedBackgroundIndexBatch, e dentro deste arquivo substituir as chamadas a hasFullGalleryPhotoPermission() por:
+
+ts
+async function checkFullPermissionOnce(): Promise<boolean> {
+  if (cachedFullPermission === null) {
+    cachedFullPermission = await hasFullGalleryPhotoPermission();
+  }
+  return cachedFullPermission;
+}
+Comportamento lógico idêntico; só evita chamar getPermissionsAsync por asset.
+
+4. app/index.tsx
+Em acceptBackgroundIndex e em toggleBackgroundIndex, logo após await syncBackgroundTask() bem-sucedido, adicionar:
+
+ts
+if (__DEV__) {
+  console.log(
+    `[Perm:diag] ctx=after-sync consent=${backgroundIndexConsent} hasPhotoAccess=${hasGalleryPhotoAccess}`,
+  );
+}
+Não alterar nenhum fluxo, mensagem de UI ou estado.
+
+Verificação obrigatória (colar saída literal)
+pnpm run test:background-indexing — esperado: 10 pass, 0 fail.
+
+pnpm run test:face-search — esperado: 15 pass, 0 fail.
+
+pnpm run typecheck — esperado: PASS.
+
+git diff --stat e o diff literal de cada arquivo alterado.
