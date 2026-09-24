@@ -567,13 +567,24 @@ export class FaceSearchRepository {
     try {
       let generation = 0;
       await database.withExclusiveTransactionAsync(async (transaction) => {
-        const active = await transaction.getFirstAsync<{ generation: number }>(
-          'SELECT generation FROM gallery_scan WHERE id = 1 AND active = 1',
+        const active = await transaction.getFirstAsync<{
+          generation: number;
+          lease_owner: string | null;
+          lease_until: number | null;
+        }>(
+          'SELECT generation, lease_owner, lease_until FROM gallery_scan WHERE id = 1 AND active = 1',
         );
         if (active) {
-          throw new FaceRecognitionError(
-            'indexing-failed',
-            'Já existe uma varredura da galeria em andamento.',
+          const leaseValid = active.lease_until !== null && active.lease_until >= Date.now();
+          if (leaseValid) {
+            throw new FaceRecognitionError(
+              'indexing-failed',
+              'Já existe uma varredura da galeria em andamento.',
+            );
+          }
+          await transaction.runAsync(
+            'UPDATE gallery_scan SET active = 0, lease_owner = NULL, lease_until = NULL WHERE id = 1 AND active = 1 AND generation = ?',
+            [active.generation],
           );
         }
         await transaction.runAsync(

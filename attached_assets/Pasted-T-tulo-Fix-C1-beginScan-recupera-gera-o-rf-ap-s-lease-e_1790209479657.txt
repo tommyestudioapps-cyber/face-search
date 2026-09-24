@@ -1,0 +1,81 @@
+Título: [Fix C1] beginScan recupera geração órfã após lease expirada
+
+Contexto: a reprodução da rodada anterior confirmou que beginScan falha permanentemente se uma execução anterior (manual ou background) morrer por SIGKILL/OOM e deixar gallery_scan com active = 1 e lease expirada. O teste services/faceSearch/__tests__/repositoryOrphanScan.test.mjs já captura isso como falha intencional.
+
+Mudança única — artifacts/busca-facial-local/services/faceSearch/repository.ts
+Alterar somente o método beginScan. Nada mais no arquivo. Nada em nenhum outro arquivo.
+
+O comportamento novo:
+
+Dentro da mesma withExclusiveTransactionAsync já existente, ler não só generation mas também lease_owner e lease_until da linha ativa.
+
+Se existir linha ativa:
+
+Se lease_until !== null && lease_until >= Date.now() → considere a varredura realmente viva e mantenha o throw new FaceRecognitionError('indexing-failed', 'Já existe uma varredura da galeria em andamento.') como está hoje.
+
+Caso contrário (lease nula ou expirada) → trate como órfã: execute dentro da mesma transação o UPDATE gallery_scan SET active = 0, lease_owner = NULL, lease_until = NULL WHERE id = 1 AND active = 1 AND generation = ? usando a geração lida, e siga o fluxo normal (incrementa geração, marca ativa, grava novo owner).
+
+Se não existir linha ativa, comportamento idêntico ao atual.
+
+Esqueleto esperado do miolo da transação (não copiar literalmente sem conferir os tipos existentes — apenas para fixar a forma):
+
+text
+const active = await transaction.getFirstAsync<{
+  generation: number;
+  lease_owner: string | null;
+  lease_until: number | null;
+}>('SELECT generation, lease_owner, lease_until FROM gallery_scan WHERE id = 1 AND active = 1');
+
+if (active) {
+  const leaseValid = active.lease_until !== null && active.lease_until >= Date.now();
+  if (leaseValid) {
+    throw new FaceRecognitionError(
+      'indexing-failed',
+      'Já existe uma varredura da galeria em andamento.',
+    );
+  }
+  await transaction.runAsync(
+    'UPDATE gallery_scan SET active = 0, lease_owner = NULL, lease_until = NULL WHERE id = 1 AND active = 1 AND generation = ?',
+    [active.generation],
+  );
+}
+
+// a partir daqui, o bloco já existente (UPDATE ... generation + 1 ... / SELECT generation) permanece como está
+Restrições explícitas
+Não alterar abortScanIfUnleased, abortScan, releaseScan, claimScan, renewScan, completeScan, markAssetSeen nem getActiveScanGeneration.
+
+Não alterar galleryIndexer.ts, batchRunner.ts, scheduler.ts nem qualquer chamador. A correção é puramente defensiva dentro do repositório.
+
+Não alterar o arquivo de teste repositoryOrphanScan.test.mjs — ele deve virar verde por consequência da correção.
+
+Não remover os console.log do teste nesta rodada; eles serão limpos numa rodada separada.
+
+Não fazer commit manual — o Replit commita automaticamente.
+
+Verificação obrigatória (colar saídas literais)
+pnpm run test:face-search 2>&1 | tee /tmp/test-fix-c1.log — esperado: 15 pass, 0 fail. Quero ver a linha ✔ reproduz geração órfã travada após a lease expirar verde.
+
+pnpm run test:background-indexing — esperado: 10 pass, 0 fail.
+
+pnpm run test:face-capture — esperado: 25 pass, 0 fail.
+
+pnpm run test:face-overlay — esperado: 2 pass, 0 fail.
+
+pnpm run test:face-settings — esperado: 5 pass, 0 fail.
+
+pnpm run test:face-coordination — esperado: 3 pass, 0 fail.
+
+pnpm run typecheck — esperado: PASS.
+
+git diff --stat e git diff HEAD~1 -- services/faceSearch/repository.ts (o commit automático já terá sido feito).
+
+Confirmações explícitas (responder sim/não para cada)
+Você alterou somente o método beginScan em repository.ts?
+
+Nenhum outro arquivo de produção foi tocado?
+
+O arquivo repositoryOrphanScan.test.mjs não foi modificado nesta rodada?
+
+O comportamento de "varredura realmente em andamento continua a lançar erro" foi preservado?
+
+Todos os 6 runners + typecheck estão verdes?
