@@ -1,0 +1,43 @@
+# Correção pontual: reverter import não-mockado em batchRunner.ts
+
+O erro é claro: `services/backgroundIndexing/batchRunner.ts` importa `hasGalleryPhotoPermission` de `./galleryPermission`, mas o módulo é mockado em `backgroundIndex.integration.test.mjs` com um conjunto de exports que não inclui essa função. Precisamos parar de importar símbolos novos daquele módulo em arquivos exercitados pelos testes.
+
+## Ação única
+
+Em `services/backgroundIndexing/batchRunner.ts`, reverter a modificação de `canContinue` para usar **somente** `hasFullGalleryPhotoPermission` (que já era importado e está mockado). O corpo deve ficar exatamente assim:
+
+```ts
+async function canContinue(): Promise<boolean> {
+  const consentOk = (await getBackgroundIndexConsent()) === 'accepted';
+  const hasFull = await hasFullGalleryPhotoPermission();
+  if (__DEV__) {
+    console.log(`[Perm:diag] ctx=batch-canContinue consent=${consentOk} full=${hasFull}`);
+  }
+  return consentOk && hasFull;
+}
+Remover hasGalleryPhotoPermission de qualquer import existente em batchRunner.ts se ele foi adicionado nesta rodada. O arquivo não deve referenciar esse símbolo em lugar nenhum.
+
+Não alterar backgroundIndexTask.ts — ele importa hasGalleryPhotoPermission e isso está correto, porque esse arquivo já a importava antes e o mock do teste o cobre. Não alterar app/index.tsx. Não alterar galleryPermission.ts. Não alterar nenhum teste.
+
+Verificação (colar saída literal)
+pnpm run test:background-indexing
+Esperado: 10 pass, 0 fail.
+
+pnpm run test:face-search
+Esperado: 15 pass, 0 fail.
+
+pnpm run typecheck
+Esperado: PASS.
+
+git diff HEAD -- services/backgroundIndexing/batchRunner.ts
+
+Se ainda houver falha em backgroundIndexing, pare e cole o log literal completo sem tentar consertar por conta própria — pode ser que as linhas 398 e 412 não sejam cascata e exijam análise separada.
+
+Não fazer
+Não importar hasGalleryPhotoPermission em batchRunner.ts.
+
+Não alterar testes.
+
+Não alterar backgroundIndexTask.ts nem app/index.tsx.
+
+Sem commit manual.

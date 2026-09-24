@@ -9,7 +9,6 @@ import {
 import { getBackgroundIndexConsent } from './consent';
 import {
   hasFullGalleryPhotoPermission,
-  hasGalleryPhotoPermission,
 } from './galleryPermission';
 import { indexCoordinator } from './indexCoordinator';
 
@@ -26,16 +25,11 @@ async function persistBackgroundState(
   }
 }
 
-async function canContinue(
-  checkFullPermission: () => Promise<boolean> = hasFullGalleryPhotoPermission,
-): Promise<boolean> {
+async function canContinue(): Promise<boolean> {
   const consentOk = (await getBackgroundIndexConsent()) === 'accepted';
-  const hasAny = await hasGalleryPhotoPermission();
-  const hasFull = await checkFullPermission();
+  const hasFull = await hasFullGalleryPhotoPermission();
   if (__DEV__) {
-    console.log(
-      `[Perm:diag] ctx=batch-canContinue consent=${consentOk} any=${hasAny} full=${hasFull}`,
-    );
+    console.log(`[Perm:diag] ctx=batch-canContinue consent=${consentOk} full=${hasFull}`);
   }
   return consentOk && hasFull;
 }
@@ -53,7 +47,7 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
     }
     return cachedFullPermission;
   };
-  if (!(await canContinue(checkFullPermissionOnce))) {
+  if (!(await canContinue())) {
     // Permission could have been reduced to a limited selection since the last page.
     const checkpoint = await loadBackgroundIndexCursor();
     await clearBackgroundIndexCursor();
@@ -130,15 +124,15 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
         leaseOwner,
         maxAssets: MAX_ASSETS_PER_RUN,
         timeBudgetMs: TIME_BUDGET_MS,
-        shouldContinue: async () => leaseHealthy && await canContinue(checkFullPermissionOnce),
+        shouldContinue: async () => leaseHealthy && await canContinue(),
         shouldYield: () => indexCoordinator.shouldYieldBackground(),
         onCheckpoint: async (cursor) => {
-          if (!(await canContinue(checkFullPermissionOnce))) {
+          if (!(await canContinue())) {
             await clearBackgroundIndexCursor();
             return;
           }
           await saveBackgroundIndexCursor(cursor, generation);
-          if (!(await canContinue(checkFullPermissionOnce))) await clearBackgroundIndexCursor();
+          if (!(await canContinue())) await clearBackgroundIndexCursor();
         },
       },
     });
