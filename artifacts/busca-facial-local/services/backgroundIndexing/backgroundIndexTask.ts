@@ -11,14 +11,19 @@ TaskManager.defineTask(BACKGROUND_INDEX_TASK_NAME, async ({ error }) => {
     return BackgroundTask.BackgroundTaskResult.Failed;
   }
 
-  try {
-    if (
-      (await getBackgroundIndexConsent()) !== 'accepted' ||
-      !(await hasGalleryPhotoPermission())
-    ) {
-      return BackgroundTask.BackgroundTaskResult.Success;
-    }
+  const consent = await getBackgroundIndexConsent();
+  const hasAny = await hasGalleryPhotoPermission();
+  if (__DEV__) {
+    console.log(
+      `[Perm:diag] ctx=task-entry consent=${consent} any=${hasAny}`,
+    );
+  }
 
+  if (consent !== 'accepted' || !hasAny) {
+    return BackgroundTask.BackgroundTaskResult.Success;
+  }
+
+  try {
     const { runBackgroundIndexBatch } = await import('./batchRunner');
     await runBackgroundIndexBatch();
     return BackgroundTask.BackgroundTaskResult.Success;

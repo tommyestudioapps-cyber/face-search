@@ -1,0 +1,117 @@
+markdown
+# [C2-diag-fix] Reaplicar instrumentação de permissão sem tocar em módulos mockados
+
+Estado atual confirmado: HEAD em b01c383; os 4 arquivos abaixo estão idênticos a 269a96a; working tree limpo; nenhum teste foi alterado.
+
+Escopo: reaplicar instrumentação DEV-only nos 4 arquivos, sem adicionar funções novas a módulos que os testes mockam.
+
+## Arquivos a alterar (somente estes 4)
+
+### 1. services/backgroundIndexing/backgroundIndexTask.ts
+
+Substituir o corpo do handler por (mantendo imports existentes; se `hasGalleryPhotoPermission` ainda não estiver importado, adicionar ao import existente de `./galleryPermission`):
+
+```ts
+TaskManager.defineTask(BACKGROUND_INDEX_TASK_NAME, async ({ error }) => {
+  if (error) {
+    console.error('[BackgroundIndex] Native task error', error);
+    return BackgroundTask.BackgroundTaskResult.Failed;
+  }
+
+  const consent = await getBackgroundIndexConsent();
+  const hasAny = await hasGalleryPhotoPermission();
+  if (__DEV__) {
+    console.log(
+      `[Perm:diag] ctx=task-entry consent=${consent} any=${hasAny}`,
+    );
+  }
+
+  if (consent !== 'accepted' || !hasAny) {
+    return BackgroundTask.BackgroundTaskResult.Success;
+  }
+
+  try {
+    const { runBackgroundIndexBatch } = await import('./batchRunner');
+    await runBackgroundIndexBatch();
+    return BackgroundTask.BackgroundTaskResult.Success;
+  } catch (cause) {
+    console.error('[BackgroundIndex] Task preparation failed', cause);
+    return BackgroundTask.BackgroundTaskResult.Failed;
+  }
+});
+Nenhuma função nova exportada neste arquivo.
+
+2. services/backgroundIndexing/batchRunner.ts
+a) Modificar canContinue() para:
+
+ts
+async function canContinue(): Promise<boolean> {
+  const consentOk = (await getBackgroundIndexConsent()) === 'accepted';
+  const hasAny = await hasGalleryPhotoPermission();
+  const hasFull = await hasFullGalleryPhotoPermission();
+  if (__DEV__) {
+    console.log(
+      `[Perm:diag] ctx=batch-canContinue consent=${consentOk} any=${hasAny} full=${hasFull}`,
+    );
+  }
+  return consentOk && hasFull;
+}
+Se hasGalleryPhotoPermission ainda não for importado, adicionar ao import existente de ./galleryPermission. Não adicionar novas funções a galleryPermission.ts.
+
+b) Dentro de runCoordinatedBackgroundIndexBatch, logo após a primeira linha da função (const activeGeneration = ...), declarar:
+
+ts
+let cachedFullPermission: boolean | null = null;
+const checkFullPermissionOnce = async (): Promise<boolean> => {
+  if (cachedFullPermission === null) {
+    cachedFullPermission = await hasFullGalleryPhotoPermission();
+  }
+  return cachedFullPermission;
+};
+Trocar, dentro desta função apenas, todas as chamadas a hasFullGalleryPhotoPermission() por checkFullPermissionOnce().
+
+3. app/index.tsx
+Dentro de acceptBackgroundIndex e de toggleBackgroundIndex, logo após o bloco await syncBackgroundTask() bem-sucedido, adicionar:
+
+ts
+if (__DEV__) {
+  console.log(
+    `[Perm:diag] ctx=after-sync consent=${backgroundIndexConsent} hasPhotoAccess=${hasGalleryPhotoAccess}`,
+  );
+}
+Nenhuma outra alteração.
+
+4. services/backgroundIndexing/galleryPermission.ts
+Não alterar. Ele deve permanecer idêntico a 269a96a. Nenhuma função nova aqui.
+
+Verificação obrigatória (colar saída literal)
+pnpm run test:background-indexing 2>&1 | tee /tmp/test-c2-fix.log
+Esperado: 10 pass, 0 fail.
+
+pnpm run test:face-search 2>&1 | tee -a /tmp/test-c2-fix.log
+Esperado: 15 pass, 0 fail.
+
+pnpm run typecheck
+Esperado: PASS.
+
+git diff HEAD~1 --stat e git diff HEAD~1 -- services/backgroundIndexing/batchRunner.ts services/backgroundIndexing/backgroundIndexTask.ts app/index.tsx
+
+Confirmações explícitas (responder sim/não)
+services/backgroundIndexing/galleryPermission.ts está idêntico a 269a96a?
+
+Nenhuma função nova foi adicionada a módulos que os testes mockam (galleryPermission em particular)?
+
+cachedFullPermission está declarado dentro de runCoordinatedBackgroundIndexBatch, não em escopo de módulo?
+
+Os 3 checks acima verdes?
+
+scheduler.ts, registrationPolicy.ts, repository.ts, consent.ts, checkpoint.ts e indexCoordinator.ts preservados?
+
+Nenhum arquivo de teste foi alterado?
+
+Regras
+Sem commit manual.
+
+Não alterar nenhum arquivo de teste.
+
+Se algo divergir, pare e reporte a saída literal.

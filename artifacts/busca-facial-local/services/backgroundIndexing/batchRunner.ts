@@ -7,7 +7,10 @@ import {
   saveBackgroundIndexCursor,
 } from './checkpoint';
 import { getBackgroundIndexConsent } from './consent';
-import { hasFullGalleryPhotoPermission } from './galleryPermission';
+import {
+  hasFullGalleryPhotoPermission,
+  hasGalleryPhotoPermission,
+} from './galleryPermission';
 import { indexCoordinator } from './indexCoordinator';
 
 const MAX_ASSETS_PER_RUN = 16;
@@ -24,10 +27,15 @@ async function persistBackgroundState(
 }
 
 async function canContinue(): Promise<boolean> {
-  return (
-    (await getBackgroundIndexConsent()) === 'accepted' &&
-    (await hasFullGalleryPhotoPermission())
-  );
+  const consentOk = (await getBackgroundIndexConsent()) === 'accepted';
+  const hasAny = await hasGalleryPhotoPermission();
+  const hasFull = await hasFullGalleryPhotoPermission();
+  if (__DEV__) {
+    console.log(
+      `[Perm:diag] ctx=batch-canContinue consent=${consentOk} any=${hasAny} full=${hasFull}`,
+    );
+  }
+  return consentOk && hasFull;
 }
 
 export async function runBackgroundIndexBatch(): Promise<void> {
@@ -36,6 +44,13 @@ export async function runBackgroundIndexBatch(): Promise<void> {
 
 async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
   const activeGeneration = await faceSearchRepository.getActiveScanGeneration();
+  let cachedFullPermission: boolean | null = null;
+  const checkFullPermissionOnce = async (): Promise<boolean> => {
+    if (cachedFullPermission === null) {
+      cachedFullPermission = await hasFullGalleryPhotoPermission();
+    }
+    return cachedFullPermission;
+  };
   if (!(await canContinue())) {
     // Permission could have been reduced to a limited selection since the last page.
     const checkpoint = await loadBackgroundIndexCursor();
