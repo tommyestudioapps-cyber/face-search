@@ -1,0 +1,106 @@
+name: Build Android APK (release)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout (com Git LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Verify LFS assets
+        run: |
+          echo "== assets/models =="
+          ls -la artifacts/busca-facial-local/assets/models/ || true
+          echo "== tamanhos =="
+          du -sh artifacts/busca-facial-local/assets/models/* 2>/dev/null || true
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Expo prebuild (Android)
+        working-directory: artifacts/busca-facial-local
+        env:
+          EXPO_NO_TELEMETRY: "1"
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > artifacts/busca-facial-local/android/app/release.keystore
+          ls -la artifacts/busca-facial-local/android/app/release.keystore
+
+      - name: Patch build.gradle for release signing
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib
+          p = pathlib.Path('artifacts/busca-facial-local/android/app/build.gradle')
+          s = p.read_text()
+
+          needle = "        debug {\n            storeFile file('debug.keystore')\n            storePassword 'android'\n            keyAlias 'androiddebugkey'\n            keyPassword 'android'\n        }\n"
+          if needle not in s:
+              raise SystemExit('ERRO: bloco debug signing nao encontrado em build.gradle')
+          release_block = needle + "        release {\n            storeFile file('release.keystore')\n            storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')\n            keyAlias System.getenv('ANDROID_KEY_ALIAS')\n            keyPassword System.getenv('ANDROID_KEY_PASSWORD')\n        }\n"
+          s = s.replace(needle, release_block, 1)
+
+          marker = "release {"
+          idx = s.find(marker)
+          if idx == -1:
+              raise SystemExit('ERRO: bloco release buildType nao encontrado')
+          sig_idx = s.find('signingConfig signingConfigs.debug', idx)
+          if sig_idx == -1:
+              raise SystemExit('ERRO: signingConfig de release nao encontrado')
+          s = s[:sig_idx] + 'signingConfig signingConfigs.release' + s[sig_idx + len('signingConfig signingConfigs.debug'):]
+
+          p.write_text(s)
+          print('build.gradle patched com sucesso')
+          PYEOF
+
+      - name: Show signing sections (debug)
+        run: |
+          echo "== signingConfigs =="
+          grep -A 20 "signingConfigs" artifacts/busca-facial-local/android/app/build.gradle | head -30
+
+      - name: Build APK (release)
+        working-directory: artifacts/busca-facial-local/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: search-face-release-apk
+          path: artifacts/busca-facial-local/android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+          if-no-files-found: error
