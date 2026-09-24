@@ -97,12 +97,18 @@ function PrimaryButton({
   onPress,
   disabled = false,
   testID,
+  backgroundColor,
+  foregroundColor,
+  highlighted = false,
 }: {
   label: string;
   icon: keyof typeof Feather.glyphMap;
   onPress: () => void;
   disabled?: boolean;
   testID: string;
+  backgroundColor?: string;
+  foregroundColor?: string;
+  highlighted?: boolean;
 }) {
   const colors = useColors();
 
@@ -117,13 +123,25 @@ function PrimaryButton({
       testID={testID}
       style={({ pressed }) => [
         styles.primaryButton,
-        { backgroundColor: colors.primary },
+        { backgroundColor: backgroundColor ?? colors.primary },
+        highlighted ? styles.highlightedPrimaryButton : null,
         disabled ? styles.disabledButton : null,
         pressed ? styles.pressed : null,
       ]}
     >
-      <Text style={styles.primaryButtonText}>{label}</Text>
-      <Feather name={icon} size={18} color={colors.primaryForeground} />
+      <Text
+        style={[
+          styles.primaryButtonText,
+          foregroundColor ? { color: foregroundColor } : null,
+        ]}
+      >
+        {label}
+      </Text>
+      <Feather
+        name={icon}
+        size={18}
+        color={foregroundColor ?? colors.primaryForeground}
+      />
     </Pressable>
   );
 }
@@ -136,10 +154,66 @@ function Onboarding({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { contentWidth } = useResponsiveLayout();
+  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollMetricsRef = useRef({ viewportHeight: 0, contentHeight: 0 });
+  const autoScrollStartedRef = useRef(false);
+  const autoScrollDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoScrollFrameRef = useRef<number | null>(null);
+
+  const cancelAutoScroll = useCallback(() => {
+    if (autoScrollDelayRef.current !== null) {
+      clearTimeout(autoScrollDelayRef.current);
+      autoScrollDelayRef.current = null;
+    }
+    if (autoScrollFrameRef.current !== null) {
+      cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+  }, []);
+
+  const maybeAutoScroll = useCallback(() => {
+    if (autoScrollStartedRef.current) return;
+
+    const { viewportHeight, contentHeight } = scrollMetricsRef.current;
+    if (!viewportHeight || !contentHeight) return;
+
+    const maxOffset = contentHeight - viewportHeight;
+    if (maxOffset <= 8) return;
+
+    autoScrollStartedRef.current = true;
+    autoScrollDelayRef.current = setTimeout(() => {
+      const duration = 2200;
+      let startedAt: number | null = null;
+      const animateScroll = (timestamp: number) => {
+        startedAt ??= timestamp;
+        const progress = Math.min((timestamp - startedAt) / duration, 1);
+        const easedProgress = 1 - Math.pow(1 - progress, 3);
+        scrollRef.current?.scrollTo({
+          y: maxOffset * easedProgress,
+          animated: false,
+        });
+
+        if (progress < 1) {
+          autoScrollFrameRef.current = requestAnimationFrame(animateScroll);
+        } else {
+          autoScrollFrameRef.current = null;
+        }
+      };
+      autoScrollFrameRef.current = requestAnimationFrame(animateScroll);
+    }, 550);
+  }, []);
+
+  useEffect(
+    () => () => {
+      cancelAutoScroll();
+    },
+    [cancelAutoScroll],
+  );
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.onboardingContent,
           {
@@ -148,46 +222,29 @@ function Onboarding({
           },
         ]}
         showsVerticalScrollIndicator={false}
+        onLayout={({ nativeEvent }) => {
+          scrollMetricsRef.current.viewportHeight = nativeEvent.layout.height;
+          maybeAutoScroll();
+        }}
+        onContentSizeChange={(_, contentHeight) => {
+          scrollMetricsRef.current.contentHeight = contentHeight;
+          maybeAutoScroll();
+        }}
+        onScrollBeginDrag={() => {
+          autoScrollStartedRef.current = true;
+          cancelAutoScroll();
+        }}
       >
         <View style={[styles.contentFrame, { width: contentWidth }]}>
-          <View style={styles.brandRow}>
-            <LinearGradient
-              colors={[colors.primary, '#8B5CF6']}
-              style={styles.brandMark}
-            >
-              <Feather name="maximize" size={21} color={colors.primaryForeground} />
-            </LinearGradient>
+          <View style={styles.onboardingBrand}>
             <Text style={[styles.brandName, { color: colors.foreground }]}>
-              visage
+              Search Face
             </Text>
-          </View>
-
-          <View style={styles.onboardingHero}>
-            <View style={styles.heroOrbLarge} />
-            <View style={styles.heroOrbSmall} />
-            <LinearGradient
-              colors={['#25235C', '#11182D']}
-              style={styles.faceCard}
-            >
-              <View style={styles.faceLines}>
-                <View style={styles.faceArc} />
-                <View style={styles.faceEyeRow}>
-                  <View style={styles.faceEye} />
-                  <View style={styles.faceEye} />
-                </View>
-                <View style={styles.faceSmile} />
-              </View>
-              <View style={styles.scanLine} />
-              <View style={styles.localBadge}>
-                <Feather name="lock" size={12} color={colors.primaryForeground} />
-                <Text style={styles.localBadgeText}>PROCESSAMENTO LOCAL</Text>
-              </View>
-            </LinearGradient>
           </View>
 
           <View style={styles.onboardingCopy}>
             <Text style={[styles.eyebrow, { color: colors.primary }]}>
-              PRIVACIDADE POR PADRÃO
+              Privacidade por padrão
             </Text>
             <Text style={[styles.onboardingTitle, { color: colors.foreground }]}>
               Encontre qualquer rosto.{'\n'}
@@ -227,9 +284,12 @@ function Onboarding({
             icon="arrow-right"
             onPress={onContinue}
             testID="onboarding-continue"
+            backgroundColor="#34D399"
+            foregroundColor="#052019"
+            highlighted
           />
           <Text style={[styles.legalNote, { color: colors.mutedForeground }]}>
-            Ao continuar, você permite que o visage acesse suas fotos para realizar a busca local.
+            Ao continuar, você permite que o Search Face acesse suas fotos para realizar a busca local.
           </Text>
         </View>
       </ScrollView>
@@ -326,7 +386,7 @@ function Home({
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Header
-        title="Seach Face"
+        title="Search Face"
         onSettings={onSettings}
         onNext={onSelect}
         centeredTitle
@@ -1638,23 +1698,10 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   onboardingContent: { flexGrow: 1 },
   contentFrame: { alignSelf: 'center' },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  brandMark: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  brandName: { fontSize: 19, fontFamily: 'Inter_700Bold', letterSpacing: -0.5 },
-  onboardingHero: { height: 270, marginTop: 28, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  heroOrbLarge: { position: 'absolute', width: 270, height: 270, borderRadius: 135, backgroundColor: '#111A38', top: 0 },
-  heroOrbSmall: { position: 'absolute', width: 190, height: 190, borderRadius: 95, backgroundColor: '#191747', top: 41 },
-  faceCard: { width: 162, height: 202, borderRadius: 82, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 1, borderColor: '#3F43A1' },
-  faceLines: { width: 104, height: 130, alignItems: 'center', justifyContent: 'center' },
-  faceArc: { width: 61, height: 76, borderWidth: 2, borderBottomColor: 'transparent', borderColor: '#A5B4FC', borderRadius: 42, position: 'absolute', top: 6 },
-  faceEyeRow: { flexDirection: 'row', gap: 26, position: 'absolute', top: 49 },
-  faceEye: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#C7D2FE' },
-  faceSmile: { width: 29, height: 13, borderBottomWidth: 2, borderBottomColor: '#A5B4FC', borderRadius: 18, position: 'absolute', top: 72 },
-  scanLine: { position: 'absolute', left: 21, right: 21, height: 1, backgroundColor: '#818CF8', top: 99, opacity: 0.8 },
-  localBadge: { position: 'absolute', bottom: 19, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#24265D', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  localBadgeText: { color: '#C7D2FE', fontSize: 8, fontFamily: 'Inter_700Bold', letterSpacing: 0.7 },
-  onboardingCopy: { marginTop: 18 },
-  eyebrow: { fontSize: 11, fontFamily: 'Inter_700Bold', letterSpacing: 1.4, marginBottom: 11 },
+  onboardingBrand: { alignItems: 'center', marginBottom: 30 },
+  brandName: { fontSize: 23, fontFamily: 'Inter_700Bold', letterSpacing: -0.6 },
+  onboardingCopy: { marginTop: 0 },
+  eyebrow: { fontSize: 14, fontFamily: 'Inter_700Bold', letterSpacing: 0.2, marginBottom: 11 },
   onboardingTitle: { fontSize: 34, lineHeight: 39, fontFamily: 'Inter_700Bold', letterSpacing: -1.3 },
   onboardingSubtitle: { fontSize: 15, lineHeight: 23, fontFamily: 'Inter_400Regular', marginTop: 15, maxWidth: 340 },
   privacyList: { gap: 18, marginTop: 28, marginBottom: 27 },
@@ -1664,6 +1711,7 @@ const styles = StyleSheet.create({
   privacyTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', marginBottom: 3 },
   privacyDescription: { fontSize: 12, lineHeight: 17, fontFamily: 'Inter_400Regular' },
   primaryButton: { minHeight: 53, borderRadius: 17, paddingHorizontal: 18, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' },
+  highlightedPrimaryButton: { borderWidth: 1, borderColor: '#6EE7B7', shadowColor: '#34D399', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.28, shadowRadius: 12, elevation: 6 },
   primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Inter_700Bold' },
   pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
   disabledButton: { opacity: 0.38 },
