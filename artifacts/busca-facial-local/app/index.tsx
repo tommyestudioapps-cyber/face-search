@@ -1130,11 +1130,6 @@ export default function HomeScreen() {
       if (registrationResult.status === 'rejected') {
         throw registrationResult.reason;
       }
-      if (__DEV__) {
-        console.log(
-          `[Perm:diag] ctx=after-sync consent=${backgroundIndexConsent} hasPhotoAccess=${hasGalleryPhotoAccess}`,
-        );
-      }
     } catch (error) {
       console.error('[BackgroundIndex] agendamento indisponível', error);
       Alert.alert(
@@ -1199,11 +1194,6 @@ export default function HomeScreen() {
           ]);
           if (registrationResult.status === 'rejected') {
             throw registrationResult.reason;
-          }
-          if (__DEV__) {
-            console.log(
-              `[Perm:diag] ctx=after-sync consent=${backgroundIndexConsent} hasPhotoAccess=${hasGalleryPhotoAccess}`,
-            );
           }
         } catch (error) {
           console.error('[BackgroundIndex] agendamento indisponível', error);

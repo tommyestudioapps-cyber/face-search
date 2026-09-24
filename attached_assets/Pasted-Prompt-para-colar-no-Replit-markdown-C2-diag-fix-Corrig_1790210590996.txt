@@ -1,0 +1,148 @@
+Prompt para colar no Replit
+markdown
+# [C2-diag-fix] Corrigir mock incompatível e escopo do cache de permissão
+
+A rodada anterior quebrou 6 testes de `test:background-indexing`. Causa raiz: `logGalleryPermissionState` foi adicionada a `services/backgroundIndexing/galleryPermission.ts`, que é mockada em `backgroundIndex.integration.test.mjs` com um conjunto fixo de exports. O `batchRunner` e o `backgroundIndexTask` importam essa função, recebem `undefined` do mock e lançam TypeError.
+
+A correção **não** é alterar os testes — é não depender de exports novos de módulos mockados.
+
+## Ação 1 — Reverter mudanças anteriores nos 4 arquivos
+
+Reverter os arquivos ao estado do commit `269a96a`:
+git checkout 269a96a --
+services/backgroundIndexing/galleryPermission.ts
+services/backgroundIndexing/backgroundIndexTask.ts
+services/backgroundIndexing/batchRunner.ts
+app/index.tsx
+
+text
+
+Isso desfaz tudo da rodada C2-diag anterior nesses arquivos.
+
+## Ação 2 — Reaplicar instrumentação usando apenas exports já existentes
+
+### `services/backgroundIndexing/backgroundIndexTask.ts`
+
+Substituir o handler por (mantendo o resto do arquivo intacto):
+
+```ts
+TaskManager.defineTask(BACKGROUND_INDEX_TASK_NAME, async ({ error }) => {
+  if (error) {
+    console.error('[BackgroundIndex] Native task error', error);
+    return BackgroundTask.BackgroundTaskResult.Failed;
+  }
+
+  const consent = await getBackgroundIndexConsent();
+  const hasAny = await hasGalleryPhotoPermission();
+  if (__DEV__) {
+    console.log(
+      `[Perm:diag] ctx=task-entry consent=${consent} any=${hasAny}`,
+    );
+  }
+
+  if (consent !== 'accepted' || !hasAny) {
+    return BackgroundTask.BackgroundTaskResult.Success;
+  }
+
+  try {
+    const { runBackgroundIndexBatch } = await import('./batchRunner');
+    await runBackgroundIndexBatch();
+    return BackgroundTask.BackgroundTaskResult.Success;
+  } catch (cause) {
+    console.error('[BackgroundIndex] Task preparation failed', cause);
+    return BackgroundTask.BackgroundTaskResult.Failed;
+  }
+});
+Não alterar mais nada nesse arquivo. getBackgroundIndexConsent e hasGalleryPhotoPermission já são importados hoje.
+
+services/backgroundIndexing/batchRunner.ts
+Duas mudanças pontuais, sem novos imports de galleryPermission:
+
+Modificar canContinue() para:
+
+ts
+async function canContinue(): Promise<boolean> {
+  const consentOk = (await getBackgroundIndexConsent()) === 'accepted';
+  const hasAny = await hasGalleryPhotoPermission();
+  const hasFull = await hasFullGalleryPhotoPermission();
+  if (__DEV__) {
+    console.log(
+      `[Perm:diag] ctx=batch-canContinue consent=${consentOk} any=${hasAny} full=${hasFull}`,
+    );
+  }
+  return consentOk && hasFull;
+}
+Se hasGalleryPhotoPermission ainda não é importado nesse arquivo, adicioná-lo ao import existente de ./galleryPermission — não adicionar nenhuma função nova.
+
+Cache de permissão com escopo per-invocação. Declarar a variável dentro de runCoordinatedBackgroundIndexBatch, logo no início da função (após a linha que começa com const activeGeneration = ...):
+
+ts
+let cachedFullPermission: boolean | null = null;
+const checkFullPermissionOnce = async (): Promise<boolean> => {
+  if (cachedFullPermission === null) {
+    cachedFullPermission = await hasFullGalleryPhotoPermission();
+  }
+  return cachedFullPermission;
+};
+Trocar, dentro desta função apenas, todas as chamadas a hasFullGalleryPhotoPermission() por checkFullPermissionOnce(). Se a variável foi declarada em escopo de módulo na rodada anterior, isso é desfeito pelo git checkout da Ação 1 e a declaração correta entra agora.
+
+Não alterar mais nada em batchRunner.ts.
+
+app/index.tsx
+No início de acceptBackgroundIndex e de toggleBackgroundIndex, logo após await syncBackgroundTask() bem-sucedido, adicionar:
+
+ts
+if (__DEV__) {
+  console.log(
+    `[Perm:diag] ctx=after-sync consent=${backgroundIndexConsent} hasPhotoAccess=${hasGalleryPhotoAccess}`,
+  );
+}
+Não alterar mais nada.
+
+services/backgroundIndexing/galleryPermission.ts
+Não deve ser tocado nesta rodada. Após o git checkout, ele volta ao estado original e fica assim.
+
+Verificação obrigatória (colar saída literal)
+pnpm run test:background-indexing 2>&1 | tee /tmp/test-c2-fix.log — esperado: 10 pass, 0 fail. Se falhar, cole o log completo.
+
+pnpm run test:face-search 2>&1 | tee -a /tmp/test-c2-fix.log — esperado: 15 pass, 0 fail.
+
+pnpm run typecheck — esperado: PASS.
+
+git diff HEAD --stat — para confirmar quais arquivos foram alterados nesta rodada.
+
+git diff HEAD -- services/backgroundIndexing/batchRunner.ts services/backgroundIndexing/backgroundIndexTask.ts app/index.tsx — diff literal.
+
+Se algum teste de background-indexing continuar falhando, também cole o corpo das funções de teste nas linhas 398 e 412 de services/backgroundIndexing/__tests__/backgroundIndex.integration.test.mjs (do test( até o });), para eu inspecionar.
+
+Confirmações explícitas (responder sim/não)
+services/backgroundIndexing/galleryPermission.ts está idêntico ao commit 269a96a?
+
+Nenhuma função nova foi adicionada a módulos que os testes mockam?
+
+cachedFullPermission está declarado dentro de runCoordinatedBackgroundIndexBatch, não no escopo do módulo?
+
+Todos os 3 checks acima verdes?
+
+scheduler.ts, registrationPolicy.ts, repository.ts, consent.ts, checkpoint.ts e indexCoordinator.ts foram preservados?
+
+Regras
+Sem commit manual.
+
+Não alterar nenhum arquivo de teste.
+
+Se algo divergir, pare e reporte a saída literal em vez de improvisar.
+
+Se o git checkout da Ação 1 conflitar com mudanças inesperadas, pare e mostre git status --short antes de qualquer resolução.
+
+text
+
+---
+
+## O que eu espero da resposta
+
+- **10/10 verde** → C2-diag concluído; partimos para você rodar o cenário no device e colher os `[Perm:diag]`. Aí decidimos a forma final da correção C2.
+- **Ainda 1–2 falhas em 398/412** → é sinal de que a causa raiz é outra (não o mock), e aí eu vou querer o corpo dessas funções de teste para investigar.
+- **Replit mexe além do escopo** → reversão e reaplicação com escopo estrito.
+
+Manda a saída literal quando chegar.

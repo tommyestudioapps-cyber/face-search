@@ -22,18 +22,6 @@ export async function hasFullGalleryPhotoPermission(): Promise<boolean> {
   return permission.granted && permission.accessPrivileges === 'all';
 }
 
-export async function logGalleryPermissionState(context: string): Promise<void> {
-  if (!__DEV__) return;
-  try {
-    const permission = await MediaLibrary.getPermissionsAsync(false, ['photo']);
-    console.log(
-      `[Perm:diag] ctx=${context} granted=${permission.granted} privileges=${permission.accessPrivileges} status=${permission.status} canAskAgain=${permission.canAskAgain}`,
-    );
-  } catch (error) {
-    console.log(`[Perm:diag] ctx=${context} error=${String(error)}`);
-  }
-}
-
 export async function requestGalleryPhotoPermission(): Promise<void> {
   if (Platform.OS === 'web') {
     throw new FaceRecognitionError(
