@@ -54,3 +54,8 @@ Thumbs.db
 
 # Replit attached assets (prompts colados)
 attached_assets/
+
+# Android signing (NUNCA commitar)
+*.keystore
+*.keystore.b64
+*.jks
