@@ -18,6 +18,7 @@ import type {
 const DATABASE_NAME = 'face-search.sqlite';
 const SCHEMA_VERSION = 4;
 const INDEXED_STATUS = 'indexed';
+export const SCAN_LEASE_MS = 300_000;
 
 interface Dimensions {
   width: number;
@@ -593,7 +594,7 @@ export class FaceSearchRepository {
         }
         await transaction.runAsync(
           'UPDATE gallery_scan SET generation = generation + 1, active = 1, lease_owner = ?, lease_until = ? WHERE id = 1',
-          [owner ?? null, owner ? Date.now() + 120_000 : null],
+          [owner ?? null, owner ? Date.now() + SCAN_LEASE_MS : null],
         );
         const row = await transaction.getFirstAsync<{ generation: number }>(
           'SELECT generation FROM gallery_scan WHERE id = 1',
@@ -618,7 +619,7 @@ export class FaceSearchRepository {
         `UPDATE gallery_scan SET lease_owner = ?, lease_until = ?
          WHERE id = 1 AND active = 1 AND generation = ?
            AND (lease_owner IS NULL OR lease_until < ?)`,
-        [owner, Date.now() + 120_000, generation, Date.now()],
+        [owner, Date.now() + SCAN_LEASE_MS, generation, Date.now()],
       );
       claimed = result.changes === 1;
     });
@@ -634,7 +635,7 @@ export class FaceSearchRepository {
         `UPDATE gallery_scan SET lease_until = ?
          WHERE id = 1 AND active = 1 AND generation = ?
            AND lease_owner = ? AND lease_until >= ?`,
-        [now + 120_000, generation, owner, now],
+        [now + SCAN_LEASE_MS, generation, owner, now],
       );
       renewed = result.changes === 1;
     });
@@ -698,7 +699,7 @@ export class FaceSearchRepository {
         [generation, assetId],
       );
       if (owner) {
-        await transaction.runAsync('UPDATE gallery_scan SET lease_until = ? WHERE id = 1', [Date.now() + 120_000]);
+        await transaction.runAsync('UPDATE gallery_scan SET lease_until = ? WHERE id = 1', [Date.now() + SCAN_LEASE_MS]);
       }
     });
   }
@@ -833,7 +834,7 @@ export class FaceSearchRepository {
           );
         }
         if (owner) {
-          await transaction.runAsync('UPDATE gallery_scan SET lease_until = ? WHERE id = 1', [Date.now() + 120_000]);
+          await transaction.runAsync('UPDATE gallery_scan SET lease_until = ? WHERE id = 1', [Date.now() + SCAN_LEASE_MS]);
         }
       });
     } catch (cause) {
