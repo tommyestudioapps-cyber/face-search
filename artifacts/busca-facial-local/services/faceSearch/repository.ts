@@ -87,6 +87,21 @@ function unsupportedOnWeb(): FaceRecognitionError {
 }
 
 function storageError(message: string, cause?: unknown): FaceRecognitionError {
+  if (cause instanceof Error) {
+    const anyCause = cause as Error & { code?: string | number };
+    console.warn(
+      '[Storage:error] message="' + message + '" causeName=' + cause.name + ' causeCode=' + String(anyCause.code) + ' causeMessage=' + cause.message,
+    );
+    const raw = (cause as { cause?: unknown }).cause;
+    if (raw instanceof Error) {
+      const anyRaw = raw as Error & { code?: string | number };
+      console.warn(
+        '[Storage:error] rawName=' + raw.name + ' rawCode=' + String(anyRaw.code) + ' rawMessage=' + raw.message,
+      );
+    }
+  } else {
+    console.warn('[Storage:error] message="' + message + '" nonErrorCause=' + String(cause));
+  }
   return new FaceRecognitionError('storage-failed', message, cause);
 }
 
@@ -841,6 +856,9 @@ export class FaceSearchRepository {
       if (cause instanceof FaceRecognitionError) {
         throw cause;
       }
+      console.warn(
+        '[saveIndexedPhoto] assetId=' + photo.assetId + ' causeName=' + (cause instanceof Error ? cause.name : 'nonError') + ' causeMessage=' + (cause instanceof Error ? cause.message : String(cause)),
+      );
       throw storageError('Não foi possível salvar a foto e seus rostos no índice local.', cause);
     }
   }
