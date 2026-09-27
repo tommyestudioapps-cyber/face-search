@@ -428,15 +428,27 @@ async function runGalleryIndex(
     scanGeneration = generation;
     if (!batch && generation !== null && manualOwner) {
       manualLeaseHeartbeat = setInterval(() => {
-        void faceSearchRepository.renewScan(generation, manualOwner)
-          .then((renewed) => {
-            if (!renewed) cancellation.cancel();
-          })
-          .catch((error) => {
-            cancellation.cancel();
-            console.warn('[Index] Não foi possível renovar a reserva.', error);
-          });
-      }, 15_000);
+        void (async () => {
+          try {
+            const renewed = await faceSearchRepository.renewScan(generation, manualOwner);
+            if (!renewed) {
+              cancellation.cancel();
+            }
+          } catch (firstError) {
+            // Uma falha transitória (SQLITE_BUSY) não deve cancelar a indexação.
+            try {
+              await new Promise((resolve) => setTimeout(resolve, 2_000));
+              const renewed = await faceSearchRepository.renewScan(generation, manualOwner);
+              if (!renewed) {
+                cancellation.cancel();
+              }
+            } catch (secondError) {
+              cancellation.cancel();
+              console.warn('[Index] Não foi possível renovar a reserva após retry.', secondError);
+            }
+          }
+        })();
+      }, 30_000);
     }
     if (batch && (
       generation === null ||
