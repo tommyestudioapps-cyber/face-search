@@ -114,6 +114,17 @@ jobs:
           echo "== signingConfigs =="
           grep -A 20 "signingConfigs" artifacts/busca-facial-local/android/app/build.gradle | head -30
 
+      - name: Increase Gradle JVM heap
+        run: |
+          mkdir -p ~/.gradle
+          cat >> ~/.gradle/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
+          org.gradle.workers.max=2
+          org.gradle.parallel=false
+          org.gradle.caching=true
+          EOF
+          cat ~/.gradle/gradle.properties
+
       - name: Build APK (release, ARM64 only)
         working-directory: artifacts/busca-facial-local/android
         env:
