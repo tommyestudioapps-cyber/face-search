@@ -234,6 +234,9 @@ function mapFace(row: IndexedFaceRow): IndexedFace {
 
 async function migrateSchema(database: SQLiteDatabase): Promise<void> {
   await database.execAsync('PRAGMA foreign_keys = ON;');
+  await database.execAsync('PRAGMA journal_mode = WAL;');
+  await database.execAsync('PRAGMA busy_timeout = 10000;');
+  await database.execAsync('PRAGMA synchronous = NORMAL;');
   const versionRow = await database.getFirstAsync<{ user_version: number }>(
     'PRAGMA user_version;',
   );
