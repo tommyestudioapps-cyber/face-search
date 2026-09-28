@@ -116,12 +116,14 @@ export function groupBestResults(
     thresholds.rejected,
   );
   const bestByPhoto = new Map<string, FaceSearchResult>();
+  const allScores: number[] = [];
 
   for (const candidate of candidates) {
     const similarity = cosineSimilarity(
       queryEmbedding,
       candidate.face.embedding.values,
     );
+    allScores.push(similarity);
     if (similarity < minimumSimilarity) {
       continue;
     }
@@ -133,7 +135,12 @@ export function groupBestResults(
     }
   }
 
-  return [...bestByPhoto.values()]
-    .sort((left, right) => right.similarity - left.similarity)
-    .slice(0, maxResults);
+  const sortedAll = [...allScores].sort((a, b) => b - a);
+  console.warn(`[Search:raw] total_raw=${sortedAll.length} top20_raw=${sortedAll.slice(0, 20).map(s => s.toFixed(3)).join(',')}`);
+
+  const allSorted = [...bestByPhoto.values()].sort((left, right) => right.similarity - left.similarity);
+  console.warn(`[Search:top] total=${allSorted.length} top20=${allSorted.slice(0, 20).map(r => r.similarity.toFixed(3)).join(',')}`);
+  console.warn(`[Search:top] above050=${allSorted.filter(r => r.similarity >= 0.5).length} above040=${allSorted.filter(r => r.similarity >= 0.4).length} above030=${allSorted.filter(r => r.similarity >= 0.3).length}`);
+
+  return allSorted.slice(0, maxResults);
 }

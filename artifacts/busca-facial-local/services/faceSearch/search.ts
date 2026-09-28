@@ -35,31 +35,26 @@ async function runSearchAlignedFace(
 
   try {
     const inputTensor = await preprocessAlignedFace(alignedFace);
-    if (__DEV__) {
-      let sum = 0;
-      let min = Infinity;
-      let max = -Infinity;
-      for (const v of inputTensor.data) {
-        sum += v;
-        if (v < min) min = v;
-        if (v > max) max = v;
-      }
-      console.log(
-        `[Search:diag] tensor len=${inputTensor.data.length} mean=${(sum / inputTensor.data.length).toFixed(3)} min=${min.toFixed(2)} max=${max.toFixed(2)}`,
-      );
+    let sum = 0;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const v of inputTensor.data) {
+      sum += v;
+      if (v < min) min = v;
+      if (v > max) max = v;
     }
+    console.warn(
+      `[Search:diag] tensor len=${inputTensor.data.length} mean=${(sum / inputTensor.data.length).toFixed(3)} min=${min.toFixed(2)} max=${max.toFixed(2)}`,
+    );
     const queryEmbedding = await runFaceEmbedding(inputTensor);
-    if (__DEV__) {
-      let sq = 0;
-      for (const v of queryEmbedding.values) sq += v * v;
-      console.log(
-        `[Search:diag] query norm=${Math.sqrt(sq).toFixed(3)} first=${queryEmbedding.values[0].toFixed(4)}`,
-      );
-    }
+    let sq = 0;
+    for (const v of queryEmbedding.values) sq += v * v;
+    console.warn(
+      `[Search:diag] query norm=${Math.sqrt(sq).toFixed(3)} first=${queryEmbedding.values[0].toFixed(4)}`,
+    );
     await faceSearchRepository.initialize();
-    let storedVersion: string | null = null;
     if (__DEV__) {
-      storedVersion = await faceSearchRepository.getStoredModelVersion();
+      const storedVersion = await faceSearchRepository.getStoredModelVersion();
       console.log(`[Search:diag] storedVersion=${storedVersion}`);
       console.log(
         `[Search:diag] queryVersion=${getModelStorageVersion(queryEmbedding.model)}`,
@@ -71,30 +66,28 @@ async function runSearchAlignedFace(
     const candidates = await faceSearchRepository.getIndexedEmbeddings(
       modelStorageVersion,
     );
-    if (__DEV__) {
-      console.log(`[Search:diag] candidates=${candidates.length}`);
-      if (candidates.length > 0) {
-        let sq = 0;
-        for (const v of candidates[0].face.embedding.values) sq += v * v;
-        console.log(
-          `[Search:diag] candidate[0] norm=${Math.sqrt(sq).toFixed(3)} first=${candidates[0].face.embedding.values[0].toFixed(4)}`,
-        );
-        const sims = candidates
-          .map((c) =>
-            cosineSimilarity(queryEmbedding.values, c.face.embedding.values),
-          )
-          .sort((a, b) => b - a);
-        console.log(
-          `[Search:diag] top5 sims=${sims
-            .slice(0, 5)
-            .map((s) => s.toFixed(4))
-            .join(',')}`,
-        );
-        console.log(
-          `[Search:diag] thresholds review=${faceSearch.similarityThresholds.review} approved=${faceSearch.similarityThresholds.approved}`,
-        );
-      }
+    console.warn(`[Search:diag] candidates=${candidates.length}`);
+    if (__DEV__ && candidates.length > 0) {
+      let candidateSq = 0;
+      for (const v of candidates[0].face.embedding.values) candidateSq += v * v;
+      console.log(
+        `[Search:diag] candidate[0] norm=${Math.sqrt(candidateSq).toFixed(3)} first=${candidates[0].face.embedding.values[0].toFixed(4)}`,
+      );
     }
+    const sims = candidates
+      .map((c) =>
+        cosineSimilarity(queryEmbedding.values, c.face.embedding.values),
+      )
+      .sort((a, b) => b - a);
+    console.warn(
+      `[Search:diag] top5 sims=${sims
+        .slice(0, 5)
+        .map((s) => s.toFixed(4))
+        .join(',')}`,
+    );
+    console.warn(
+      `[Search:diag] thresholds review=${faceSearch.similarityThresholds.review} approved=${faceSearch.similarityThresholds.approved}`,
+    );
     const results = groupBestResults(
       candidates,
       queryEmbedding.values,
