@@ -1,0 +1,28 @@
+diff --git a/android/src/main/java/com/reactnativemediapipe/facelandmarkdetection/FaceLandmarkDetectionModule.kt b/android/src/main/java/com/reactnativemediapipe/facelandmarkdetection/FaceLandmarkDetectionModule.kt
+index 62155186e4a606f3f27f5ccad594d086a48704e3..a16e998a4e93a0100a0bd48ce25e486f0f88be70 100644
+--- a/android/src/main/java/com/reactnativemediapipe/facelandmarkdetection/FaceLandmarkDetectionModule.kt
++++ b/android/src/main/java/com/reactnativemediapipe/facelandmarkdetection/FaceLandmarkDetectionModule.kt
+@@ -132,8 +132,9 @@ class FaceLandmarkDetectionModule(reactContext: ReactApplicationContext) :
+       delegate: Int,
+       promise: Promise
+   ) {
++    var helper: FaceLandmarkDetectorHelper? = null
+     try {
+-      val helper =
++      helper =
+           FaceLandmarkDetectorHelper(
+               maxNumFaces = numFaces,
+               minFaceDetectionConfidence = minFaceDetectionConfidence,
+@@ -147,10 +148,11 @@ class FaceLandmarkDetectionModule(reactContext: ReactApplicationContext) :
+           )
+       val bundle = helper.detectImage(loadBitmapFromPath(imagePath))
+       val resultArgs = convertResultBundleToWritableMap(bundle)
+-
+       promise.resolve(resultArgs)
+     } catch (e: Exception) {
+       promise.reject(e)
++    } finally {
++      helper?.clearFaceLandmarker()
+     }
+   }
+ 

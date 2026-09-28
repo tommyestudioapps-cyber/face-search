@@ -68,34 +68,6 @@ catalogs:
       version: 3.25.76
 
 overrides:
-  '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
-  '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
-  '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'
-  '@expo/ngrok-bin>@expo/ngrok-bin-freebsd-ia32': '-'
-  '@expo/ngrok-bin>@expo/ngrok-bin-freebsd-x64': '-'
-  '@expo/ngrok-bin>@expo/ngrok-bin-linux-arm': '-'
-  '@expo/ngrok-bin>@expo/ngrok-bin-linux-arm64': '-'
-  '@expo/ngrok-bin>@expo/ngrok-bin-linux-ia32': '-'
-  '@expo/ngrok-bin>@expo/ngrok-bin-sunos-x64': '-'
-  '@expo/ngrok-bin>@expo/ngrok-bin-win32-ia32': '-'
-  '@expo/ngrok-bin>@expo/ngrok-bin-win32-x64': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-android-arm64': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-darwin-arm64': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-darwin-x64': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-freebsd-x64': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-linux-arm-gnueabihf': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-linux-arm64-gnu': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-linux-arm64-musl': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-linux-x64-musl': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-win32-arm64-msvc': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc': '-'
-  brace-expansion@>=4.0.0 <5.0.9: '>=5.0.9'
-  decode-uri-component@<=0.4.2: '>=0.5.0'
-  esbuild: 0.27.3
-  esbuild>@esbuild/aix-ppc64: '-'
-  esbuild>@esbuild/android-arm: '-'
-  esbuild>@esbuild/android-arm64: '-'
-  esbuild>@esbuild/android-x64: '-'
   esbuild>@esbuild/darwin-arm64: '-'
   esbuild>@esbuild/darwin-x64: '-'
   esbuild>@esbuild/freebsd-arm64: '-'
@@ -112,16 +84,15 @@ overrides:
   esbuild>@esbuild/netbsd-x64: '-'
   esbuild>@esbuild/openbsd-arm64: '-'
   esbuild>@esbuild/openbsd-x64: '-'
-  esbuild>@esbuild/openharmony-arm64: '-'
   esbuild>@esbuild/sunos-x64: '-'
   esbuild>@esbuild/win32-arm64: '-'
   esbuild>@esbuild/win32-ia32: '-'
   esbuild>@esbuild/win32-x64: '-'
-  fast-uri@>=3.0.0 <3.1.5: '>=3.1.5'
-  fast-uri@>=3.0.0 <3.1.6: '>=3.1.6'
-  fast-uri@>=3.1.2 <3.1.6: '>=3.1.6'
-  fast-uri@>=3.1.3 <3.1.6: '>=3.1.6'
-  js-yaml@>=4.0.0 <4.3.1: '>=4.3.1'
+  esbuild>@esbuild/aix-ppc64: '-'
+  esbuild>@esbuild/android-arm: '-'
+  esbuild>@esbuild/android-arm64: '-'
+  esbuild>@esbuild/android-x64: '-'
+  esbuild>@esbuild/openharmony-arm64: '-'
   lightningcss>lightningcss-android-arm64: '-'
   lightningcss>lightningcss-darwin-arm64: '-'
   lightningcss>lightningcss-darwin-x64: '-'
@@ -132,13 +103,16 @@ overrides:
   lightningcss>lightningcss-linux-x64-musl: '-'
   lightningcss>lightningcss-win32-arm64-msvc: '-'
   lightningcss>lightningcss-win32-x64-msvc: '-'
-  nanoid@<3.3.18: '>=3.3.18'
-  postcss@<8.5.10: '>=8.5.10'
-  postcss@<=8.5.11: '>=8.5.12'
-  postcss@<=8.5.17: '>=8.5.18'
-  postcss@<=8.5.22: '>=8.5.23'
-  qs@>=2.2.5 <6.16.0: '>=6.16.0'
-  qs@>=6.14.2 <=6.15.3: '>=6.16.0'
+  '@tailwindcss/oxide>@tailwindcss/oxide-android-arm64': '-'
+  '@tailwindcss/oxide>@tailwindcss/oxide-darwin-arm64': '-'
+  '@tailwindcss/oxide>@tailwindcss/oxide-darwin-x64': '-'
+  '@tailwindcss/oxide>@tailwindcss/oxide-freebsd-x64': '-'
+  '@tailwindcss/oxide>@tailwindcss/oxide-linux-arm-gnueabihf': '-'
+  '@tailwindcss/oxide>@tailwindcss/oxide-linux-arm64-gnu': '-'
+  '@tailwindcss/oxide>@tailwindcss/oxide-linux-arm64-musl': '-'
+  '@tailwindcss/oxide>@tailwindcss/oxide-win32-arm64-msvc': '-'
+  '@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc': '-'
+  '@tailwindcss/oxide>@tailwindcss/oxide-linux-x64-musl': '-'
   rollup>@rollup/rollup-android-arm-eabi: '-'
   rollup>@rollup/rollup-android-arm64: '-'
   rollup>@rollup/rollup-darwin-arm64: '-'
@@ -163,7 +137,38 @@ overrides:
   rollup>@rollup/rollup-win32-ia32-msvc: '-'
   rollup>@rollup/rollup-win32-x64-gnu: '-'
   rollup>@rollup/rollup-win32-x64-msvc: '-'
+  '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
+  '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'
+  '@expo/ngrok-bin>@expo/ngrok-bin-freebsd-ia32': '-'
+  '@expo/ngrok-bin>@expo/ngrok-bin-freebsd-x64': '-'
+  '@expo/ngrok-bin>@expo/ngrok-bin-linux-arm64': '-'
+  '@expo/ngrok-bin>@expo/ngrok-bin-linux-arm': '-'
+  '@expo/ngrok-bin>@expo/ngrok-bin-linux-ia32': '-'
+  '@expo/ngrok-bin>@expo/ngrok-bin-sunos-x64': '-'
+  '@expo/ngrok-bin>@expo/ngrok-bin-win32-ia32': '-'
+  '@expo/ngrok-bin>@expo/ngrok-bin-win32-x64': '-'
+  '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
+  esbuild: 0.27.3
+  brace-expansion@>=4.0.0 <5.0.9: '>=5.0.9'
+  decode-uri-component@<=0.4.2: '>=0.5.0'
+  fast-uri@>=3.0.0 <3.1.5: '>=3.1.5'
+  fast-uri@>=3.0.0 <3.1.6: '>=3.1.6'
+  fast-uri@>=3.1.2 <3.1.6: '>=3.1.6'
+  fast-uri@>=3.1.3 <3.1.6: '>=3.1.6'
+  js-yaml@>=4.0.0 <4.3.1: '>=4.3.1'
+  nanoid@<3.3.18: '>=3.3.18'
+  postcss@<8.5.10: '>=8.5.10'
+  postcss@<=8.5.11: '>=8.5.12'
+  postcss@<=8.5.17: '>=8.5.18'
+  postcss@<=8.5.22: '>=8.5.23'
+  qs@>=2.2.5 <6.16.0: '>=6.16.0'
+  qs@>=6.14.2 <=6.15.3: '>=6.16.0'
   uuid@<11.1.1: '>=11.1.1'
+
+patchedDependencies:
+  react-native-mediapipe@0.6.0:
+    hash: 247e36f91c23f60beb04bf6c68a0e0bede56a899ae8f1b4841e6134acf75a069
+    path: patches/react-native-mediapipe@0.6.0.patch
 
 importers:
 
@@ -278,7 +283,7 @@ importers:
         version: 3.0.1(react-native-nitro-modules@0.37.1(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       react-native-mediapipe:
         specifier: 0.6.0
-        version: 0.6.0(react-native-vision-camera@4.7.3(react-native-reanimated@4.1.7(react-native-worklets@0.5.1(@babel/core@7.29.7)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-worklets-core@1.6.3(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-worklets-core@1.6.3(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+        version: 0.6.0(patch_hash=247e36f91c23f60beb04bf6c68a0e0bede56a899ae8f1b4841e6134acf75a069)(react-native-vision-camera@4.7.3(react-native-reanimated@4.1.7(react-native-worklets@0.5.1(@babel/core@7.29.7)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-worklets-core@1.6.3(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-worklets-core@1.6.3(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       react-native-nitro-modules:
         specifier: 0.37.1
         version: 0.37.1(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -6731,6 +6736,7 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
+    optional: true
 
   '@expo/code-signing-certificates@0.0.6':
     dependencies:
@@ -6795,6 +6801,7 @@ snapshots:
     optionalDependencies:
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0)
+    optional: true
 
   '@expo/env@2.0.12':
     dependencies:
@@ -6874,7 +6881,7 @@ snapshots:
       postcss: 8.5.23
       resolve-from: 5.0.0
     optionalDependencies:
-      expo: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+      expo: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -6968,7 +6975,7 @@ snapshots:
       '@expo/json-file': 10.2.0
       '@react-native/normalize-colors': 0.81.5
       debug: 4.4.3
-      expo: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+      expo: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
       resolve-from: 5.0.0
       semver: 7.8.5
       xml2js: 0.6.0
@@ -7007,6 +7014,7 @@ snapshots:
       expo-font: 14.0.12(expo@54.0.37)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0))(react@19.1.0)
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0)
+    optional: true
 
   '@expo/ws-tunnel@1.0.6': {}
 
@@ -8364,6 +8372,7 @@ snapshots:
       react-native: 0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0)
     optionalDependencies:
       '@types/react': 19.2.17
+    optional: true
 
   '@react-navigation/bottom-tabs@7.18.18(@react-navigation/native@7.3.18(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-screens@4.16.0(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)':
     dependencies:
@@ -9053,7 +9062,7 @@ snapshots:
       resolve-from: 5.0.0
     optionalDependencies:
       '@babel/runtime': 7.29.7
-      expo: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+      expo: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -9639,6 +9648,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - typescript
+    optional: true
 
   expo-background-task@1.0.10(expo@54.0.37)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0)):
     dependencies:
@@ -9670,6 +9680,7 @@ snapshots:
       react-native: 0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0)
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   expo-dev-client@6.0.21(expo@54.0.37):
     dependencies:
@@ -9709,6 +9720,7 @@ snapshots:
     dependencies:
       expo: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
       react-native: 0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0)
+    optional: true
 
   expo-font@14.0.12(expo@54.0.37)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:
@@ -9723,6 +9735,7 @@ snapshots:
       fontfaceobserver: 2.3.0
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0)
+    optional: true
 
   expo-glass-effect@0.1.10(expo@54.0.37)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:
@@ -9760,7 +9773,7 @@ snapshots:
 
   expo-keep-awake@15.0.8(expo@54.0.37)(react@19.1.0):
     dependencies:
-      expo: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+      expo: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
       react: 19.1.0
 
   expo-linear-gradient@15.0.8(expo@54.0.37)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
@@ -9826,6 +9839,7 @@ snapshots:
       invariant: 2.2.4
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.0)
+    optional: true
 
   expo-router@6.0.24(@types/react-dom@19.1.11(@types/react@19.1.17))(@types/react@19.1.17)(expo-constants@18.0.14)(expo-linking@8.0.12)(expo@54.0.37)(react-dom@19.1.0(react@19.1.0))(react-native-gesture-handler@2.28.0(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-reanimated@4.1.7(react-native-worklets@0.5.1(@babel/core@7.29.7)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-screens@4.16.0(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:
@@ -10048,6 +10062,7 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
+    optional: true
 
   exponential-backoff@3.1.3: {}
 
@@ -11557,7 +11572,7 @@ snapshots:
       react-native-is-edge-to-edge: 1.3.1(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       react-native-reanimated: 4.1.7(react-native-worklets@0.5.1(@babel/core@7.29.7)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
 
-  react-native-mediapipe@0.6.0(react-native-vision-camera@4.7.3(react-native-reanimated@4.1.7(react-native-worklets@0.5.1(@babel/core@7.29.7)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-worklets-core@1.6.3(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-worklets-core@1.6.3(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
+  react-native-mediapipe@0.6.0(patch_hash=247e36f91c23f60beb04bf6c68a0e0bede56a899ae8f1b4841e6134acf75a069)(react-native-vision-camera@4.7.3(react-native-reanimated@4.1.7(react-native-worklets@0.5.1(@babel/core@7.29.7)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-worklets-core@1.6.3(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-worklets-core@1.6.3(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0)
@@ -11789,6 +11804,7 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+    optional: true
 
   react-refresh@0.14.2: {}
 
