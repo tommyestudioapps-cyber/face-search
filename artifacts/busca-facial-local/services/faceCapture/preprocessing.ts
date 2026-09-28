@@ -1,5 +1,4 @@
 import {
-  FlipType,
   manipulateAsync,
   SaveFormat,
 } from 'expo-image-manipulator';
@@ -9,7 +8,6 @@ import type { FaceCaptureError, NormalizedImage } from './types';
 import { FaceCaptureError as FaceCaptureFailure } from './types';
 import { faceCapture } from '@/constants/faceCapture';
 import {
-  getExifTransform,
   getNormalizedImageDimensions,
   getPhysicalOrientation,
   readJpegMetadata,
@@ -39,23 +37,13 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
     const sourceMetadata = await readSourceJpegMetadata(sourceUri);
     const exifOrientation = sourceMetadata?.orientation ?? 1;
     console.warn('[EXIF:Read] status=' + (sourceMetadata ? 'ok' : 'fail') + ' orientation=' + exifOrientation + ' uri=' + sourceUri.slice(0, 100));
-    const exifTransform = getExifTransform(exifOrientation);
-    const transformActions = [
-      ...exifTransform.flips.map((flip) => ({
-        flip:
-          flip === 'horizontal' ? FlipType.Horizontal : FlipType.Vertical,
-      })),
-      ...(exifTransform.rotationDegrees
-        ? [{ rotate: exifTransform.rotationDegrees }]
-        : []),
-    ];
 
     // Always render a new bitmap. This bakes EXIF rotation and mirroring into
     // pixels before MediaPipe sees them, including Android camera/gallery
     // providers that expose content:// URIs with inconsistent EXIF handling.
     const oriented = await manipulateAsync(
       sourceUri,
-      transformActions.length > 0 ? transformActions : [{ rotate: 0 }],
+      [{ rotate: 0 }],
       {
       compress: 0.92,
       format: SaveFormat.JPEG,
@@ -65,8 +53,6 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
       console.log('[FaceCapture] EXIF orientation applied', {
         platform: Platform.OS,
         exifOrientation,
-        rotationDegrees: exifTransform.rotationDegrees,
-        flips: exifTransform.flips,
       });
     }
     if (oriented.width <= 0 || oriented.height <= 0) {
