@@ -38,6 +38,7 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
   try {
     const sourceMetadata = await readSourceJpegMetadata(sourceUri);
     const exifOrientation = sourceMetadata?.orientation ?? 1;
+    console.warn('[EXIF:Read] status=' + (sourceMetadata ? 'ok' : 'fail') + ' orientation=' + exifOrientation + ' uri=' + sourceUri.slice(0, 100));
     const exifTransform = getExifTransform(exifOrientation);
     const transformActions = [
       ...exifTransform.flips.map((flip) => ({
@@ -60,9 +61,6 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
       format: SaveFormat.JPEG,
       },
     );
-    console.log(
-      `[Prep:Output] Asset: ${sourceUri} | Dimensões pós-manipulação: ${oriented.width}x${oriented.height}`,
-    );
     if (__DEV__) {
       console.log('[FaceCapture] EXIF orientation applied', {
         platform: Platform.OS,
@@ -74,6 +72,7 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
     if (oriented.width <= 0 || oriented.height <= 0) {
       throw new FaceCaptureFailure('invalid-image', 'A imagem normalizada não possui dimensões válidas.');
     }
+    console.warn('[Prep:Exif] uri=' + sourceUri.slice(0, 100) + ' dims=' + oriented.width + 'x' + oriented.height);
     if (sourceMetadata) {
       const expectedDimensions = getNormalizedImageDimensions(
         sourceMetadata.width,
@@ -99,6 +98,7 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
           `[Normalize] ${oriented.width}x${oriented.height} mantida (abaixo do limite)`,
         );
       }
+      console.warn('[Prep:Output] uri=' + sourceUri.slice(0, 100) + ' final=' + oriented.width + 'x' + oriented.height);
       return {
         uri: oriented.uri,
         width: oriented.width,
@@ -131,6 +131,7 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
     }
 
     temporaryUris.push(resized.uri);
+    console.warn('[Prep:Output] uri=' + sourceUri.slice(0, 100) + ' final=' + resized.width + 'x' + resized.height);
     return {
       uri: resized.uri,
       width: resized.width,

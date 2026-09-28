@@ -140,7 +140,7 @@ export function groupBestResults(
 
   const allSorted = [...bestByPhoto.values()].sort((left, right) => right.similarity - left.similarity);
   console.warn(`[Search:top] total=${allSorted.length} top20=${allSorted.slice(0, 20).map(r => r.similarity.toFixed(3)).join(',')}`);
-  console.warn(`[Search:top] above050=${allSorted.filter(r => r.similarity >= 0.5).length} above040=${allSorted.filter(r => r.similarity >= 0.4).length} above030=${allSorted.filter(r => r.similarity >= 0.3).length}`);
+  console.warn(`[Search:top] above070=${allSorted.filter(r => r.similarity >= 0.7).length} above060=${allSorted.filter(r => r.similarity >= 0.6).length} above050=${allSorted.filter(r => r.similarity >= 0.5).length} above040=${allSorted.filter(r => r.similarity >= 0.4).length} above030=${allSorted.filter(r => r.similarity >= 0.3).length}`);
 
   return allSorted.slice(0, maxResults);
 }
