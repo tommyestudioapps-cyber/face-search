@@ -19,9 +19,13 @@ async function readSourceJpegMetadata(sourceUri: string) {
   try {
     const bytes = await new File(sourceUri).bytes();
     return readJpegMetadata(bytes);
-  } catch {
+  } catch (error) {
     // Android content:// providers may not expose bytes to JavaScript. The
     // image manipulator still performs the native EXIF normalization.
+    const detail = error instanceof Error ? ` Detalhe: ${error.message}` : '';
+    console.warn(
+      `[EXIF:Error] Falha ao ler bytes do URI: ${sourceUri}.${detail} Forçando orientação padrão 1.`,
+    );
     return null;
   }
 }
@@ -55,6 +59,9 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
       compress: 0.92,
       format: SaveFormat.JPEG,
       },
+    );
+    console.log(
+      `[Prep:Output] Asset: ${sourceUri} | Dimensões pós-manipulação: ${oriented.width}x${oriented.height}`,
     );
     if (__DEV__) {
       console.log('[FaceCapture] EXIF orientation applied', {
