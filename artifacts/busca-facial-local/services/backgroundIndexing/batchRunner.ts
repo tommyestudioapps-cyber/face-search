@@ -144,6 +144,7 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
         lastError: null,
       });
     } else if (result.status === 'paused') {
+      await faceSearchRepository.abortScan(generation, leaseOwner);
       await persistBackgroundState({
         status: 'paused',
         scope: 'gallery',
@@ -171,6 +172,11 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
     if (error instanceof FaceRecognitionError && error.code === 'invalid-cursor') {
       await clearBackgroundIndexCursor();
       await faceSearchRepository.abortScan(generation, leaseOwner);
+    }
+    try {
+      await faceSearchRepository.abortScan(generation, leaseOwner);
+    } catch (abortError) {
+      console.warn('[BackgroundIndex] Não foi possível abortar a geração após falha.', abortError);
     }
     try {
       await persistBackgroundState({

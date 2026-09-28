@@ -18,7 +18,7 @@ import type {
 const DATABASE_NAME = 'face-search.sqlite';
 const SCHEMA_VERSION = 4;
 const INDEXED_STATUS = 'indexed';
-export const SCAN_LEASE_MS = 300_000;
+export const SCAN_LEASE_MS = 60_000;
 
 interface Dimensions {
   width: number;
@@ -608,6 +608,7 @@ export class FaceSearchRepository {
           const hasExpiredLease =
             active.lease_until !== null && active.lease_until < Date.now();
           if (!hasExpiredLease) {
+            console.warn('[beginScan] bloqueado: geração ativa encontrada', { generation: active.generation, lease_owner: active.lease_owner, lease_until: active.lease_until, now: Date.now(), leaseValid: active.lease_until !== null && active.lease_until >= Date.now() });
             throw new FaceRecognitionError(
               'indexing-failed',
               'Já existe uma varredura da galeria em andamento.',
