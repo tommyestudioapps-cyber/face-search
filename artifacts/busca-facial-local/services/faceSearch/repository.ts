@@ -414,6 +414,16 @@ export interface FaceSearchRepositoryOptions {
 
 export class FaceSearchRepository {
   private databasePromise: Promise<SQLiteDatabase> | null = null;
+  private writeChain: Promise<void> = Promise.resolve();
+
+  private enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.writeChain.then(operation, operation);
+    this.writeChain = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
 
   constructor(
     private readonly options: FaceSearchRepositoryOptions = {},
@@ -582,6 +592,7 @@ export class FaceSearchRepository {
   }
 
   async beginScan(owner?: string): Promise<number> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     try {
       let generation = 0;
@@ -624,9 +635,11 @@ export class FaceSearchRepository {
       }
       throw storageError('Não foi possível iniciar a varredura da galeria.', cause);
     }
+    });
   }
 
   async claimScan(generation: number, owner: string): Promise<boolean> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     let claimed = false;
     await database.withExclusiveTransactionAsync(async (transaction) => {
@@ -639,9 +652,11 @@ export class FaceSearchRepository {
       claimed = result.changes === 1;
     });
     return claimed;
+    });
   }
 
   async renewScan(generation: number, owner: string): Promise<boolean> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     let renewed = false;
     await database.withExclusiveTransactionAsync(async (transaction) => {
@@ -655,9 +670,11 @@ export class FaceSearchRepository {
       renewed = result.changes === 1;
     });
     return renewed;
+    });
   }
 
   async releaseScan(generation: number, owner: string): Promise<void> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     await database.withExclusiveTransactionAsync(async (transaction) => {
       await transaction.runAsync(
@@ -665,9 +682,11 @@ export class FaceSearchRepository {
         [generation, owner],
       );
     });
+    });
   }
 
   async abortScanIfUnleased(generation: number): Promise<boolean> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     let aborted = false;
     await database.withExclusiveTransactionAsync(async (transaction) => {
@@ -680,9 +699,11 @@ export class FaceSearchRepository {
       aborted = result.changes === 1;
     });
     return aborted;
+    });
   }
 
   async abortScan(generation: number, owner?: string): Promise<void> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     try {
       await database.withExclusiveTransactionAsync(async (transaction) => {
@@ -696,9 +717,11 @@ export class FaceSearchRepository {
     } catch (cause) {
       throw storageError('Não foi possível interromper a varredura da galeria.', cause);
     }
+    });
   }
 
   async markAssetSeen(assetId: string, generation: number, owner?: string): Promise<void> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     await database.withExclusiveTransactionAsync(async (transaction) => {
       const active = await transaction.getFirstAsync<{ generation: number; lease_owner: string | null; lease_until: number | null }>(
@@ -717,9 +740,11 @@ export class FaceSearchRepository {
         await transaction.runAsync('UPDATE gallery_scan SET lease_until = ? WHERE id = 1', [Date.now() + SCAN_LEASE_MS]);
       }
     });
+    });
   }
 
   async completeScan(generation: number, owner?: string): Promise<number> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     try {
       let deletedRows = 0;
@@ -744,6 +769,7 @@ export class FaceSearchRepository {
       if (cause instanceof FaceRecognitionError) throw cause;
       throw storageError('Não foi possível concluir a limpeza do índice local.', cause);
     }
+    });
   }
 
   async saveIndexedPhoto(
@@ -752,6 +778,7 @@ export class FaceSearchRepository {
     generation?: number,
     owner?: string,
   ): Promise<void> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     const dimensions = serializeDimensions(photo.width, photo.height);
 
@@ -861,6 +888,7 @@ export class FaceSearchRepository {
       );
       throw storageError('Não foi possível salvar a foto e seus rostos no índice local.', cause);
     }
+    });
   }
 
   async getIndexedEmbeddings(
@@ -1043,6 +1071,7 @@ export class FaceSearchRepository {
   }
 
   async clearIndex(): Promise<void> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     try {
       await database.withExclusiveTransactionAsync(async (transaction) => {
@@ -1053,6 +1082,7 @@ export class FaceSearchRepository {
     } catch (cause) {
       throw storageError('Não foi possível invalidar o índice facial local.', cause);
     }
+    });
   }
 
   async close(): Promise<void> {
