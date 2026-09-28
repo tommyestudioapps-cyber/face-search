@@ -82,7 +82,7 @@ test('mantém os PRAGMAs do banco e a duração da lease configurados', async ()
     );
     assert.equal(journalMode.journal_mode, 'wal');
 
-    assert.equal(SCAN_LEASE_MS, 300_000);
+    assert.equal(SCAN_LEASE_MS, 60_000);
   } finally {
     await repository.close();
     await rm(directory, { recursive: true, force: true });
