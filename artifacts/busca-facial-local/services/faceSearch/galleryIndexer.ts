@@ -250,6 +250,7 @@ async function indexAsset(
 
   try {
     try {
+      console.warn(`[Index:agg] asset=${asset.id} start`);
       const t0 = Date.now();
       session = await detectFaces(asset.uri);
       detectMs += Date.now() - t0;
@@ -295,6 +296,8 @@ async function indexAsset(
         }
       }
     }
+
+    console.warn(`[Index:agg] asset=${asset.id} indexed_faces=${indexedFaces.length}`);
 
     throwIfCancelled(cancellation);
     if (shouldContinue && !(await shouldContinue())) {

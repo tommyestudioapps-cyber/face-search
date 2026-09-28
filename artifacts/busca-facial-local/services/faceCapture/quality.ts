@@ -162,6 +162,10 @@ export async function evaluateFaceQuality(
   if (!sharpnessAccepted) issues.push('blur-detected');
   const reason: FaceQuality['reason'] = issues[0] ?? 'accepted';
 
+  if (issues.length > 0) {
+    console.warn(`[Quality:agg] reason=${reason} issues=${issues.join(',')}`);
+  }
+
   return {
     bounds,
     yawDegrees: pose.yawDegrees,

@@ -46,6 +46,7 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
     const nativeFaces = result.faces;
 
     if (nativeFaces.length === 0) {
+      console.warn('[Detect:agg] native=0');
       throw new FaceCaptureError(
         'no-face',
         'Nenhum rosto foi encontrado na imagem selecionada.',
@@ -78,6 +79,8 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
         ),
       );
     }
+
+    console.warn(`[Detect:agg] native=${nativeFaces.length} accepted=${faces.filter(f => f.quality.accepted).length} rejected=${rejectedCount}`);
 
     if (__DEV__ && nativeFaces.length > 0) {
       console.log(
