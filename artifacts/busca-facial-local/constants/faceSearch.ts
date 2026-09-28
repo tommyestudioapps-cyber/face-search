@@ -15,9 +15,9 @@ export const faceSearch = {
     batchSize: 12,
   },
   similarityThresholds: {
-    approved: 0.82,
-    review: 0.7,
-    rejected: 0.7,
+    approved: 0.65,
+    review: 0.50,
+    rejected: 0.50,
   },
   maxResults: 50,
 } as const;
