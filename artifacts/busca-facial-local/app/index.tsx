@@ -1406,35 +1406,6 @@ export default function HomeScreen() {
 
   const pickFromLibrary = async () => {
     try {
-      const existingPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
-      const permission = existingPermission.granted
-        ? existingPermission
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        if (!permission.canAskAgain) {
-          Alert.alert(
-            'Permissão para fotos necessária',
-            'Permita o acesso à galeria nas configurações do aplicativo para escolher uma foto.',
-            [
-              { text: 'Agora não', style: 'cancel' },
-              {
-                text: 'Configurações',
-                onPress: () => {
-                  void Linking.openSettings().catch((error) => {
-                    console.error('[Gallery] não foi possível abrir configurações', error);
-                  });
-                },
-              },
-            ],
-          );
-        } else {
-          Alert.alert(
-            'Permissão para fotos necessária',
-            'Permita o acesso às fotos para escolher uma imagem da galeria.',
-          );
-        }
-        return;
-      }
       const selection = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
