@@ -41,12 +41,12 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
     // Always render a new bitmap. This bakes EXIF rotation and mirroring into
     // pixels before MediaPipe sees them, including Android camera/gallery
     // providers that expose content:// URIs with inconsistent EXIF handling.
-    const oriented = await manipulateAsync(
+    const orientedInitial = await manipulateAsync(
       sourceUri,
       [{ rotate: 0 }],
       {
-      compress: 0.92,
-      format: SaveFormat.JPEG,
+        compress: 0.92,
+        format: SaveFormat.JPEG,
       },
     );
     if (__DEV__) {
@@ -55,10 +55,9 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
         exifOrientation,
       });
     }
-    if (oriented.width <= 0 || oriented.height <= 0) {
+    if (orientedInitial.width <= 0 || orientedInitial.height <= 0) {
       throw new FaceCaptureFailure('invalid-image', 'A imagem normalizada não possui dimensões válidas.');
     }
-    console.warn('[Prep:Exif] uri=' + sourceUri.slice(0, 100) + ' dims=' + oriented.width + 'x' + oriented.height);
     if (sourceMetadata) {
       const expectedDimensions = getNormalizedImageDimensions(
         sourceMetadata.width,
@@ -66,8 +65,8 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
         sourceMetadata.orientation,
       );
       if (
-        oriented.width !== expectedDimensions.width ||
-        oriented.height !== expectedDimensions.height
+        orientedInitial.width !== expectedDimensions.width ||
+        orientedInitial.height !== expectedDimensions.height
       ) {
         throw new FaceCaptureFailure(
           'invalid-image',
@@ -75,7 +74,51 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
         );
       }
     }
-    const temporaryUris = [oriented.uri];
+
+    const aspectRatio = orientedInitial.width / orientedInitial.height;
+    const needsSquareCrop = aspectRatio > 1.4 || aspectRatio < (1 / 1.4);
+    let oriented = orientedInitial;
+    let squareCropTempUri: string | null = null;
+
+    if (needsSquareCrop) {
+      const cropSize = Math.min(orientedInitial.width, orientedInitial.height);
+      let cropOriginX = 0;
+      let cropOriginY = 0;
+      if (orientedInitial.height > orientedInitial.width) {
+        // Retrato alongado: recorta quadrado viés topo (rostos geralmente no terço superior)
+        cropOriginX = Math.floor((orientedInitial.width - cropSize) / 2);
+        cropOriginY = Math.floor((orientedInitial.height - cropSize) * 0.2);
+      } else {
+        // Paisagem alongada: recorta quadrado centralizado
+        cropOriginX = Math.floor((orientedInitial.width - cropSize) / 2);
+        cropOriginY = Math.floor((orientedInitial.height - cropSize) / 2);
+      }
+      const cropped = await manipulateAsync(
+        orientedInitial.uri,
+        [
+          {
+            crop: {
+              originX: cropOriginX,
+              originY: cropOriginY,
+              width: cropSize,
+              height: cropSize,
+            },
+          },
+        ],
+        {
+          compress: 0.92,
+          format: SaveFormat.JPEG,
+        },
+      );
+      squareCropTempUri = cropped.uri;
+      oriented = cropped;
+      console.warn('[Prep:SquareCrop] from=' + orientedInitial.width + 'x' + orientedInitial.height + ' to=' + cropSize + 'x' + cropSize + ' origin=' + cropOriginX + ',' + cropOriginY);
+    }
+
+    console.warn('[Prep:Exif] uri=' + sourceUri.slice(0, 100) + ' dims=' + oriented.width + 'x' + oriented.height);
+    const temporaryUris = squareCropTempUri
+      ? [orientedInitial.uri, squareCropTempUri]
+      : [oriented.uri];
 
     const largestDimension = Math.max(oriented.width, oriented.height);
     if (largestDimension <= faceCapture.maxInputDimension) {
