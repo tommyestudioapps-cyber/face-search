@@ -16,6 +16,7 @@ import {
 } from './types';
 import { cosineSimilarity, groupBestResults } from './searchMath';
 import { indexCoordinator } from '../backgroundIndexing/indexCoordinator';
+import { getRecognitionModelIdentity } from './modelIdentity';
 
 export async function searchAlignedFace(
   alignedFace: AlignedFace,
@@ -34,6 +35,14 @@ async function runSearchAlignedFace(
   }
 
   try {
+    const modelIdentity = await getRecognitionModelIdentity();
+    console.warn(
+      `[Search:agg] modelSha256=${modelIdentity.sha256} modelVersion=${modelIdentity.modelVersion} pipelineVersion=${modelIdentity.pipelineVersion}`,
+    );
+    const referenceQuality = alignedFace.referenceQuality;
+    console.warn(
+      `[Search:agg] reference face=${alignedFace.faceId} bbox=${JSON.stringify(alignedFace.referenceBounds ?? null)} accepted=${referenceQuality?.accepted ?? 'na'} brightness=${referenceQuality?.brightness ?? 'na'} sharpness=${referenceQuality?.sharpness ?? 'na'} yaw=${referenceQuality?.yawDegrees ?? 'na'} pitch=${referenceQuality?.pitchDegrees ?? 'na'} roll=${referenceQuality?.rollDegrees ?? 'na'} issues=${referenceQuality?.issues.join(',') || 'na'}`,
+    );
     const inputTensor = await preprocessAlignedFace(alignedFace);
     console.warn('[Search:diag] tensor len=' + inputTensor.data.length);
     const queryEmbedding = await runFaceEmbedding(inputTensor);
@@ -50,6 +59,7 @@ async function runSearchAlignedFace(
     const candidates = await faceSearchRepository.getIndexedEmbeddings(
       modelStorageVersion,
     );
+    const indexedPhotos = await faceSearchRepository.getIndexedPhotos();
     console.warn(`[Search:diag] candidates=${candidates.length}`);
     if (candidates.length > 0) {
       let candidateSq = 0;
@@ -72,6 +82,21 @@ async function runSearchAlignedFace(
       queryEmbedding.values,
       faceSearch.similarityThresholds,
       faceSearch.maxResults,
+      (scores) => {
+        const rankedAssetIds = new Set(scores.map((score) => score.assetId));
+        for (const score of scores) {
+          console.warn(
+            `[Search:agg] filename=${JSON.stringify(score.filename ?? '')} assetId=${score.assetId} best=${score.bestSimilarity.toFixed(4)} rank=${score.rank}`,
+          );
+        }
+        for (const photo of indexedPhotos) {
+          if (!rankedAssetIds.has(photo.assetId)) {
+            console.warn(
+              `[Search:agg] filename=${JSON.stringify(photo.filename ?? '')} assetId=${photo.assetId} best=na rank=na`,
+            );
+          }
+        }
+      },
     );
     console.warn(`[Search:diag] finalResults=${results.length}`);
 

@@ -19,6 +19,10 @@ import {
   hasRequiredLandmarks,
   isFacePoseWithinLimits,
 } from './landmarkGeometry';
+import {
+  getFaceSizeRatios,
+  isFaceInsideNormalizedImage,
+} from './qualityGeometry';
 
 export interface DecodedImage {
   width: number;
@@ -134,12 +138,12 @@ export async function evaluateFaceQuality(
   const pose = calculateFacePose(landmarks);
   const { rollDegrees } = pose;
   const landmarksAccepted = hasRequiredLandmarks(landmarks, faceCapture.minLandmarkCount);
-  const faceInFrameAccepted =
-    bounds.minX >= 0 && bounds.minY >= 0 && bounds.maxX <= 1 && bounds.maxY <= 1;
+  const faceInFrameAccepted = isFaceInsideNormalizedImage(bounds);
+  const faceSizeRatios = getFaceSizeRatios(bounds, imageWidth, imageHeight);
   const faceSizeAccepted =
-    bounds.width >= faceCapture.minFaceWidthRatio &&
-    bounds.height >= faceCapture.minFaceHeightRatio &&
-    bounds.width * bounds.height >= faceCapture.minFaceAreaRatio;
+    faceSizeRatios.width >= faceCapture.minFaceWidthRatio &&
+    faceSizeRatios.height >= faceCapture.minFaceHeightRatio &&
+    faceSizeRatios.area >= faceCapture.minFaceAreaRatio;
   const rotationAccepted = isFacePoseWithinLimits(pose, faceCapture);
   const pixels = analyzePixels(image, bounds);
   const lightingAccepted =
@@ -161,10 +165,6 @@ export async function evaluateFaceQuality(
   }
   if (!sharpnessAccepted) issues.push('blur-detected');
   const reason: FaceQuality['reason'] = issues[0] ?? 'accepted';
-
-  if (issues.length > 0) {
-    console.warn(`[Quality:agg] reason=${reason} issues=${issues.join(',')}`);
-  }
 
   return {
     bounds,

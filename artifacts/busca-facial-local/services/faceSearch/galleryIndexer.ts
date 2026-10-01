@@ -29,6 +29,7 @@ import {
   releaseRecognitionModel,
   runFaceEmbedding,
 } from './model';
+import { getRecognitionModelIdentity } from './modelIdentity';
 import {
   shouldLogPhoto,
   logIndexProgress,
@@ -134,6 +135,10 @@ function getCurrentModelMetadata(): FaceSearchModelMetadata {
   };
 }
 
+function getCurrentModelStorageVersion(): string {
+  return getModelStorageVersion(getCurrentModelMetadata());
+}
+
 function makeInitialProgress(): FaceIndexProgress {
   return {
     status: 'idle',
@@ -197,6 +202,21 @@ function isSkippableFaceError(error: unknown): boolean {
   return isSkippableAssetError(error);
 }
 
+function logSkippedIndexError(
+  assetId: string,
+  faceId: number | 'none',
+  error: unknown,
+): void {
+  const code =
+    error instanceof FaceCaptureError || error instanceof FaceRecognitionError
+      ? error.code
+      : 'unknown';
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(
+    `[Index:face:agg] asset=${assetId} face=${faceId} code=${code} message=${JSON.stringify(message)}`,
+  );
+}
+
 function isUnchangedAsset(
   asset: MediaLibrary.Asset,
   indexedPhoto: IndexedPhoto | undefined,
@@ -205,7 +225,7 @@ function isUnchangedAsset(
     indexedPhoto !== undefined &&
     indexedPhoto.assetId === asset.id &&
     indexedPhoto.modificationTime === asset.modificationTime &&
-    indexedPhoto.modelVersion === faceSearch.modelVersion
+    indexedPhoto.modelVersion === getCurrentModelStorageVersion()
   );
 }
 
@@ -221,7 +241,7 @@ function createIndexedPhoto(
     modificationTime: asset.modificationTime,
     width: asset.width,
     height: asset.height,
-    modelVersion: faceSearch.modelVersion,
+    modelVersion: getCurrentModelStorageVersion(),
     indexedAt: Date.now(),
     faceCount,
   };
@@ -252,12 +272,14 @@ async function indexAsset(
     try {
       console.warn(`[Index:agg] asset=${asset.id} start`);
       const t0 = Date.now();
-      session = await detectFaces(asset.uri);
+      session = await detectFaces(asset.uri, asset.id);
       detectMs += Date.now() - t0;
     } catch (error) {
       if (error instanceof FaceCaptureError && error.code === 'no-face') {
+        logSkippedIndexError(asset.id, 'none', error);
         session = null;
       } else if (isSkippableAssetError(error)) {
+        logSkippedIndexError(asset.id, 'none', error);
         return { indexed: false, skipped: true, faceCount: 0 };
       } else {
         throw error;
@@ -286,7 +308,9 @@ async function indexAsset(
             indexedAt: Date.now(),
           });
         } catch (error) {
-          if (!isSkippableFaceError(error)) {
+          if (isSkippableFaceError(error)) {
+            logSkippedIndexError(asset.id, detectedFace.id, error);
+          } else {
             throw error;
           }
         } finally {
@@ -395,6 +419,11 @@ async function runGalleryIndex(
         'A indexação da galeria está disponível somente no APK.',
       );
     }
+
+    const modelIdentity = await getRecognitionModelIdentity();
+    console.warn(
+      `[Index:agg] modelSha256=${modelIdentity.sha256} modelVersion=${modelIdentity.modelVersion} pipelineVersion=${modelIdentity.pipelineVersion}`,
+    );
 
     emitProgress({ status: 'requesting-permission' });
     if (batch) {

@@ -5,7 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { FaceSearchRepository } from '../repository.ts';
+import {
+  FaceSearchRepository,
+  getModelStorageVersion,
+} from '../repository.ts';
 
 function createNativeSQLiteAdapter(databasePath) {
   const database = new DatabaseSync(databasePath);
@@ -78,7 +81,7 @@ function createPhoto(assetId) {
     modificationTime: 1_700_000_001,
     width: 1200,
     height: 800,
-    modelVersion: 'mobilefacenet-192-v1:192:112x112x3',
+    modelVersion: 'mobilefacenet-192-v1:det-tiles-v1:192:112x112x3',
     indexedAt: 1_700_000_001,
     faceCount: 1,
   };
@@ -101,10 +104,46 @@ function createFace(assetId, faceIndex = 0, value = 1) {
       model,
       normalized: true,
     },
-    modelVersion: 'mobilefacenet-192-v1:192:112x112x3',
+    modelVersion: 'mobilefacenet-192-v1:det-tiles-v1:192:112x112x3',
     indexedAt: 1_700_000_001,
   };
 }
+
+test('inclui pipelineVersion na versão de armazenamento do modelo', () => {
+  assert.equal(
+    getModelStorageVersion(model),
+    'mobilefacenet-192-v1:det-tiles-v1:192:112x112x3',
+  );
+});
+
+test('invalida fotos antigas mesmo quando o índice não contém embeddings', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'face-pipeline-version-'));
+  const repository = new FaceSearchRepository({
+    platformOS: 'android',
+    openDatabase: async () =>
+      createNativeSQLiteAdapter(path.join(directory, 'index.sqlite')),
+  });
+
+  try {
+    await repository.saveIndexedPhoto(
+      {
+        ...createPhoto('photo-without-faces'),
+        modelVersion: model.version,
+      },
+      [],
+    );
+
+    assert.equal(await repository.getStoredModelVersion(), model.version);
+    assert.equal(await repository.invalidateIfModelChanged(model), true);
+    assert.deepEqual(await repository.getStoredIndexStats(), {
+      indexedPhotos: 0,
+      indexedFaces: 0,
+    });
+  } finally {
+    await repository.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test('limpa o índice, reabre o mesmo SQLite e preserva a galeria', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'face-search-'));

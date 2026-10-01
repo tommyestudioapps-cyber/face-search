@@ -113,6 +113,8 @@ export interface AlignedFace {
   height: number;
   faceId: number;
   standardized: boolean;
+  referenceBounds?: FaceBounds;
+  referenceQuality?: FaceQuality;
   sourceUri?: string;
   rotationDegrees: number;
   crop: {

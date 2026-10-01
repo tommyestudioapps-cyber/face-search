@@ -112,3 +112,31 @@ test('limita resultados e retorna vazio sem correspondências sintéticas', () =
   );
   assert.deepEqual(empty, []);
 });
+
+test('reports each photo best score and rank before the result floor is applied', () => {
+  let scores = [];
+  const results = groupBestResults(
+    [
+      candidate('photo-low', 0, [0.6, 0.8]),
+      candidate('photo-high', 0, [0.8, 0.6]),
+      candidate('photo-high', 1, [0.7, Math.sqrt(1 - 0.7 ** 2)]),
+    ],
+    new Float32Array([1, 0]),
+    thresholds,
+    50,
+    (nextScores) => {
+      scores = nextScores;
+    },
+  );
+
+  assert.deepEqual(
+    scores.map(({ assetId, rank }) => ({ assetId, rank })),
+    [
+      { assetId: 'photo-high', rank: 1 },
+      { assetId: 'photo-low', rank: 2 },
+    ],
+  );
+  assert.ok(Math.abs(scores[0].bestSimilarity - 0.8) < 1e-6);
+  assert.ok(Math.abs(scores[1].bestSimilarity - 0.6) < 1e-6);
+  assert.deepEqual(results.map((result) => result.assetId), ['photo-high']);
+});

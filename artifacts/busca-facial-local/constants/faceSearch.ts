@@ -1,6 +1,7 @@
 export const faceSearch = {
   modelAssetName: 'face-recognition.tflite',
   modelVersion: 'mobilefacenet-192-v1',
+  pipelineVersion: 'det-tiles-v1',
   input: {
     width: 112,
     height: 112,

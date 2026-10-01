@@ -61,6 +61,8 @@ export async function alignFace(
       height: aligned.height,
       faceId: face.id,
       standardized: true,
+      referenceBounds: face.bounds,
+      referenceQuality: face.quality,
       sourceUri,
       rotationDegrees,
       crop,

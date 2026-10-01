@@ -5,6 +5,7 @@ import { parseCheckpoint } from './checkpointPolicy';
 const CURSOR_KEY = 'visage.background-index.cursor.v1';
 const INDEX_VERSION = [
   faceSearch.modelVersion,
+  faceSearch.pipelineVersion,
   faceSearch.embeddingDimension,
   faceSearch.input.width,
   faceSearch.input.height,

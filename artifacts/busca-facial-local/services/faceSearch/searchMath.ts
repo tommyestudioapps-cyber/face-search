@@ -23,6 +23,13 @@ export interface SearchMathCandidate {
   };
 }
 
+export interface PhotoSimilarityScore {
+  assetId: string;
+  filename: string | null;
+  bestSimilarity: number;
+  rank: number;
+}
+
 export function normalizeL2(values: Float32Array): Float32Array {
   let squaredNorm = 0;
   for (const value of values) {
@@ -110,12 +117,17 @@ export function groupBestResults(
   queryEmbedding: Float32Array,
   thresholds: SimilarityThresholds,
   maxResults: number,
+  onPhotoScores?: (scores: PhotoSimilarityScore[]) => void,
 ): FaceSearchResult[] {
   const minimumSimilarity = Math.max(
     thresholds.review,
     thresholds.rejected,
   );
   const bestByPhoto = new Map<string, FaceSearchResult>();
+  const bestSimilarityByPhoto = new Map<
+    string,
+    { assetId: string; filename: string | null; bestSimilarity: number }
+  >();
   const allScores: number[] = [];
 
   for (const candidate of candidates) {
@@ -124,6 +136,14 @@ export function groupBestResults(
       candidate.face.embedding.values,
     );
     allScores.push(similarity);
+    const previousScore = bestSimilarityByPhoto.get(candidate.photo.assetId);
+    if (!previousScore || similarity > previousScore.bestSimilarity) {
+      bestSimilarityByPhoto.set(candidate.photo.assetId, {
+        assetId: candidate.photo.assetId,
+        filename: candidate.photo.filename,
+        bestSimilarity: similarity,
+      });
+    }
     if (similarity < minimumSimilarity) {
       continue;
     }
@@ -137,6 +157,10 @@ export function groupBestResults(
 
   const sortedAll = [...allScores].sort((a, b) => b - a);
   console.warn(`[Search:raw] total_raw=${sortedAll.length} top20_raw=${sortedAll.slice(0, 20).map(s => s.toFixed(3)).join(',')}`);
+  const rankedPhotoScores = [...bestSimilarityByPhoto.values()]
+    .sort((left, right) => right.bestSimilarity - left.bestSimilarity)
+    .map((score, index) => ({ ...score, rank: index + 1 }));
+  onPhotoScores?.(rankedPhotoScores);
 
   const allSorted = [...bestByPhoto.values()].sort((left, right) => right.similarity - left.similarity);
   console.warn(`[Search:top] total=${allSorted.length} top20=${allSorted.slice(0, 20).map(r => r.similarity.toFixed(3)).join(',')}`);

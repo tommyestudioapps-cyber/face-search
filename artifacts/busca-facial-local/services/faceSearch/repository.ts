@@ -107,7 +107,7 @@ function storageError(message: string, cause?: unknown): FaceRecognitionError {
 
 function getModelStorageVersion(model: FaceSearchModelMetadata): string {
   const { width, height, channels } = model.input;
-  return `${model.version}:${model.embeddingDimension}:${width}x${height}x${channels}`;
+  return `${model.version}:${faceSearch.pipelineVersion}:${model.embeddingDimension}:${width}x${height}x${channels}`;
 }
 
 function serializeDimensions(width: number, height: number): string {
@@ -1039,11 +1039,9 @@ export class FaceSearchRepository {
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ModelVersionRow>(
       `
-        SELECT DISTINCT fe.model_version
-        FROM face_embeddings fe
-        INNER JOIN indexed_photos ip
-          ON ip.id_media_library = fe.photo_id
-        WHERE ip.indexing_status = ?
+        SELECT DISTINCT model_version
+        FROM indexed_photos
+        WHERE indexing_status = ?
       `,
       [INDEXED_STATUS],
     );

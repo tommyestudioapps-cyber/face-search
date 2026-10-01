@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { faceCapture } from '@/constants/faceCapture';
 import {
   getSelectableFaces,
@@ -9,6 +10,12 @@ import { alignFace } from './alignment';
 import { detectFacesWithMediaPipe } from './nativeAdapter';
 import { createAnalysisSample, normalizeImage } from './preprocessing';
 import { createDetectedFace, decodeImage, evaluateFaceQuality } from './quality';
+import {
+  createDetectionWindowLayout,
+  deduplicateWindowFaces,
+  mapWindowFacesToImage,
+  type WindowedFaceDetection,
+} from './windowDetection';
 import {
   FaceCaptureError,
   type AlignedFace,
@@ -20,7 +27,10 @@ import {
 export * from './types';
 export { getSelectableFaces, runFaceCaptureFlow } from './captureFlow';
 
-export async function detectFaces(sourceUri: string): Promise<FaceDetectionSession> {
+export async function detectFaces(
+  sourceUri: string,
+  assetId?: string,
+): Promise<FaceDetectionSession> {
   if (Platform.OS === 'web') {
     throw new FaceCaptureError(
       'web-unsupported',
@@ -30,23 +40,71 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
 
   const normalized = await normalizeImage(sourceUri);
   let qualitySampleUri: string | null = null;
+  const detectionWindowUris: string[] = [];
 
   try {
     const qualitySample = await createAnalysisSample(normalized.uri);
     qualitySampleUri = qualitySample.uri;
     const qualityImage = await decodeImage(qualitySample.uri);
-    const detectStartedAt = Date.now();
-    const result = await detectFacesWithMediaPipe(normalized.uri);
-    if (__DEV__) {
-      console.log(
-        `[Detect] nativo ${Date.now() - detectStartedAt}ms | ` +
-          `faces=${result.faces.length}`,
+    const layout = createDetectionWindowLayout(normalized.width, normalized.height);
+    const facesPerWindow: number[] = [];
+    const windowedFaces: WindowedFaceDetection[] = [];
+
+    for (const window of layout.windows) {
+      let detectionUri = normalized.uri;
+      if (layout.elongated) {
+        const tile = await manipulateAsync(
+          normalized.uri,
+          [
+            {
+              crop: {
+                originX: window.x,
+                originY: window.y,
+                width: window.width,
+                height: window.height,
+              },
+            },
+          ],
+          {
+            compress: 0.96,
+            format: SaveFormat.JPEG,
+          },
+        );
+        detectionWindowUris.push(tile.uri);
+        detectionUri = tile.uri;
+      }
+
+      const detectStartedAt = Date.now();
+      const result = await detectFacesWithMediaPipe(detectionUri);
+      if (__DEV__) {
+        console.log(
+          `[Detect] window=${window.index} nativo ${Date.now() - detectStartedAt}ms | ` +
+            `faces=${result.faces.length}`,
+        );
+      }
+      facesPerWindow.push(result.faces.length);
+      windowedFaces.push(
+        ...mapWindowFacesToImage(
+          result.faces,
+          window,
+          normalized.width,
+          normalized.height,
+        ),
       );
     }
-    const nativeFaces = result.faces;
+
+    const nativeFaces = deduplicateWindowFaces(
+      windowedFaces,
+      normalized.width,
+      normalized.height,
+    );
+    const imageRatio = Math.max(normalized.width, normalized.height) /
+      Math.min(normalized.width, normalized.height);
+    console.warn(
+      `[Detect:agg] assetId=${assetId ?? 'reference'} width=${normalized.width} height=${normalized.height} ratio=${imageRatio.toFixed(3)} windows=${layout.windows.length} facesPerWindow=${facesPerWindow.join(',')} facesAfterDedup=${nativeFaces.length} coverage=${layout.coverage.toFixed(3)}`,
+    );
 
     if (nativeFaces.length === 0) {
-      console.warn('[Detect:agg] native=0');
       throw new FaceCaptureError(
         'no-face',
         'Nenhum rosto foi encontrado na imagem selecionada.',
@@ -68,6 +126,12 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
         rejectedCount += 1;
         rejectionReasons.push(evaluated.quality.reason);
       }
+      const quality = evaluated.quality;
+      const formatNullable = (value: number | null): string =>
+        value === null ? 'na' : value.toFixed(3);
+      console.warn(
+        `[Quality:agg] assetId=${assetId ?? 'reference'} face=${id} w=${(evaluated.bounds.width * normalized.width).toFixed(1)} h=${(evaluated.bounds.height * normalized.height).toFixed(1)} brightness=${formatNullable(quality.brightness)} sharpness=${formatNullable(quality.sharpness)} yaw=${formatNullable(quality.yawDegrees)} pitch=${formatNullable(quality.pitchDegrees)} roll=${quality.rollDegrees.toFixed(3)} accepted=${quality.accepted} issues=${quality.issues.length ? quality.issues.join(',') : 'none'}`,
+      );
       faces.push(
         createDetectedFace(
           id,
@@ -102,19 +166,17 @@ export async function detectFaces(sourceUri: string): Promise<FaceDetectionSessi
       temporaryUris: [...normalized.temporaryUris],
     };
   } catch (error) {
-    await cleanupTempFiles([
-      ...normalized.temporaryUris,
-      ...(qualitySampleUri ? [qualitySampleUri] : []),
-    ]);
+    await cleanupTempFiles(normalized.temporaryUris);
     if (error instanceof FaceCaptureError) {
       throw error;
     }
     const message = error instanceof Error ? error.message : 'Falha ao detectar rostos.';
     throw new FaceCaptureError('processing-failed', message);
   } finally {
-    if (qualitySampleUri) {
-      await cleanupTempFiles([qualitySampleUri]);
-    }
+    await cleanupTempFiles([
+      ...detectionWindowUris,
+      ...(qualitySampleUri ? [qualitySampleUri] : []),
+    ]);
   }
 }
 
