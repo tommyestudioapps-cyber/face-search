@@ -279,28 +279,6 @@ export function useFaceSearch(): UseFaceSearchResult {
             );
           }
         }
-        const activeFace = activeAlignedFaceRef.current;
-        if (activeFace && activeFace.standardized) {
-          if (__DEV__) {
-            console.log('[Search] rodando search pós-indexação');
-          }
-          try {
-            const nextSummary = await faceSearchModule.searchFace(activeFace);
-            if (mountedRef.current) {
-              setSummary(nextSummary);
-              setResults(nextSummary.results);
-              if (__DEV__) {
-                console.log(
-                  `[Search] resultados=${nextSummary.results.length}`,
-                );
-              }
-            }
-          } catch (searchError) {
-            if (__DEV__) {
-              console.log('[Search] falhou pós-indexação', searchError);
-            }
-          }
-        }
         return result;
       } catch (caught) {
         const nextError = toFaceSearchError(
