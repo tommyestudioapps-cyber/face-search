@@ -20,7 +20,6 @@ import {
   isFacePoseWithinLimits,
 } from './landmarkGeometry';
 import {
-  getFaceSizeRatios,
   isFaceInsideNormalizedImage,
 } from './qualityGeometry';
 
@@ -139,19 +138,23 @@ export async function evaluateFaceQuality(
   const { rollDegrees } = pose;
   const landmarksAccepted = hasRequiredLandmarks(landmarks, faceCapture.minLandmarkCount);
   const faceInFrameAccepted = isFaceInsideNormalizedImage(bounds);
-  const faceSizeRatios = getFaceSizeRatios(bounds, imageWidth, imageHeight);
+  const faceWidthPx = bounds.width * imageWidth;
+  const faceHeightPx = bounds.height * imageHeight;
+  console.warn('[Quality:size] w=' + faceWidthPx.toFixed(0) + ' h=' + faceHeightPx.toFixed(0) + ' min=' + faceCapture.minFacePixels + ' accepted=' + (faceWidthPx >= faceCapture.minFacePixels && faceHeightPx >= faceCapture.minFacePixels));
   const faceSizeAccepted =
-    faceSizeRatios.width >= faceCapture.minFaceWidthRatio &&
-    faceSizeRatios.height >= faceCapture.minFaceHeightRatio &&
-    faceSizeRatios.area >= faceCapture.minFaceAreaRatio;
+    faceWidthPx >= faceCapture.minFacePixels &&
+    faceHeightPx >= faceCapture.minFacePixels;
   const rotationAccepted = isFacePoseWithinLimits(pose, faceCapture);
   const pixels = analyzePixels(image, bounds);
   const lightingAccepted =
     pixels.brightness !== null &&
     pixels.brightness >= faceCapture.minBrightness &&
     pixels.brightness <= faceCapture.maxBrightness;
+  // TODO: mover o cálculo de sharpness para o recorte alinhado 112×112
+  // numa rodada futura. Por ora, o limiar de minSharpnessAligned:3 é
+  // aplicado sobre o valor calculado na amostra 256px.
   const sharpnessAccepted =
-    pixels.sharpness !== null && pixels.sharpness >= faceCapture.minSharpness;
+    pixels.sharpness !== null && pixels.sharpness >= faceCapture.minSharpnessAligned;
 
   const issues: FaceQualityIssue[] = [];
   if (!landmarksAccepted) issues.push('landmarks-incomplete');
