@@ -110,24 +110,30 @@ export function calculateAlignmentCrop(
   const maxSide = Math.min(rotatedWidth, rotatedHeight);
   const cropSide = Math.max(1, Math.floor(Math.min(desiredSide, maxSide)));
 
-  const originX = Math.floor(
-    clamp(
-      eyeCenterX - TEMPLATE_EYE_CENTER_X_RATIO * cropSide,
-      0,
-      rotatedWidth - cropSide,
-    ),
+  const requestedOriginX = Math.floor(
+    eyeCenterX - TEMPLATE_EYE_CENTER_X_RATIO * cropSide,
   );
-  const originY = Math.floor(
-    clamp(
-      eyeCenterY - TEMPLATE_EYE_CENTER_Y_RATIO * cropSide,
-      0,
-      rotatedHeight - cropSide,
-    ),
+  const requestedOriginY = Math.floor(
+    eyeCenterY - TEMPLATE_EYE_CENTER_Y_RATIO * cropSide,
   );
+  const clampedX = Math.floor(
+    clamp(requestedOriginX, 0, rotatedWidth - cropSide),
+  );
+  const clampedY = Math.floor(
+    clamp(requestedOriginY, 0, rotatedHeight - cropSide),
+  );
+  const clampFiredX = clampedX !== requestedOriginX;
+  const clampFiredY = clampedY !== requestedOriginY;
+
+  if (clampFiredX || clampFiredY) {
+    const dxPx = clampedX - requestedOriginX;
+    const dyPx = clampedY - requestedOriginY;
+    console.warn('[Align:clamp] firedX=' + clampFiredX + ' firedY=' + clampFiredY + ' dxPx=' + dxPx + ' dyPx=' + dyPx + ' cropSide=' + cropSide);
+  }
 
   return {
-    originX,
-    originY,
+    originX: clampedX,
+    originY: clampedY,
     width: cropSide,
     height: cropSide,
   };
