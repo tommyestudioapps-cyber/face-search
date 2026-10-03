@@ -85,6 +85,7 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
     return; // Another runtime owns this execution; it will keep the checkpoint.
   }
 
+  console.warn('[Batch] iniciando batch gen=' + generation);
   await persistBackgroundState(resume
     ? {
         status: 'running',
@@ -132,6 +133,7 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
         },
       },
     });
+    console.warn('[Batch] terminou status=' + result.status + ' processed=' + result.processedAssets + ' total=' + result.totalAssets);
     if (result.status === 'completed') {
       await clearBackgroundIndexCursor();
       await persistBackgroundState({
@@ -144,6 +146,7 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
         lastError: null,
       });
     } else if (result.status === 'paused') {
+      console.warn('[Batch] pausado por orçamento processed=' + result.processedAssets);
       await persistBackgroundState({
         status: 'paused',
         scope: 'gallery',
