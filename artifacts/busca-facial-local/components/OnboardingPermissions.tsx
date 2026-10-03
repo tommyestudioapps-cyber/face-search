@@ -1,7 +1,9 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
+  AppState,
   ActivityIndicator,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -48,6 +50,17 @@ export function OnboardingPermissions({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') return;
+      if (step !== 'permission-denied') return;
+      void hasGalleryPhotoPermission().then((granted) => {
+        if (granted) setStep('consent');
+      });
+    });
+    return () => subscription.remove();
+  }, [step]);
+
+  useEffect(() => {
     let cancelled = false;
 
     void hasGalleryPhotoPermission()
@@ -92,6 +105,14 @@ export function OnboardingPermissions({
       setStep('permission-denied');
     } finally {
       setIsBusy(false);
+    }
+  };
+
+  const openAppSettings = async () => {
+    try {
+      await Linking.openSettings();
+    } catch {
+      setError('Não foi possível abrir as configurações do app.');
     }
   };
 
@@ -195,46 +216,66 @@ export function OnboardingPermissions({
                   </Pressable>
                 </View>
               ) : (
-                <View style={styles.actions}>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={isBusy}
-                    onPress={closeWithDecline}
-                    style={({ pressed }) => [
-                      styles.secondaryButton,
-                      { borderColor: colors.border },
-                      pressed ? styles.pressed : null,
-                    ]}
-                    testID="onboarding-permission-skip"
-                  >
-                    <Text style={[styles.secondaryButtonText, { color: colors.foreground }]}>
-                      Continuar sem índice
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={isBusy}
-                    onPress={() => void requestPermission()}
-                    style={({ pressed }) => [
-                      styles.primaryButton,
-                      { backgroundColor: colors.primary },
-                      pressed ? styles.pressed : null,
-                    ]}
-                    testID={
-                      isDeniedStep
-                        ? 'onboarding-permission-retry'
-                        : 'onboarding-gallery-permission'
-                    }
-                  >
-                    {isBusy ? (
-                      <ActivityIndicator color={colors.primaryForeground} />
-                    ) : (
-                      <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
-                        {isDeniedStep ? 'Tentar novamente' : 'Permitir acesso'}
+                <>
+                  <View style={styles.actions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={isBusy}
+                      onPress={closeWithDecline}
+                      style={({ pressed }) => [
+                        styles.secondaryButton,
+                        { borderColor: colors.border },
+                        pressed ? styles.pressed : null,
+                      ]}
+                      testID="onboarding-permission-skip"
+                    >
+                      <Text style={[styles.secondaryButtonText, { color: colors.foreground }]}>
+                        Continuar sem índice
                       </Text>
-                    )}
-                  </Pressable>
-                </View>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={isBusy}
+                      onPress={() => void requestPermission()}
+                      style={({ pressed }) => [
+                        styles.primaryButton,
+                        { backgroundColor: colors.primary },
+                        pressed ? styles.pressed : null,
+                      ]}
+                      testID={
+                        isDeniedStep
+                          ? 'onboarding-permission-retry'
+                          : 'onboarding-gallery-permission'
+                      }
+                    >
+                      {isBusy ? (
+                        <ActivityIndicator color={colors.primaryForeground} />
+                      ) : (
+                        <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
+                          {isDeniedStep ? 'Tentar novamente' : 'Permitir acesso'}
+                        </Text>
+                      )}
+                    </Pressable>
+                  </View>
+                  {Platform.OS === 'android' && isDeniedStep ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={isBusy}
+                      onPress={() => void openAppSettings()}
+                      style={({ pressed }) => [
+                        styles.settingsButton,
+                        { borderColor: colors.border },
+                        pressed ? styles.pressed : null,
+                      ]}
+                      testID="onboarding-open-settings"
+                    >
+                      <Feather name="settings" size={16} color={colors.foreground} />
+                      <Text style={[styles.secondaryButtonText, { color: colors.foreground }]}>
+                        Abrir configurações
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </>
               )}
             </>
           )}
@@ -282,6 +323,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 22,
+  },
+  settingsButton: {
+    minHeight: 48,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
   },
   secondaryButton: {
     flex: 1,
