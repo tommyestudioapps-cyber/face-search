@@ -134,6 +134,7 @@ export async function loadFaceSlots(): Promise<(PersistedFaceSlot | null)[]> {
         legacyFile.copy(slotFile);
         legacyFile.delete();
       }
+      removeFileIfExists(getSlotFile(1));
 
       persisted = {
         slots: [
