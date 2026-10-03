@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   FlatList,
   Image,
   Linking,
@@ -42,6 +43,10 @@ import {
   requestGalleryPhotoPermission,
 } from '@/services/backgroundIndexing/galleryPermission';
 import { clearBackgroundIndexCursor } from '@/services/backgroundIndexing/checkpoint';
+import {
+  getActiveForegroundIndexing,
+  startForegroundIndexing,
+} from '@/services/backgroundIndexing/foregroundIndexLoop';
 import {
   AlbumPicker,
   type AlbumOption,
@@ -1110,7 +1115,7 @@ export default function HomeScreen() {
     await syncBackgroundIndexRegistration();
   };
 
-  const runImmediateBackgroundIndex = useCallback(async (): Promise<void> => {
+  const startForegroundIndexingIfNeeded = useCallback(async (): Promise<void> => {
     if (Platform.OS === 'web') return;
 
     if (mountedRef.current) {
@@ -1121,29 +1126,14 @@ export default function HomeScreen() {
       }));
     }
 
-    try {
-      const [batchRunner, faceSearchModule] = await Promise.all([
-        import('@/services/backgroundIndexing/batchRunner'),
-        import('@/services/faceSearch'),
-      ]);
-      try {
-        await batchRunner.runBackgroundIndexBatch();
-      } catch (error) {
-        console.error('[BackgroundIndex] o primeiro lote falhou', error);
-      } finally {
-        try {
-          const nextState = await faceSearchModule.getBackgroundIndexState();
-          if (mountedRef.current) {
-            setBackgroundIndexState(nextState);
-          }
-        } catch (error) {
-          console.error('[BackgroundIndex] não foi possível atualizar o estado visual', error);
+    startForegroundIndexing({
+      onProgress: async (state) => {
+        if (mountedRef.current) {
+          setBackgroundIndexState(state);
         }
         await refreshIndexedPhotos();
-      }
-    } catch (error) {
-      console.error('[BackgroundIndex] não foi possível iniciar o primeiro lote', error);
-    }
+      },
+    });
   }, [refreshIndexedPhotos]);
 
   useEffect(() => {
@@ -1251,6 +1241,20 @@ export default function HomeScreen() {
     return () => clearInterval(timer);
   }, [showReward]);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') return;
+      if (backgroundIndexConsent !== 'accepted') return;
+      if (!hasGalleryPhotoAccess) return;
+      void startForegroundIndexingIfNeeded();
+    });
+    return () => subscription.remove();
+  }, [
+    backgroundIndexConsent,
+    hasGalleryPhotoAccess,
+    startForegroundIndexingIfNeeded,
+  ]);
+
   const handleOnboarding = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowOnboardingPermissions(true);
@@ -1300,7 +1304,7 @@ export default function HomeScreen() {
     }
     try {
       const registration = syncBackgroundTask();
-      const immediateBatch = runImmediateBackgroundIndex();
+      const immediateBatch = startForegroundIndexingIfNeeded();
       const [registrationResult] = await Promise.allSettled([
         registration,
         immediateBatch,
@@ -1369,7 +1373,7 @@ export default function HomeScreen() {
         }
         try {
           const registration = syncBackgroundTask();
-          const immediateBatch = runImmediateBackgroundIndex();
+          const immediateBatch = startForegroundIndexingIfNeeded();
           const [registrationResult] = await Promise.allSettled([
             registration,
             immediateBatch,
@@ -1392,6 +1396,7 @@ export default function HomeScreen() {
         return;
       }
 
+      getActiveForegroundIndexing()?.cancel();
       cancelIndexing();
       await setBackgroundIndexConsent('declined');
       if (mountedRef.current) {

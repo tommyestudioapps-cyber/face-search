@@ -2,6 +2,7 @@ import { AppState } from 'react-native';
 import { runBackgroundIndexBatch } from './batchRunner';
 import { getBackgroundIndexConsent } from './consent';
 import { faceSearchRepository } from '../faceSearch/repository';
+import type { BackgroundIndexState } from './status';
 
 export interface ForegroundIndexingHandle {
   promise: Promise<void>;
@@ -12,6 +13,7 @@ export interface ForegroundIndexingHandle {
 export interface ForegroundIndexingOptions {
   maxAssets?: number;
   timeBudgetMs?: number;
+  onProgress?: (state: BackgroundIndexState) => void | Promise<void>;
 }
 
 const DEFAULT_MAX_ASSETS = 500;
@@ -53,6 +55,9 @@ export function startForegroundIndexing(
         if (cancelled) break;
 
         const state = await faceSearchRepository.getBackgroundIndexState();
+        if (options.onProgress) {
+          await options.onProgress(state);
+        }
         if (
           state.status === 'completed' ||
           state.status === 'error' ||
