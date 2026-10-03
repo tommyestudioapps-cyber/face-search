@@ -483,6 +483,9 @@ export function useFaceSearch(): UseFaceSearchResult {
       alignedFace: AlignedFace | null,
       albumId?: string | null,
     ): Promise<FaceSearchSummary | null> => {
+      if (mountedRef.current) {
+        setResults([]);
+      }
       const indexResult = await startIndexing(albumId);
       if (!indexResult || indexResult.status !== 'completed') {
         return null;
