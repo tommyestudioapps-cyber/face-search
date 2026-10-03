@@ -157,7 +157,7 @@ export function PhotoViewer({ uri, visible, onClose }: PhotoViewerProps) {
               onPress={() => void sharePhoto()}
               style={styles.actionButton}
             >
-              <Feather name="share" size={20} color="#FFFFFF" />
+              <Feather name="share-2" size={20} color="#FFFFFF" />
             </Pressable>
           </View>
         </View>
