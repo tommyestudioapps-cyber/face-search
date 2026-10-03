@@ -1240,6 +1240,17 @@ export default function HomeScreen() {
   }, [showReward]);
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
+    if (backgroundIndexConsent !== 'accepted') return;
+    if (!hasGalleryPhotoAccess) return;
+    void startForegroundIndexingIfNeeded();
+  }, [
+    backgroundIndexConsent,
+    hasGalleryPhotoAccess,
+    startForegroundIndexingIfNeeded,
+  ]);
+
+  useEffect(() => {
     if (Platform.OS === 'web') return undefined;
     let cancelled = false;
     let subscription: { remove: () => void } | null = null;
