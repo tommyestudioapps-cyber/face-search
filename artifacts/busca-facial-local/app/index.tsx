@@ -796,12 +796,14 @@ function Analyzing({
   progress,
   status,
   error,
+  matchCount,
   onCancel,
   onDismiss,
 }: {
   progress: FaceIndexProgress;
   status: FaceSearchStatus;
   error: FaceRecognitionError | null;
+  matchCount: number;
   onCancel: () => void;
   onDismiss: () => void;
 }) {
@@ -823,6 +825,7 @@ function Analyzing({
           progress={progress}
           status={status}
           error={error}
+          matchCount={matchCount}
           onCancel={onCancel}
           onDismiss={onDismiss}
         />
@@ -1604,6 +1607,7 @@ export default function HomeScreen() {
             progress={faceSearchProgress}
             status={faceSearchStatus}
             error={faceSearchError}
+            matchCount={results.length}
             onCancel={cancelIndexing}
             onDismiss={dismissSearchProgress}
           />
