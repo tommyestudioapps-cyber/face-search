@@ -54,6 +54,7 @@ export function OnboardingPermissions({
       if (nextState !== 'active') return;
       if (step !== 'permission-denied') return;
       void hasGalleryPhotoPermission().then((granted) => {
+        console.warn('[Onboarding] appStateReturned granted=' + granted);
         if (granted) setStep('consent');
       });
     });
@@ -65,6 +66,7 @@ export function OnboardingPermissions({
 
     void hasGalleryPhotoPermission()
       .then((granted) => {
+        console.warn('[Onboarding] initialCheck granted=' + granted);
         if (!cancelled) {
           setStep(granted ? 'consent' : 'permission');
         }
@@ -87,6 +89,7 @@ export function OnboardingPermissions({
     setIsBusy(true);
     setError(null);
     try {
+      console.warn('[Onboarding] complete galleryGranted=' + result.galleryGranted + ' indexAccepted=' + result.indexAccepted);
       await onComplete(result);
     } catch {
       setError('Não foi possível salvar sua escolha. Tente novamente.');
@@ -100,8 +103,10 @@ export function OnboardingPermissions({
     setError(null);
     try {
       await requestGalleryPhotoPermission();
+      console.warn('[Onboarding] permissionGranted');
       setStep('consent');
     } catch {
+      console.warn('[Onboarding] permissionDenied');
       setStep('permission-denied');
     } finally {
       setIsBusy(false);
