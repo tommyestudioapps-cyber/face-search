@@ -29,7 +29,7 @@ import { FaceSearchProgress } from '@/components/FaceSearchProgress';
 import { IndexSettings } from '@/components/IndexSettings';
 import { IndexedGallery } from '@/components/IndexedGallery';
 import { GlobalMatchesPanel } from '@/components/GlobalMatchesPanel';
-import { BackgroundIndexConsent } from '@/components/BackgroundIndexConsent';
+import { OnboardingPermissions } from '@/components/OnboardingPermissions';
 import {
   BACKGROUND_INDEX_DECLINED_MESSAGE,
   getBackgroundIndexConsent,
@@ -1028,7 +1028,7 @@ export default function HomeScreen() {
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [rewardCountdown, setRewardCountdown] = useState(3);
   const [matchesReturnScreen, setMatchesReturnScreen] = useState<AppScreen | null>(null);
-  const [showBackgroundIndexConsent, setShowBackgroundIndexConsent] = useState(false);
+  const [showOnboardingPermissions, setShowOnboardingPermissions] = useState(false);
   const [backgroundIndexConsent, setBackgroundIndexConsentState] =
     useState<BackgroundIndexConsentStatus>('unknown');
   const [hasGalleryPhotoAccess, setHasGalleryPhotoAccess] = useState(false);
@@ -1154,7 +1154,7 @@ export default function HomeScreen() {
       }
       if (onboardingValue === 'true') {
         const canAskForConsent = consent === 'unknown' && galleryPermissionGranted;
-        setShowBackgroundIndexConsent(canAskForConsent);
+        setShowOnboardingPermissions(canAskForConsent);
       }
       await syncBackgroundTask();
     })().catch((error) => {
@@ -1223,21 +1223,26 @@ export default function HomeScreen() {
 
   const handleOnboarding = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await ImagePicker.requestMediaLibraryPermissionsAsync();
-    let galleryPermissionGranted = false;
-    try {
-      await requestGalleryPhotoPermission();
-      galleryPermissionGranted = true;
-      setHasGalleryPhotoAccess(true);
-    } catch (error) {
-      if (__DEV__) {
-        console.error('[BackgroundIndex] permissão da galeria não concedida', error);
-      }
-    }
+    setShowOnboardingPermissions(true);
+  };
+
+  const completeOnboardingPermissions = async (result: {
+    galleryGranted: boolean;
+    indexAccepted: boolean;
+  }) => {
     await AsyncStorage.setItem('visage.onboarding.complete', 'true');
     setScreen('home');
-    if (backgroundIndexConsent === 'unknown' && galleryPermissionGranted) {
-      setShowBackgroundIndexConsent(true);
+    setHasGalleryPhotoAccess(result.galleryGranted);
+
+    if (!result.galleryGranted || backgroundIndexConsent !== 'unknown') {
+      setShowOnboardingPermissions(false);
+      return;
+    }
+
+    if (result.indexAccepted) {
+      await acceptBackgroundIndex();
+    } else {
+      await declineBackgroundIndex();
     }
   };
 
@@ -1251,7 +1256,7 @@ export default function HomeScreen() {
       if (mountedRef.current) {
         setHasGalleryPhotoAccess(true);
         setBackgroundIndexConsentState('accepted');
-        setShowBackgroundIndexConsent(false);
+        setShowOnboardingPermissions(false);
       }
     } catch (error) {
       if (__DEV__) {
@@ -1292,7 +1297,7 @@ export default function HomeScreen() {
       await setBackgroundIndexConsent('declined');
       if (mountedRef.current) {
         setBackgroundIndexConsentState('declined');
-        setShowBackgroundIndexConsent(false);
+        setShowOnboardingPermissions(false);
         setBackgroundIndexState((current) => ({
           ...current,
           status: 'paused',
@@ -1691,11 +1696,9 @@ export default function HomeScreen() {
           }
         }}
       />
-      <BackgroundIndexConsent
-        visible={showBackgroundIndexConsent}
-        onAccept={acceptBackgroundIndex}
-        onDecline={declineBackgroundIndex}
-      />
+      {showOnboardingPermissions ? (
+        <OnboardingPermissions onComplete={completeOnboardingPermissions} />
+      ) : null}
       <OfflineModal visible={showOffline} onClose={() => setShowOffline(false)} />
       <IndexSettings
         visible={showIndexSettings}
