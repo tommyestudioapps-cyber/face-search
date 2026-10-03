@@ -112,10 +112,7 @@ export function FaceSearchProgress({
           </View>
           <View style={styles.statsRow}>
             <Text style={[styles.stat, { color: colors.mutedForeground }]}>
-              {total === null ? 'Fotos: preparando…' : `${progress.processedAssets} de ${total} fotos`}
-            </Text>
-            <Text style={[styles.stat, { color: colors.foreground }]}>
-              {progress.indexedFaces} rostos indexados
+              {total === null ? 'Fotos: preparando…' : `${progress.processedAssets} de ${total} fotos processadas`}
             </Text>
           </View>
         </>
