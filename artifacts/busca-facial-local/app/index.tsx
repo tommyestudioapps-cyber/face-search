@@ -1749,10 +1749,6 @@ export default function HomeScreen() {
         hasGalleryPhotoPermission={hasGalleryPhotoAccess}
         isBackgroundIndexUpdating={isUpdatingBackgroundIndex}
         onBackgroundIndexToggle={toggleBackgroundIndex}
-        onOpenIndexed={() => {
-          setShowIndexSettings(false);
-          openIndexed();
-        }}
       />
       <AlbumPicker
         visible={showAlbumPicker}

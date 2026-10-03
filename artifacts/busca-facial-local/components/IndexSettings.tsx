@@ -36,7 +36,6 @@ interface IndexSettingsProps {
   stats: StoredIndexStats;
   onClose: () => void;
   onClearIndex: () => Promise<void>;
-  onOpenIndexed?: () => void;
   operation: FaceSearchOperation;
   isOperationActive: boolean;
   clearState: FaceSearchClearState;
@@ -53,7 +52,6 @@ export function IndexSettings({
   stats,
   onClose,
   onClearIndex,
-  onOpenIndexed,
   operation,
   isOperationActive,
   clearState,
@@ -188,9 +186,6 @@ export function IndexSettings({
                 <Text style={[styles.title, { color: colors.foreground }]}>
                   Configurações do índice
                 </Text>
-                <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                  Dados processados somente neste aparelho
-                </Text>
               </View>
             </View>
             <Pressable
@@ -209,59 +204,6 @@ export function IndexSettings({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-              ESTATÍSTICAS LOCAIS
-            </Text>
-            <View style={styles.statsRow}>
-              <View
-                style={[
-                  styles.statCard,
-                  { backgroundColor: colors.background, borderColor: colors.border },
-                ]}
-              >
-                <Feather name="image" size={18} color={colors.primary} />
-                <Text style={[styles.statValue, { color: colors.foreground }]}>
-                  {String(stats.indexedPhotos)}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
-                  fotos indexadas
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.statCard,
-                  { backgroundColor: colors.background, borderColor: colors.border },
-                ]}
-              >
-                <Feather name="user" size={18} color="#34D399" />
-                <Text style={[styles.statValue, { color: colors.foreground }]}>
-                  {String(stats.indexedFaces)}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
-                  rostos indexados
-                </Text>
-              </View>
-            </View>
-
-            {onOpenIndexed && stats.indexedPhotos > 0 ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={onOpenIndexed}
-                style={({ pressed }) => [
-                  styles.viewPhotosButton,
-                  { borderColor: colors.border },
-                  pressed ? styles.pressed : null,
-                ]}
-                testID="view-indexed-photos"
-              >
-                <Feather name="image" size={16} color={colors.primary} />
-                <Text style={[styles.viewPhotosText, { color: colors.foreground }]}>
-                  Ver fotos indexadas
-                </Text>
-                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-              </Pressable>
-            ) : null}
-
             {isWaitingForOperation ? (
               <View
                 style={[
@@ -516,39 +458,6 @@ const styles = StyleSheet.create({
     fontSize: 19,
     letterSpacing: -0.4,
   },
-  subtitle: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 11,
-    marginTop: 4,
-  },
-  sectionLabel: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 10,
-    letterSpacing: 1,
-    marginTop: 26,
-    marginBottom: 10,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  statCard: {
-    flex: 1,
-    minHeight: 105,
-    borderWidth: 1,
-    borderRadius: 17,
-    padding: 14,
-  },
-  statValue: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 25,
-    marginTop: 10,
-  },
-  statLabel: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 11,
-    marginTop: 2,
-  },
   infoCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -710,23 +619,6 @@ const styles = StyleSheet.create({
   backgroundIndexControlLabel: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 9,
-  },
-  viewPhotosButton: {
-    minHeight: 48,
-    borderWidth: 1,
-    borderRadius: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 12,
-    paddingHorizontal: 14,
-  },
-  viewPhotosText: {
-    flex: 1,
-    textAlign: 'center',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 13,
   },
   clearButton: {
     minHeight: 50,
