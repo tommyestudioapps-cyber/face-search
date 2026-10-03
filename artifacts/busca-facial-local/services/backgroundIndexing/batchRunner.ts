@@ -15,6 +15,11 @@ import { indexCoordinator } from './indexCoordinator';
 const MAX_ASSETS_PER_RUN = 16;
 const TIME_BUDGET_MS = 15_000;
 
+export interface RunBackgroundIndexBatchOptions {
+  maxAssets?: number;
+  timeBudgetMs?: number;
+}
+
 async function persistBackgroundState(
   patch: Parameters<typeof faceSearchRepository.updateBackgroundIndexState>[0],
 ): Promise<void> {
@@ -30,11 +35,20 @@ async function canContinue(): Promise<boolean> {
   return consentOk && hasFull;
 }
 
-export async function runBackgroundIndexBatch(): Promise<void> {
-  return indexCoordinator.run('background', runCoordinatedBackgroundIndexBatch);
+export async function runBackgroundIndexBatch(
+  options: RunBackgroundIndexBatchOptions = {},
+): Promise<void> {
+  return indexCoordinator.run(
+    'background',
+    () => runCoordinatedBackgroundIndexBatch(options),
+  );
 }
 
-async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
+async function runCoordinatedBackgroundIndexBatch(
+  options: RunBackgroundIndexBatchOptions = {},
+): Promise<void> {
+  const maxAssets = options.maxAssets ?? MAX_ASSETS_PER_RUN;
+  const timeBudgetMs = options.timeBudgetMs ?? TIME_BUDGET_MS;
   const activeGeneration = await faceSearchRepository.getActiveScanGeneration();
   let cachedFullPermission: boolean | null = null;
   const checkFullPermissionOnce = async (): Promise<boolean> => {
@@ -119,8 +133,8 @@ async function runCoordinatedBackgroundIndexBatch(): Promise<void> {
         after,
         generation,
         leaseOwner,
-        maxAssets: MAX_ASSETS_PER_RUN,
-        timeBudgetMs: TIME_BUDGET_MS,
+        maxAssets,
+        timeBudgetMs,
         shouldContinue: async () => leaseHealthy && await canContinue(),
         shouldYield: () => indexCoordinator.shouldYieldBackground(),
         onCheckpoint: async (cursor) => {
