@@ -6,7 +6,6 @@ import { Feather } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  AppState,
   FlatList,
   Image,
   Linking,
@@ -43,10 +42,6 @@ import {
   requestGalleryPhotoPermission,
 } from '@/services/backgroundIndexing/galleryPermission';
 import { clearBackgroundIndexCursor } from '@/services/backgroundIndexing/checkpoint';
-import {
-  getActiveForegroundIndexing,
-  startForegroundIndexing,
-} from '@/services/backgroundIndexing/foregroundIndexLoop';
 import {
   AlbumPicker,
   type AlbumOption,
@@ -1126,7 +1121,10 @@ export default function HomeScreen() {
       }));
     }
 
-    startForegroundIndexing({
+    const foregroundIndexLoop = await import(
+      '@/services/backgroundIndexing/foregroundIndexLoop'
+    );
+    foregroundIndexLoop.startForegroundIndexing({
       onProgress: async (state) => {
         if (mountedRef.current) {
           setBackgroundIndexState(state);
@@ -1242,13 +1240,22 @@ export default function HomeScreen() {
   }, [showReward]);
 
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active') return;
-      if (backgroundIndexConsent !== 'accepted') return;
-      if (!hasGalleryPhotoAccess) return;
-      void startForegroundIndexingIfNeeded();
+    if (Platform.OS === 'web') return undefined;
+    let cancelled = false;
+    let subscription: { remove: () => void } | null = null;
+    void import('react-native').then(({ AppState }) => {
+      if (cancelled) return;
+      subscription = AppState.addEventListener('change', (nextState) => {
+        if (nextState !== 'active') return;
+        if (backgroundIndexConsent !== 'accepted') return;
+        if (!hasGalleryPhotoAccess) return;
+        void startForegroundIndexingIfNeeded();
+      });
     });
-    return () => subscription.remove();
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+    };
   }, [
     backgroundIndexConsent,
     hasGalleryPhotoAccess,
@@ -1396,7 +1403,12 @@ export default function HomeScreen() {
         return;
       }
 
-      getActiveForegroundIndexing()?.cancel();
+      if (Platform.OS !== 'web') {
+        const foregroundIndexLoop = await import(
+          '@/services/backgroundIndexing/foregroundIndexLoop'
+        );
+        foregroundIndexLoop.getActiveForegroundIndexing()?.cancel();
+      }
       cancelIndexing();
       await setBackgroundIndexConsent('declined');
       if (mountedRef.current) {
