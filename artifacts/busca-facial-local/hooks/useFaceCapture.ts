@@ -147,7 +147,7 @@ export function useFaceCapture() {
         await cleanupTempFiles([previous.uri]);
       }
     },
-    [activeSlot, persistCurrentSlots, updateSlotRef],
+    [activeSlot, persistCurrentSlots],
   );
 
   const toCaptureError = useCallback((caught: unknown): FaceCaptureError => {
@@ -364,8 +364,22 @@ export function useFaceCapture() {
       updateSlotRef(slotIndex, emptySlot());
       await persistCurrentSlots();
     },
-    [persistCurrentSlots, updateSlotRef],
+    [persistCurrentSlots],
   );
+
+  useEffect(() => {
+    return () => {
+      for (const slot of slotsRef.current) {
+        void releaseFaceDetectionSession(slot.session);
+        if (
+          slot.alignedFace &&
+          slot.alignedFace.uri !== slot.persistedUri
+        ) {
+          void cleanupTempFiles([slot.alignedFace.uri]);
+        }
+      }
+    };
+  }, []);
 
   const active = slots[activeSlot];
 
@@ -391,18 +405,4 @@ export function useFaceCapture() {
     reset,
     restoreFromSession,
   };
-
-  useEffect(() => {
-    return () => {
-      for (const slot of slotsRef.current) {
-        void releaseFaceDetectionSession(slot.session);
-        if (
-          slot.alignedFace &&
-          slot.alignedFace.uri !== slot.persistedUri
-        ) {
-          void cleanupTempFiles([slot.alignedFace.uri]);
-        }
-      }
-    };
-  }, []);
 }
