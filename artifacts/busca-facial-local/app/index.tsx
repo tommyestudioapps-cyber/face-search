@@ -1479,7 +1479,7 @@ export default function HomeScreen() {
       });
       if (!selection.canceled && selection.assets[0]?.uri) {
         const uri = selection.assets[0].uri;
-          void analyzeFace(uri, activeSlot);
+        void analyzeFace(uri, activeSlot);
       }
     } catch (error) {
       console.error('[Gallery] não foi possível abrir a galeria', error);
