@@ -783,9 +783,8 @@ function SelectPhoto({
           testID="search-face"
         />
         <View style={styles.localNotice}>
-          <Feather name="wifi-off" size={15} color={colors.mutedForeground} />
           <Text style={[styles.localNoticeText, { color: colors.mutedForeground }]}>
-            A busca é feita no índice local e não envia suas fotos.
+            A busca é feita no índice local e não faz envios.
           </Text>
         </View>
       </ScrollView>
