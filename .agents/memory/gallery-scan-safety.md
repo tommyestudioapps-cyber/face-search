@@ -21,6 +21,12 @@ A reserva da geração e a exclusividade da execução são garantias diferentes
 
 **How to apply:** Em mudanças nas operações faciais, mantenha a posse temporária da execução, a validação transacional das escritas e a recuperação quando o processo morre antes do primeiro checkpoint. Não apague o único cursor antes de invalidar a geração no SQLite.
 
+Ao ativar ou reativar a indexação automática pelo seletor, preserve o cursor válido para que o próximo lote possa retomar a geração pausada.
+
+**Why:** Cada lote tem limite próprio; apagar o cursor ao reativar faz o trabalho recomeçar em vez de avançar pelo restante da galeria.
+
+**How to apply:** Não limpe o cursor no ramo de ativação do seletor. Mantenha limpezas nos fluxos de recusa/desativação, cursor inválido ou incompatível, e conclusão da varredura.
+
 O estado resumido da tarefa deve ser persistido no SQLite, mas a falha isolada dessa gravação não pode interromper a indexação ou fazer uma limpeza bem-sucedida parecer falha.
 
 **Why:** O estado é necessário para recuperação e UI, porém é metadado; as fotos e embeddings continuam sendo a fonte de dados do índice e não devem ficar indisponíveis por uma falha transitória ao atualizar o resumo.

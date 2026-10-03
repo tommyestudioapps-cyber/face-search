@@ -1357,7 +1357,6 @@ export default function HomeScreen() {
     try {
       if (enabled) {
         await requestGalleryPhotoPermission();
-        await clearBackgroundIndexCursor();
         await setBackgroundIndexConsent('accepted');
         if (mountedRef.current) {
           setHasGalleryPhotoAccess(true);
