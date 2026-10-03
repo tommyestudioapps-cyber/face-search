@@ -18,7 +18,7 @@ export interface PersistedFaceSlot {
 }
 
 export interface PersistedSessionMulti {
-  slots: PersistedFaceSlot[];
+  slots: (PersistedFaceSlot | null)[];
   savedAt: number;
 }
 
@@ -72,24 +72,32 @@ function removeFileIfExists(file: File): void {
 }
 
 export async function persistFaceSlots(
-  slots: PersistedFaceSlot[],
+  slots: (PersistedFaceSlot | null)[],
 ): Promise<void> {
-  if (slots.length === 0) {
-    await clearPersistedSession();
+  const slotsToPersist: (PersistedFaceSlot | null)[] = [
+    slots[0] ?? null,
+    slots[1] ?? null,
+  ];
+
+  if (slotsToPersist.every((slot) => slot === null)) {
+    await clearPersistedSessions();
     return;
   }
 
   try {
-    const previousSlots = await loadFaceSlots();
     getSessionDirectory().create({ idempotent: true });
 
-    const persistedSlots: PersistedFaceSlot[] = [];
-    for (let slotIndex = 0; slotIndex < slots.length; slotIndex += 1) {
-      const slot = slots[slotIndex];
-      persistedSlots.push({
+    const persistedSlots: (PersistedFaceSlot | null)[] = [null, null];
+    for (let slotIndex = 0; slotIndex < 2; slotIndex += 1) {
+      const slot = slotsToPersist[slotIndex];
+      if (slot === null) {
+        removeFileIfExists(getSlotFile(slotIndex));
+        continue;
+      }
+      persistedSlots[slotIndex] = {
         ...slot,
         alignedFace: copyAlignedFaceToSlot(slot.alignedFace, slotIndex),
-      });
+      };
     }
 
     const persisted: PersistedSessionMulti = {
@@ -97,31 +105,23 @@ export async function persistFaceSlots(
       savedAt: Date.now(),
     };
     await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(persisted));
-
-    for (
-      let slotIndex = slots.length;
-      slotIndex < previousSlots.length;
-      slotIndex += 1
-    ) {
-      removeFileIfExists(getSlotFile(slotIndex));
-    }
     removeFileIfExists(getLegacySessionFile());
   } catch (error) {
     logPersistenceFailure('persistir', error);
   }
 }
 
-export async function loadFaceSlots(): Promise<PersistedFaceSlot[]> {
+export async function loadFaceSlots(): Promise<(PersistedFaceSlot | null)[]> {
   try {
     const serialized = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
     if (!serialized) {
-      return [];
+      return [null, null];
     }
 
     const parsed: unknown = JSON.parse(serialized);
     if (!isRecord(parsed)) {
       await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
-      return [];
+      return [null, null];
     }
 
     let persisted: PersistedSessionMulti;
@@ -144,6 +144,7 @@ export async function loadFaceSlots(): Promise<PersistedFaceSlot[]> {
             },
             sourceUri: legacySession.sourceUri,
           },
+          null,
         ],
         savedAt:
           typeof legacySession.savedAt === 'number' &&
@@ -152,56 +153,48 @@ export async function loadFaceSlots(): Promise<PersistedFaceSlot[]> {
             : Date.now(),
       };
       await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(persisted));
-    } else if (Array.isArray(parsed.slots)) {
-      persisted = parsed as unknown as PersistedSessionMulti;
-    } else {
-      await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
-      return [];
-    }
-
-    const existingSlots = persisted.slots
-      .map((slot, slotIndex) => ({ slot, slotIndex }))
-      .filter(({ slotIndex }) => getSlotFile(slotIndex).exists);
-
-    if (existingSlots.length === persisted.slots.length) {
       return persisted.slots;
     }
 
-    const validSlots: PersistedFaceSlot[] = [];
-    for (
-      let slotIndex = 0;
-      slotIndex < existingSlots.length;
-      slotIndex += 1
-    ) {
-      const { slot, slotIndex: originalIndex } = existingSlots[slotIndex];
-      if (originalIndex === slotIndex) {
-        validSlots.push(slot);
-        continue;
-      }
-
-      const sourceFile = getSlotFile(originalIndex);
-      const destination = getSlotFile(slotIndex);
-      removeFileIfExists(destination);
-      sourceFile.copy(destination);
-      sourceFile.delete();
-      validSlots.push({
-        ...slot,
-        alignedFace: {
-          ...slot.alignedFace,
-          uri: destination.uri,
-        },
-      });
+    if (!Array.isArray(parsed.slots)) {
+      await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+      return [null, null];
     }
 
-    const cleanedPersisted: PersistedSessionMulti = {
-      slots: validSlots,
-      savedAt: persisted.savedAt,
-    };
-    await AsyncStorage.setItem(
-      SESSION_STORAGE_KEY,
-      JSON.stringify(cleanedPersisted),
-    );
-    return validSlots;
+    persisted = parsed as unknown as PersistedSessionMulti;
+    const storedSlots = persisted.slots;
+    const slots: (PersistedFaceSlot | null)[] = [
+      storedSlots[0] ?? null,
+      storedSlots[1] ?? null,
+    ];
+    let needsSave = storedSlots.length !== 2;
+
+    for (let slotIndex = 0; slotIndex < 2; slotIndex += 1) {
+      const slotFile = getSlotFile(slotIndex);
+      if (slots[slotIndex] === null) {
+        if (slotFile.exists) {
+          removeFileIfExists(slotFile);
+          needsSave = true;
+        }
+        continue;
+      }
+      if (!slotFile.exists) {
+        slots[slotIndex] = null;
+        needsSave = true;
+      }
+    }
+
+    if (needsSave) {
+      const cleanedPersisted: PersistedSessionMulti = {
+        slots,
+        savedAt: persisted.savedAt,
+      };
+      await AsyncStorage.setItem(
+        SESSION_STORAGE_KEY,
+        JSON.stringify(cleanedPersisted),
+      );
+    }
+    return slots;
   } catch (error) {
     logPersistenceFailure('carregar', error);
     try {
@@ -209,7 +202,7 @@ export async function loadFaceSlots(): Promise<PersistedFaceSlot[]> {
     } catch (cleanupError) {
       logPersistenceFailure('limpar sessão inválida', cleanupError);
     }
-    return [];
+    return [null, null];
   }
 }
 
@@ -237,15 +230,15 @@ export async function persistSession(
   alignedFace: AlignedFace,
   sourceUri: string,
 ): Promise<void> {
-  return persistFaceSlots([{ alignedFace, sourceUri }]);
+  return persistFaceSlots([{ alignedFace, sourceUri }, null]);
 }
 
 export async function loadPersistedSession(): Promise<PersistedSession | null> {
   const slots = await loadFaceSlots();
-  if (slots.length === 0) {
+  const first = slots[0] ?? slots[1] ?? null;
+  if (first === null) {
     return null;
   }
-  const first = slots[0];
   return {
     alignedFace: first.alignedFace,
     sourceUri: first.sourceUri,
