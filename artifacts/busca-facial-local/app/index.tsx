@@ -893,10 +893,9 @@ function Results({
                 {item.filename ?? 'Foto da galeria'}
               </Text>
               <View style={styles.confidenceRow}>
-                 <View style={[styles.confidenceBar, { backgroundColor: colors.muted }]}>
-                   <View style={[styles.confidenceFill, { backgroundColor: colors.primary, width: `${Math.round(item.similarity * 100)}%` }]} />
-                </View>
-                 <Text style={styles.confidenceText}>{Math.round(item.similarity * 100)}%</Text>
+                <Text numberOfLines={1} style={[styles.confidenceText, { color: colors.mutedForeground }]}>
+                  {getFolderNameFromUri(item.uri)}
+                </Text>
               </View>
             </View>
           </View>
@@ -1015,6 +1014,22 @@ function OfflineModal({
       </View>
     </Modal>
   );
+}
+
+function getFolderNameFromUri(uri: string): string {
+  try {
+    const cleanUri = uri.split('?')[0];
+    const segments = cleanUri.split('/').filter(Boolean);
+    if (segments.length >= 2) {
+      const candidate = segments[segments.length - 2];
+      if (candidate && candidate.length > 0) {
+        return decodeURIComponent(candidate);
+      }
+    }
+  } catch {
+    // fallthrough
+  }
+  return 'Galeria';
 }
 
 export default function HomeScreen() {
