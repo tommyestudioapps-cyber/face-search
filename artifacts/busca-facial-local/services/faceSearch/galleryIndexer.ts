@@ -383,6 +383,7 @@ async function runGalleryIndex(
   let progress = makeInitialProgress();
   let totalAssets = 0;
   let indexedPhotoCount = 0;
+  let workAssets = 0;
   let skippedAssets = 0;
   let indexedFaceCount = 0;
   let removedPhotos = 0;
@@ -500,7 +501,7 @@ async function runGalleryIndex(
         throwIfCancelled(cancellation);
       }
       if (batch && progress.processedAssets > 0 && (batch.shouldYield?.() || shouldPauseBatch(
-        progress.processedAssets,
+        workAssets,
         batch.maxAssets,
         Date.now() - indexStartedAt,
         batch.timeBudgetMs,
@@ -574,6 +575,9 @@ async function runGalleryIndex(
         }
         if (result.skipped) {
           skippedAssets += 1;
+        }
+        if (result.indexed || result.skipped) {
+          workAssets += 1;
         }
 
         progress = {

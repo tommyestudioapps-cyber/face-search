@@ -27,6 +27,12 @@ Ao ativar ou reativar a indexação automática pelo seletor, preserve o cursor 
 
 **How to apply:** Não limpe o cursor no ramo de ativação do seletor. Mantenha limpezas nos fluxos de recusa/desativação, cursor inválido ou incompatível, e conclusão da varredura.
 
+No orçamento de assets de um lote, conte apenas assets indexados ou pulados após erro recuperável; mantenha o progresso visível contando todos os assets visitados, inclusive os inalterados.
+
+**Why:** Recontar fotos inalteradas no limite por lote pode consumir o orçamento sem avançar o trabalho de indexação.
+
+**How to apply:** Use um contador de trabalho separado para `maxAssets`; não reutilize o total exibido em `processedAssets`.
+
 O estado resumido da tarefa deve ser persistido no SQLite, mas a falha isolada dessa gravação não pode interromper a indexação ou fazer uma limpeza bem-sucedida parecer falha.
 
 **Why:** O estado é necessário para recuperação e UI, porém é metadado; as fotos e embeddings continuam sendo a fonte de dados do índice e não devem ficar indisponíveis por uma falha transitória ao atualizar o resumo.
