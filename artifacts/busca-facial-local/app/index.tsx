@@ -1047,7 +1047,6 @@ function getFolderNameFromUri(uri: string): string {
 export default function HomeScreen() {
   const [screen, setScreen] = useState<AppScreen>('onboarding');
   const [indexedFilter, setIndexedFilter] = useState<'all' | 'withFaces'>('all');
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   const [showReward, setShowReward] = useState(false);
   const [showIndexSettings, setShowIndexSettings] = useState(false);
@@ -1082,7 +1081,12 @@ export default function HomeScreen() {
     imageHeight,
     normalizedImageUri,
     restoreFromSession,
+    slots,
+    activeSlot,
+    setActiveSlot,
+    clearSlot,
   } = useFaceCapture();
+  const selectedImage = slots[activeSlot].sourceUri;
   const {
     status: faceSearchStatus,
     operation: faceSearchOperation,
@@ -1212,7 +1216,6 @@ export default function HomeScreen() {
           `[Boot] restaurando sessão de ${new Date(session.savedAt).toISOString()}`,
         );
       }
-      setSelectedImage(session.sourceUri);
       setActiveAlignedFace(session.alignedFace);
       await rehydrateSession(session.alignedFace);
     })();
@@ -1476,10 +1479,7 @@ export default function HomeScreen() {
       });
       if (!selection.canceled && selection.assets[0]?.uri) {
         const uri = selection.assets[0].uri;
-        await clearPersistedSession();
-        await resetCapture();
-        setSelectedImage(uri);
-        void analyzeFace(uri);
+          void analyzeFace(uri, activeSlot);
       }
     } catch (error) {
       console.error('[Gallery] não foi possível abrir a galeria', error);
@@ -1502,10 +1502,7 @@ export default function HomeScreen() {
     });
     if (!selection.canceled && selection.assets[0]?.uri) {
       const uri = selection.assets[0].uri;
-      await clearPersistedSession();
-      await resetCapture();
-      setSelectedImage(uri);
-      void analyzeFace(uri);
+      void analyzeFace(uri, activeSlot);
     }
   };
 
