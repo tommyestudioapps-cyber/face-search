@@ -26,6 +26,7 @@ import { clearPersistedSession } from '@/services/faceCapture/sessionPersistence
 import { FaceCaptureFeedback } from '@/components/FaceCaptureFeedback';
 import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
 import { FaceSearchProgress } from '@/components/FaceSearchProgress';
+import { PhotoViewer } from '@/components/PhotoViewer';
 import { IndexSettings } from '@/components/IndexSettings';
 import { IndexedGallery } from '@/components/IndexedGallery';
 import { GlobalMatchesPanel } from '@/components/GlobalMatchesPanel';
@@ -837,9 +838,11 @@ function Analyzing({
 function Results({
   results,
   onNewSearch,
+  onOpenPhoto,
 }: {
   results: FaceSearchResult[];
   onNewSearch: () => void;
+  onOpenPhoto: (uri: string) => void;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -886,7 +889,16 @@ function Results({
           </View>
         }
         renderItem={({ item }) => (
-          <View style={[styles.resultCard, { backgroundColor: colors.card }]}>
+          <Pressable
+            onPress={() => onOpenPhoto(item.uri)}
+            accessibilityRole="button"
+            accessibilityLabel={`Abrir ${item.filename ?? 'foto'}`}
+            style={({ pressed }) => [
+              styles.resultCard,
+              { backgroundColor: colors.card },
+              pressed ? styles.pressed : null,
+            ]}
+          >
             <Image source={typeof item.uri === 'number' ? item.uri : { uri: item.uri }} style={styles.resultImage} />
             <View style={styles.resultCardBody}>
               <Text numberOfLines={1} style={[styles.resultFilename, { color: colors.foreground }]}>
@@ -898,7 +910,7 @@ function Results({
                 </Text>
               </View>
             </View>
-          </View>
+          </Pressable>
         )}
         ListEmptyComponent={
           <View style={styles.emptyResults}>
@@ -1036,6 +1048,7 @@ export default function HomeScreen() {
   const [screen, setScreen] = useState<AppScreen>('onboarding');
   const [indexedFilter, setIndexedFilter] = useState<'all' | 'withFaces'>('all');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [viewerUri, setViewerUri] = useState<string | null>(null);
   const [showReward, setShowReward] = useState(false);
   const [showIndexSettings, setShowIndexSettings] = useState(false);
   const [showOffline, setShowOffline] = useState(false);
@@ -1632,6 +1645,7 @@ export default function HomeScreen() {
           <Results
             results={results}
             onNewSearch={matchesReturnScreen ? returnFromMatches : goHome}
+            onOpenPhoto={(uri) => setViewerUri(uri)}
           />
         );
       case 'indexed': {
@@ -1692,6 +1706,7 @@ export default function HomeScreen() {
     openMatches,
     selectedAlbumTitle,
     setShowAlbumPicker,
+    setViewerUri,
     handleSelectAlbum,
     cancelIndexing,
     results,
@@ -1744,6 +1759,11 @@ export default function HomeScreen() {
         selectedAlbumId={selectedAlbumId}
         onSelect={handleSelectAlbum}
         onClose={() => setShowAlbumPicker(false)}
+      />
+      <PhotoViewer
+        visible={viewerUri !== null}
+        uri={viewerUri}
+        onClose={() => setViewerUri(null)}
       />
     </>
   );
