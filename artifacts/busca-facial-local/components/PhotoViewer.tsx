@@ -118,22 +118,23 @@ export function PhotoViewer({ uri, visible, onClose }: PhotoViewerProps) {
             }}
           />
           {uri ? (
-            <Image
-              key={uri}
-              source={{ uri }}
-              resizeMode="contain"
-              pointerEvents="none"
-              onLoad={({ nativeEvent }) => {
-                const { width, height } = nativeEvent.source;
-                if (width > 0 && height > 0) setImageSize({ width, height });
-              }}
-              style={[
-                styles.image,
-                imageBounds
-                  ? imageBounds
-                  : StyleSheet.absoluteFillObject,
-              ]}
-            />
+            <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+              <Image
+                key={uri}
+                source={{ uri }}
+                resizeMode="contain"
+                onLoad={({ nativeEvent }) => {
+                  const { width, height } = nativeEvent.source;
+                  if (width > 0 && height > 0) setImageSize({ width, height });
+                }}
+                style={[
+                  styles.image,
+                  imageBounds
+                    ? imageBounds
+                    : StyleSheet.absoluteFillObject,
+                ]}
+              />
+            </View>
           ) : null}
           <View
             pointerEvents="box-none"
