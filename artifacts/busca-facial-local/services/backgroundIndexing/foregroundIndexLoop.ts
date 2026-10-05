@@ -39,12 +39,27 @@ export function startForegroundIndexing(
   let cancelled = false;
 
   const promise = (async () => {
+    if (__DEV__) {
+      console.log('[ForegroundIndex] loop iniciado');
+    }
     try {
       while (!cancelled) {
         const consent = await getBackgroundIndexConsent();
-        if (consent !== 'accepted') break;
+        if (consent !== 'accepted') {
+          if (__DEV__) {
+            console.log(`[ForegroundIndex] loop saindo: consent=${consent}`);
+          }
+          break;
+        }
 
-        if (AppState.currentState !== 'active') break;
+        if (AppState.currentState !== 'active') {
+          if (__DEV__) {
+            console.log(
+              `[ForegroundIndex] loop saindo: AppState=${AppState.currentState}`,
+            );
+          }
+          break;
+        }
 
         try {
           await runBackgroundIndexBatch({
@@ -57,7 +72,12 @@ export function startForegroundIndexing(
           break;
         }
 
-        if (cancelled) break;
+        if (cancelled) {
+          if (__DEV__) {
+            console.log('[ForegroundIndex] loop saindo: cancelado');
+          }
+          break;
+        }
 
         const state = await faceSearchRepository.getBackgroundIndexState();
         if (options.onProgress) {
@@ -68,10 +88,18 @@ export function startForegroundIndexing(
           state.status === 'error' ||
           state.status === 'cancelled'
         ) {
+          if (__DEV__) {
+            console.log(
+              `[ForegroundIndex] loop saindo: status=${state.status}`,
+            );
+          }
           break;
         }
       }
     } finally {
+      if (__DEV__) {
+        console.log('[ForegroundIndex] loop finalizado');
+      }
       activeHandle = null;
     }
   })();

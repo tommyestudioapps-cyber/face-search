@@ -1357,6 +1357,46 @@ export default function HomeScreen() {
     startForegroundIndexingIfNeeded,
   ]);
 
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const WATCHDOG_INTERVAL_MS = 15_000;
+    const id = setInterval(() => {
+      void (async () => {
+        try {
+          if (backgroundIndexConsent !== 'accepted') return;
+          if (!hasGalleryPhotoAccess) return;
+          if (
+            backgroundIndexState.status === 'completed' ||
+            backgroundIndexState.status === 'cancelled'
+          ) {
+            return;
+          }
+          const foregroundIndexLoop = await import(
+            '@/services/backgroundIndexing/foregroundIndexLoop'
+          );
+          const active = foregroundIndexLoop.getActiveForegroundIndexing();
+          if (active && active.isRunning()) return;
+          if (__DEV__) {
+            console.log(
+              `[Watchdog] loop não está rodando (state.status=${backgroundIndexState.status}); reiniciando`,
+            );
+          }
+          await startForegroundIndexingIfNeeded();
+        } catch (error) {
+          if (__DEV__) {
+            console.log('[Watchdog] erro ao reiniciar loop', error);
+          }
+        }
+      })();
+    }, WATCHDOG_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [
+    backgroundIndexConsent,
+    hasGalleryPhotoAccess,
+    backgroundIndexState.status,
+    startForegroundIndexingIfNeeded,
+  ]);
+
   const handleOnboarding = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowOnboardingPermissions(true);
