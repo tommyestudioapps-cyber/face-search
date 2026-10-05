@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather } from '@expo/vector-icons';
+import { Feather, FontAwesome } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -17,6 +17,14 @@ import {
   Text,
   View,
 } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layout } from '@/constants/layout';
 import { useColors } from '@/hooks/useColors';
@@ -864,6 +872,37 @@ function SelectPhoto({
   );
 }
 
+function OrbitingSilhouette({ color }: { color: string }) {
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    rotation.value = withRepeat(
+      withTiming(360, { duration: 3600, easing: Easing.linear }),
+      -1,
+      false,
+    );
+    return () => cancelAnimation(rotation);
+  }, [rotation]);
+
+  const orbitStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
+  const uprightStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${-rotation.value}deg` }],
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.analysisOrbit, orbitStyle]}
+    >
+      <Animated.View style={[styles.analysisOrbitingPerson, uprightStyle]}>
+        <FontAwesome name="user" size={19} color={color} />
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
 function Analyzing({
   progress,
   status,
@@ -885,8 +924,7 @@ function Analyzing({
     <View style={[styles.screen, styles.centeredScreen, { backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
       <View style={styles.analysisVisual}>
         <View style={[styles.analysisRing, { borderColor: colors.accent }]} />
-        <View style={[styles.analysisRingInner, { borderColor: colors.primary }]} />
-        <Feather name="maximize" size={41} color={colors.primary} />
+        <OrbitingSilhouette color={colors.primary} />
       </View>
       <Text style={[styles.analysisTitle, { color: colors.foreground }]}>Analisando sua galeria</Text>
       <Text style={[styles.analysisBody, { color: colors.mutedForeground }]}>
@@ -2077,7 +2115,8 @@ const styles = StyleSheet.create({
   centeredScreen: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   analysisVisual: { width: 147, height: 147, alignItems: 'center', justifyContent: 'center', marginBottom: 31 },
   analysisRing: { ...StyleSheet.absoluteFillObject, borderWidth: 1, borderRadius: 74 },
-  analysisRingInner: { width: 102, height: 102, borderWidth: 1.5, borderRadius: 51, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  analysisOrbit: { ...StyleSheet.absoluteFillObject, alignItems: 'center' },
+  analysisOrbitingPerson: { width: 24, height: 24, marginTop: 15, alignItems: 'center', justifyContent: 'center' },
   analysisTitle: { fontFamily: 'Inter_700Bold', fontSize: 23, letterSpacing: -0.5 },
   analysisBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 11 },
   analysisProgressCard: { width: '100%', marginTop: 25 },
