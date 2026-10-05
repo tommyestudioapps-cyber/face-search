@@ -8,16 +8,15 @@
     "scheme": "busca-facial-local",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#080B14"
-    },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "package": "com.buscafacial.local",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#080B14"
+      },
       "allowBackup": false,
       "permissions": [
         "CAMERA",
@@ -31,6 +30,15 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#080B14"
+        }
+      ],
       "expo-font",
       "expo-web-browser",
       "expo-sqlite",
