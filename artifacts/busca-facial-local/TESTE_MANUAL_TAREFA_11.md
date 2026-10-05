@@ -65,7 +65,7 @@ Resultado esperado:
 
 1. Faça uma captura/análise e selecione um rosto.
 2. Volte para a tela inicial ou cancele a captura.
-3. Abra **Configurações → Aplicativos → Busca Facial Local → Armazenamento**
+3. Abra **Configurações → Aplicativos → Search Face Local → Armazenamento**
    (o nome dos menus pode variar por fabricante).
 4. Verifique que a foto original continua na galeria.
 5. Repita a inspeção após desmontar a tela ou fechar/reabrir o fluxo de seleção.

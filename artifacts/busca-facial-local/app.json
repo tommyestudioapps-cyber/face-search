@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Busca Facial Local",
+    "name": "Search Face Local",
     "slug": "busca-facial-local",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -46,13 +46,13 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Permita que o Busca Facial Local use a câmera para capturar um rosto."
+          "cameraPermissionText": "Permita que o Search Face Local use a câmera para capturar um rosto."
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "Permita que o Busca Facial Local acesse suas fotos para procurar rostos localmente.",
+          "photosPermission": "Permita que o Search Face Local acesse suas fotos para procurar rostos localmente.",
           "savePhotosPermission": false,
           "isAccessMediaLocationEnabled": false,
           "granularPermissions": [

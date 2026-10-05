@@ -245,7 +245,7 @@ function Onboarding({
         ]}
       >
         <Text style={[styles.brandName, { color: colors.foreground }]}>
-          Search Face
+          Search Face Local
         </Text>
         <Text
           style={[
@@ -340,7 +340,7 @@ function Onboarding({
             />
           </View>
           <Text style={[styles.legalNote, { color: colors.mutedForeground }]}>
-            Ao continuar, você permite que o Search Face acesse suas fotos para realizar a busca local.
+            Ao continuar, você permite que o Search Face Local acesse suas fotos para realizar a busca local.
           </Text>
         </View>
       </ScrollView>
@@ -447,7 +447,7 @@ function Home({
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Header
-        title="Search Face"
+        title="Search Face Local"
         onSettings={onSettings}
         onNext={onSelect}
         centeredTitle
