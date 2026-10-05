@@ -746,17 +746,22 @@ function SelectPhoto({
                 onPress={() => onSelectSlot(slot)}
                 testID={`select-slot-${slot}`}
                 style={({ pressed }) => [
-                  styles.slotPill,
-                  isActive
-                    ? { backgroundColor: colors.accent, borderColor: colors.primary }
-                    : { backgroundColor: colors.card, borderColor: colors.border },
+                  styles.slotOption,
                   pressed ? styles.pressed : null,
                 ]}
               >
+                <View
+                  style={[
+                    styles.slotDot,
+                    isActive
+                      ? { backgroundColor: colors.primary }
+                      : { backgroundColor: '#050810' },
+                  ]}
+                />
                 <Text
                   style={[
-                    styles.slotPillText,
-                    { color: isActive ? colors.primaryForeground : colors.mutedForeground },
+                    styles.slotLabel,
+                    { color: isActive ? colors.foreground : colors.mutedForeground },
                   ]}
                 >
                   {`Foto ${slot + 1}`}
@@ -1942,22 +1947,24 @@ const styles = StyleSheet.create({
   slotSelector: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 10,
+    gap: 18,
     marginTop: 12,
   },
-  slotPill: {
-    minWidth: 68,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 15,
-    borderWidth: 1,
+  slotOption: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
   },
-  slotPillText: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 11,
-    letterSpacing: 0.2,
+  slotDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  slotLabel: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: 12,
   },
   cropClearButton: {
     position: 'absolute',
