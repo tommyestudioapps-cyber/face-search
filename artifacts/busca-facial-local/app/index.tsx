@@ -1945,17 +1945,18 @@ const styles = StyleSheet.create({
   emptyCropBody: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 7 },
   helperText: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 14, textAlign: 'center', paddingHorizontal: 23, marginTop: 12 },
   slotSelector: {
+    width: '100%',
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
+    gap: 12,
     marginTop: 12,
   },
   slotOption: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
     paddingVertical: 4,
-    paddingHorizontal: 6,
   },
   slotDot: {
     width: 12,
