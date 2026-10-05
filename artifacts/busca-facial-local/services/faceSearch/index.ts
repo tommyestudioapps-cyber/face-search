@@ -20,6 +20,7 @@ import type {
   IndexedPhoto,
   StoredIndexStats,
 } from './types';
+import type { SearchProgressEvent } from './searchMath';
 import type { AlignedFace } from '../faceCapture/types';
 import { clearBackgroundIndexCursor } from '../backgroundIndexing/checkpoint';
 import { indexCoordinator } from '../backgroundIndexing/indexCoordinator';
@@ -99,8 +100,9 @@ export async function indexGallery(
 
 export async function searchFace(
   alignedFace: AlignedFace,
+  onProgress?: (event: SearchProgressEvent) => void,
 ): Promise<FaceSearchSummary> {
-  return searchAlignedFace(alignedFace);
+  return searchAlignedFace(alignedFace, onProgress);
 }
 
 export async function searchMultiFace(
@@ -160,4 +162,5 @@ export type {
   BackgroundIndexState,
   BackgroundIndexStatus,
 } from '../backgroundIndexing/status';
+export type { SearchProgressEvent } from './searchMath';
 export { searchAlignedFace };

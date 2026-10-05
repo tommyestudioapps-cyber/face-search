@@ -15,14 +15,21 @@ import {
   type FaceSearchResult,
   type FaceSearchSummary,
 } from './types';
-import { cosineSimilarity, groupBestResults } from './searchMath';
+import {
+  cosineSimilarity,
+  groupBestResults,
+  type SearchProgressEvent,
+} from './searchMath';
 import { indexCoordinator } from '../backgroundIndexing/indexCoordinator';
 import { getRecognitionModelIdentity } from './modelIdentity';
 
 export async function searchAlignedFace(
   alignedFace: AlignedFace,
+  onProgress?: (event: SearchProgressEvent) => void,
 ): Promise<FaceSearchSummary> {
-  return indexCoordinator.run('search', () => runSearchAlignedFace(alignedFace));
+  return indexCoordinator.run('search', () =>
+    runSearchAlignedFace(alignedFace, onProgress),
+  );
 }
 
 export async function searchMultiAlignedFaces(
@@ -80,6 +87,7 @@ export async function searchMultiAlignedFaces(
 
 async function runSearchAlignedFace(
   alignedFace: AlignedFace,
+  onProgress?: (event: SearchProgressEvent) => void,
 ): Promise<FaceSearchSummary> {
   if (Platform.OS === 'web') {
     throw new FaceRecognitionError(
@@ -122,16 +130,10 @@ async function runSearchAlignedFace(
         `[Search:diag] candidate[0] norm=${Math.sqrt(candidateSq).toFixed(3)} first=${candidates[0].face.embedding.values[0].toFixed(4)}`,
       );
     }
-    const sims = candidates
-      .map((c) =>
-        cosineSimilarity(queryEmbedding.values, c.face.embedding.values),
-      )
-      .sort((a, b) => b - a);
-    console.warn('[Search:diag] top5 sims=' + sims.slice(0, 5).map(s => s.toFixed(4)).join(','));
     console.warn(
-      `[Search:diag] thresholds review=${faceSearch.similarityThresholds.review} approved=${faceSearch.similarityThresholds.approved}`,
+      `[Search:diag] thresholds review=${faceSearch.similarityThresholds.review} approved=${faceSearch.similarityThresholds.approved} candidates=${candidates.length}`,
     );
-    const results = groupBestResults(
+    const results = await groupBestResults(
       candidates,
       queryEmbedding.values,
       faceSearch.similarityThresholds,
@@ -151,6 +153,7 @@ async function runSearchAlignedFace(
           }
         }
       },
+      onProgress,
     );
     console.warn(`[Search:diag] finalResults=${results.length}`);
 

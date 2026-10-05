@@ -13,6 +13,7 @@ import type {
   GalleryIndexResult,
   GalleryIndexTask,
 } from '@/services/faceSearch/galleryIndexer';
+import type { SearchProgressEvent } from '@/services/faceSearch';
 import { FaceSearchOperationGate } from './faceSearchOperationGate';
 
 type FaceSearchModule = typeof import('@/services/faceSearch');
@@ -46,6 +47,7 @@ export interface UseFaceSearchResult {
   progress: FaceIndexProgress;
   results: FaceSearchResult[];
   summary: FaceSearchSummary | null;
+  searchProgress: SearchProgressEvent | null;
   storedIndexStats: StoredIndexStats;
   indexedPhotos: IndexedPhoto[];
   isLoadingIndexedPhotos: boolean;
@@ -121,6 +123,8 @@ export function useFaceSearch(): UseFaceSearchResult {
   const [progress, setProgress] = useState<FaceIndexProgress>(initialProgress);
   const [results, setResults] = useState<FaceSearchResult[]>([]);
   const [summary, setSummary] = useState<FaceSearchSummary | null>(null);
+  const [searchProgress, setSearchProgress] =
+    useState<SearchProgressEvent | null>(null);
   const [storedIndexStats, setStoredIndexStats] =
     useState<StoredIndexStats>(initialStoredIndexStats);
   const [indexedPhotos, setIndexedPhotos] = useState<IndexedPhoto[]>([]);
@@ -448,11 +452,17 @@ export function useFaceSearch(): UseFaceSearchResult {
         if (mountedRef.current) {
           setError(null);
           setStatus('searching');
+          setSearchProgress(null);
         }
 
         const faceSearchModule = await getFaceSearchModule();
+        const handleProgress = (event: SearchProgressEvent) => {
+          if (mountedRef.current) {
+            setSearchProgress(event);
+          }
+        };
         const nextSummary = validFaces.length === 1
-          ? await faceSearchModule.searchFace(validFaces[0]!)
+          ? await faceSearchModule.searchFace(validFaces[0]!, handleProgress)
           : await faceSearchModule.searchMultiFace(validFaces);
         if (mountedRef.current) {
           setSummary(nextSummary);
@@ -564,6 +574,7 @@ export function useFaceSearch(): UseFaceSearchResult {
     progress,
     results,
     summary,
+    searchProgress,
     storedIndexStats,
     indexedPhotos,
     isLoadingIndexedPhotos,

@@ -30,6 +30,13 @@ export interface PhotoSimilarityScore {
   rank: number;
 }
 
+export interface SearchProgressEvent {
+  candidatesProcessed: number;
+  candidatesTotal: number;
+  distinctPhotosProcessed: number;
+  matchesSoFar: number;
+}
+
 export function normalizeL2(values: Float32Array): Float32Array {
   let squaredNorm = 0;
   for (const value of values) {
@@ -112,13 +119,14 @@ function createResult(
   };
 }
 
-export function groupBestResults(
+export async function groupBestResults(
   candidates: SearchMathCandidate[],
   queryEmbedding: Float32Array,
   thresholds: SimilarityThresholds,
   maxResults: number,
-  onPhotoScores?: (scores: PhotoSimilarityScore[]) => void,
-): FaceSearchResult[] {
+  onDiagnostic: ((scores: PhotoSimilarityScore[]) => void) | undefined,
+  onProgress?: (event: SearchProgressEvent) => void,
+): Promise<FaceSearchResult[]> {
   const minimumSimilarity = Math.max(
     thresholds.review,
     thresholds.rejected,
@@ -129,6 +137,9 @@ export function groupBestResults(
     { assetId: string; filename: string | null; bestSimilarity: number }
   >();
   const allScores: number[] = [];
+  const seenAssetIds = new Set<string>();
+  let processed = 0;
+  let matchesSoFar = 0;
 
   for (const candidate of candidates) {
     const similarity = cosineSimilarity(
@@ -136,6 +147,8 @@ export function groupBestResults(
       candidate.face.embedding.values,
     );
     allScores.push(similarity);
+    seenAssetIds.add(candidate.photo.assetId);
+    processed += 1;
     const previousScore = bestSimilarityByPhoto.get(candidate.photo.assetId);
     if (!previousScore || similarity > previousScore.bestSimilarity) {
       bestSimilarityByPhoto.set(candidate.photo.assetId, {
@@ -144,23 +157,42 @@ export function groupBestResults(
         bestSimilarity: similarity,
       });
     }
-    if (similarity < minimumSimilarity) {
-      continue;
+
+    if (similarity >= minimumSimilarity) {
+      const result = createResult(candidate, similarity, thresholds);
+      const previous = bestByPhoto.get(result.assetId);
+      if (!previous) {
+        matchesSoFar += 1;
+      }
+      if (!previous || result.similarity > previous.similarity) {
+        bestByPhoto.set(result.assetId, result);
+      }
     }
 
-    const result = createResult(candidate, similarity, thresholds);
-    const previous = bestByPhoto.get(result.assetId);
-    if (!previous || result.similarity > previous.similarity) {
-      bestByPhoto.set(result.assetId, result);
+    if (processed % 100 === 0) {
+      onProgress?.({
+        candidatesProcessed: processed,
+        candidatesTotal: candidates.length,
+        distinctPhotosProcessed: seenAssetIds.size,
+        matchesSoFar,
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
   }
+
+  onProgress?.({
+    candidatesProcessed: processed,
+    candidatesTotal: candidates.length,
+    distinctPhotosProcessed: seenAssetIds.size,
+    matchesSoFar,
+  });
 
   const sortedAll = [...allScores].sort((a, b) => b - a);
   console.warn(`[Search:raw] total_raw=${sortedAll.length} top20_raw=${sortedAll.slice(0, 20).map(s => s.toFixed(3)).join(',')}`);
   const rankedPhotoScores = [...bestSimilarityByPhoto.values()]
     .sort((left, right) => right.bestSimilarity - left.bestSimilarity)
     .map((score, index) => ({ ...score, rank: index + 1 }));
-  onPhotoScores?.(rankedPhotoScores);
+  onDiagnostic?.(rankedPhotoScores);
 
   const allSorted = [...bestByPhoto.values()].sort((left, right) => right.similarity - left.similarity);
   console.warn(`[Search:top] total=${allSorted.length} top20=${allSorted.slice(0, 20).map(r => r.similarity.toFixed(3)).join(',')}`);
