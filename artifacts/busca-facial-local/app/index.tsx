@@ -600,6 +600,9 @@ function SelectPhoto({
   onPressAlbum,
   onBack,
   onOpenMatches,
+  activeSlot,
+  onSelectSlot,
+  onClearSlot,
 }: {
   selectedImage: string | null;
   normalizedImageUri: string | null;
@@ -620,6 +623,9 @@ function SelectPhoto({
   onPressAlbum: () => void;
   onBack: () => void;
   onOpenMatches: () => void;
+  activeSlot: 0 | 1;
+  onSelectSlot: (slot: 0 | 1) => void;
+  onClearSlot: (slot: 0 | 1) => void;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -673,6 +679,17 @@ function SelectPhoto({
                   {faces.length > 0 ? 'Rosto detectado' : 'Detectando o rosto'}
                 </Text>
               </View>
+              <Pressable
+                onPress={() => onClearSlot(activeSlot)}
+                testID="clear-active-slot"
+                style={({ pressed }) => [
+                  styles.cropClearButton,
+                  { backgroundColor: 'rgba(8,11,20,0.75)' },
+                  pressed ? styles.pressed : null,
+                ]}
+              >
+                <Feather name="trash-2" size={16} color={colors.foreground} />
+              </Pressable>
               {imageWidth && imageHeight ? (
                 <FaceSelectionOverlay
                   faces={faces}
@@ -717,8 +734,37 @@ function SelectPhoto({
         />
 
         <Text style={[styles.helperText, { color: colors.mutedForeground }]}>
-          Para melhores resultados, use uma foto nítida e com boa iluminação.
+          Para melhores resultados, use uma foto nítida
         </Text>
+
+        <View style={styles.slotSelector}>
+          {([0, 1] as const).map((slot) => {
+            const isActive = slot === activeSlot;
+            return (
+              <Pressable
+                key={slot}
+                onPress={() => onSelectSlot(slot)}
+                testID={`select-slot-${slot}`}
+                style={({ pressed }) => [
+                  styles.slotPill,
+                  isActive
+                    ? { backgroundColor: colors.accent, borderColor: colors.primary }
+                    : { backgroundColor: colors.card, borderColor: colors.border },
+                  pressed ? styles.pressed : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.slotPillText,
+                    { color: isActive ? colors.primaryForeground : colors.mutedForeground },
+                  ]}
+                >
+                  {`Foto ${slot + 1}`}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
         <View style={styles.sourceButtons}>
           <Pressable
@@ -1651,6 +1697,9 @@ export default function HomeScreen() {
             onPressAlbum={() => setShowAlbumPicker(true)}
             onBack={leaveSelection}
             onOpenMatches={openMatches}
+            activeSlot={activeSlot}
+            onSelectSlot={setActiveSlot}
+            onClearSlot={clearSlot}
           />
         );
       case 'analyzing':
@@ -1889,7 +1938,38 @@ const styles = StyleSheet.create({
   emptyCropIcon: { width: 61, height: 61, borderRadius: 21, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
   emptyCropTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15, textAlign: 'center' },
   emptyCropBody: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 7 },
-  helperText: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18, textAlign: 'center', paddingHorizontal: 23, marginTop: 14 },
+  helperText: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 14, textAlign: 'center', paddingHorizontal: 23, marginTop: 12 },
+  slotSelector: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 12,
+  },
+  slotPill: {
+    minWidth: 68,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotPillText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+    letterSpacing: 0.2,
+  },
+  cropClearButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
   sourceButtons: { flexDirection: 'row', gap: 12, marginTop: 25, marginBottom: 0 },
   sourceButton: { flex: 1, minHeight: 52, borderRadius: 16, borderWidth: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   sourceButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
