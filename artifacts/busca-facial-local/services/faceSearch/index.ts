@@ -13,7 +13,7 @@ import {
   loadRecognitionModel,
   releaseRecognitionModel,
 } from './model';
-import { searchAlignedFace } from './search';
+import { searchAlignedFace, searchMultiAlignedFaces } from './search';
 import type {
   FaceIndexProgress,
   FaceSearchSummary,
@@ -101,6 +101,12 @@ export async function searchFace(
   alignedFace: AlignedFace,
 ): Promise<FaceSearchSummary> {
   return searchAlignedFace(alignedFace);
+}
+
+export async function searchMultiFace(
+  alignedFaces: AlignedFace[],
+): Promise<FaceSearchSummary> {
+  return searchMultiAlignedFaces(alignedFaces);
 }
 
 export async function readIndexedPhotos(): Promise<IndexedPhoto[]> {

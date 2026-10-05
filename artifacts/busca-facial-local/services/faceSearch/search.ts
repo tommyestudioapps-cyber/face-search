@@ -12,6 +12,7 @@ import {
 } from './repository';
 import {
   FaceRecognitionError,
+  type FaceSearchResult,
   type FaceSearchSummary,
 } from './types';
 import { cosineSimilarity, groupBestResults } from './searchMath';
@@ -22,6 +23,59 @@ export async function searchAlignedFace(
   alignedFace: AlignedFace,
 ): Promise<FaceSearchSummary> {
   return indexCoordinator.run('search', () => runSearchAlignedFace(alignedFace));
+}
+
+export async function searchMultiAlignedFaces(
+  alignedFaces: AlignedFace[],
+): Promise<FaceSearchSummary> {
+  if (alignedFaces.length === 0) {
+    throw new FaceRecognitionError(
+      'invalid-input',
+      'Nenhum rosto informado para a busca.',
+    );
+  }
+  if (alignedFaces.length > 2) {
+    throw new FaceRecognitionError(
+      'invalid-input',
+      'A busca suporta no máximo 2 rostos.',
+    );
+  }
+  if (alignedFaces.length === 1) {
+    return searchAlignedFace(alignedFaces[0]!);
+  }
+
+  const summaryA = await searchAlignedFace(alignedFaces[0]!);
+  const summaryB = await searchAlignedFace(alignedFaces[1]!);
+  const resultsA = new Map(
+    summaryA.results.map((result) => [result.assetId, result] as const),
+  );
+  const resultsB = new Map(
+    summaryB.results.map((result) => [result.assetId, result] as const),
+  );
+  const results: FaceSearchResult[] = [];
+
+  for (const [assetId, resultA] of resultsA) {
+    const resultB = resultsB.get(assetId);
+    if (!resultB) continue;
+
+    const minSimilarity = Math.min(resultA.similarity, resultB.similarity);
+    const lowerSimilarityResult =
+      resultA.similarity <= resultB.similarity ? resultA : resultB;
+    results.push({
+      ...lowerSimilarityResult,
+      similarity: minSimilarity,
+    });
+  }
+
+  results.sort((a, b) => b.similarity - a.similarity);
+
+  return {
+    queryModelVersion: `${summaryA.queryModelVersion}|${summaryB.queryModelVersion}`,
+    totalCandidates: summaryA.totalCandidates + summaryB.totalCandidates,
+    matchedFaces: results.length,
+    returnedPhotos: results.length,
+    results,
+  };
 }
 
 async function runSearchAlignedFace(
