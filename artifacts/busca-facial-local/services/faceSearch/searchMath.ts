@@ -34,6 +34,7 @@ export interface SearchProgressEvent {
   candidatesProcessed: number;
   candidatesTotal: number;
   distinctPhotosProcessed: number;
+  distinctPhotosTotal: number;
   matchesSoFar: number;
 }
 
@@ -137,6 +138,9 @@ export async function groupBestResults(
     { assetId: string; filename: string | null; bestSimilarity: number }
   >();
   const allScores: number[] = [];
+  const distinctPhotosTotal = new Set(
+    candidates.map((candidate) => candidate.photo.assetId),
+  ).size;
   const seenAssetIds = new Set<string>();
   let processed = 0;
   let matchesSoFar = 0;
@@ -174,6 +178,7 @@ export async function groupBestResults(
         candidatesProcessed: processed,
         candidatesTotal: candidates.length,
         distinctPhotosProcessed: seenAssetIds.size,
+        distinctPhotosTotal,
         matchesSoFar,
       });
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -184,6 +189,7 @@ export async function groupBestResults(
     candidatesProcessed: processed,
     candidatesTotal: candidates.length,
     distinctPhotosProcessed: seenAssetIds.size,
+    distinctPhotosTotal,
     matchesSoFar,
   });
 
