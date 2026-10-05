@@ -753,9 +753,10 @@ function SelectPhoto({
                 <View
                   style={[
                     styles.slotDot,
-                    isActive
-                      ? { backgroundColor: colors.primary }
-                      : { backgroundColor: '#050810' },
+                    {
+                      backgroundColor: isActive ? colors.primary : '#050810',
+                      borderColor: colors.foreground,
+                    },
                   ]}
                 />
                 <Text
@@ -1962,6 +1963,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   slotLabel: {
     fontFamily: 'Inter_500Medium',
