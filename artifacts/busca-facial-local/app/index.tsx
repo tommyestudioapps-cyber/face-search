@@ -755,7 +755,7 @@ function SelectPhoto({
                     styles.slotDot,
                     {
                       backgroundColor: isActive ? colors.primary : '#050810',
-                      borderColor: colors.foreground,
+                      borderColor: colors.border,
                     },
                   ]}
                 />
