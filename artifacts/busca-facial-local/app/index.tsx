@@ -425,6 +425,7 @@ function Home({
   matchCount,
   indexingState,
   indexingCount,
+  indexingTotalAssets,
   onOpenMatches,
   hasActiveFace,
 }: {
@@ -435,6 +436,7 @@ function Home({
   matchCount: number;
   indexingState: HomeIndexingState;
   indexingCount: number;
+  indexingTotalAssets: number | null;
   onOpenMatches: () => void;
   hasActiveFace: boolean;
 }) {
@@ -453,6 +455,7 @@ function Home({
       <HomeIndexingIndicator
         state={indexingState}
         processedAssets={indexingCount}
+        totalAssets={indexingTotalAssets}
         horizontalPadding={horizontalPadding}
         anchorColumnWidth={HEADER_ACTION_SIZE}
       />
@@ -1795,6 +1798,7 @@ export default function HomeScreen() {
                   : 'off'
             }
             indexingCount={backgroundIndexState.processedAssets}
+            indexingTotalAssets={backgroundIndexState.totalAssets}
             onOpenMatches={openMatches}
             hasActiveFace={Boolean(alignedFace)}
           />

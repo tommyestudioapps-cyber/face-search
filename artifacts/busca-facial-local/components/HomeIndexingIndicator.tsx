@@ -13,6 +13,7 @@ export type HomeIndexingState = 'indexing' | 'completed' | 'off';
 interface HomeIndexingIndicatorProps {
   state: HomeIndexingState;
   processedAssets: number;
+  totalAssets: number | null;
   horizontalPadding: number;
   anchorColumnWidth: number;
 }
@@ -20,6 +21,7 @@ interface HomeIndexingIndicatorProps {
 export function HomeIndexingIndicator({
   state,
   processedAssets,
+  totalAssets,
   horizontalPadding,
   anchorColumnWidth,
 }: HomeIndexingIndicatorProps) {
@@ -73,6 +75,10 @@ export function HomeIndexingIndicator({
       : state === 'indexing'
         ? LABEL_MUTED
         : LABEL_MUTED;
+  const countLabel =
+    totalAssets === null
+      ? processedAssets.toLocaleString('pt-BR')
+      : `${processedAssets.toLocaleString('pt-BR')} de ${totalAssets.toLocaleString('pt-BR')} fotos`;
 
   return (
     <View
@@ -92,7 +98,7 @@ export function HomeIndexingIndicator({
         </Text>
         {state !== 'off' ? (
           <Text style={[styles.count, { color: COUNT_COLOR }]}>
-            {processedAssets}
+            {countLabel}
           </Text>
         ) : null}
       </View>
