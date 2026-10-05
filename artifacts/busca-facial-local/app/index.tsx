@@ -1947,7 +1947,7 @@ const styles = StyleSheet.create({
   slotSelector: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 18,
+    gap: 24,
     marginTop: 12,
   },
   slotOption: {
