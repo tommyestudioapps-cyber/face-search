@@ -1203,6 +1203,16 @@ export default function HomeScreen() {
         }
         await refreshIndexedPhotos();
       },
+      onPartialProgress: (processedAssets, totalAssets) => {
+        if (!mountedRef.current) return;
+        setBackgroundIndexState((current) => ({
+          ...current,
+          status: 'running',
+          processedAssets,
+          totalAssets: totalAssets ?? current.totalAssets,
+          lastError: null,
+        }));
+      },
     });
   }, [refreshIndexedPhotos]);
 

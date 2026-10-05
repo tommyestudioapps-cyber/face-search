@@ -14,6 +14,7 @@ export interface ForegroundIndexingOptions {
   maxAssets?: number;
   timeBudgetMs?: number;
   onProgress?: (state: BackgroundIndexState) => void | Promise<void>;
+  onPartialProgress?: (processedAssets: number, totalAssets: number | null) => void;
 }
 
 const DEFAULT_MAX_ASSETS = 500;
@@ -46,7 +47,11 @@ export function startForegroundIndexing(
         if (AppState.currentState !== 'active') break;
 
         try {
-          await runBackgroundIndexBatch({ maxAssets, timeBudgetMs });
+          await runBackgroundIndexBatch({
+            maxAssets,
+            timeBudgetMs,
+            onPartialProgress: options.onPartialProgress,
+          });
         } catch (error) {
           console.warn('[ForegroundIndex] batch falhou', error);
           break;

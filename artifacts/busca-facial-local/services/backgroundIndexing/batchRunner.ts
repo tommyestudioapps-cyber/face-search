@@ -18,6 +18,7 @@ const TIME_BUDGET_MS = 15_000;
 export interface RunBackgroundIndexBatchOptions {
   maxAssets?: number;
   timeBudgetMs?: number;
+  onPartialProgress?: (processedAssets: number, totalAssets: number | null) => void;
 }
 
 async function persistBackgroundState(
@@ -52,6 +53,7 @@ async function runCoordinatedBackgroundIndexBatch(
   const activeGeneration = await faceSearchRepository.getActiveScanGeneration();
   const previousState = await faceSearchRepository.getBackgroundIndexState();
   const previousProcessed = previousState.processedAssets ?? 0;
+  const onPartialProgress = options.onPartialProgress;
   let cachedFullPermission: boolean | null = null;
   const checkFullPermissionOnce = async (): Promise<boolean> => {
     if (cachedFullPermission === null) {
@@ -132,6 +134,17 @@ async function runCoordinatedBackgroundIndexBatch(
   }, 15_000);
   try {
     const result = await indexGallery({
+      onProgress: onPartialProgress
+        ? (() => {
+            let lastEmitAt = 0;
+            return (progress: { processedAssets: number; totalAssets: number | null }) => {
+              const now = Date.now();
+              if (now - lastEmitAt < 500) return;
+              lastEmitAt = now;
+              onPartialProgress(startOffset + progress.processedAssets, progress.totalAssets);
+            };
+          })()
+        : undefined,
       batch: {
         after,
         generation,
