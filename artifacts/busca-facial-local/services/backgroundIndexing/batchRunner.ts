@@ -50,6 +50,8 @@ async function runCoordinatedBackgroundIndexBatch(
   const maxAssets = options.maxAssets ?? MAX_ASSETS_PER_RUN;
   const timeBudgetMs = options.timeBudgetMs ?? TIME_BUDGET_MS;
   const activeGeneration = await faceSearchRepository.getActiveScanGeneration();
+  const previousState = await faceSearchRepository.getBackgroundIndexState();
+  const previousProcessed = previousState.processedAssets ?? 0;
   let cachedFullPermission: boolean | null = null;
   const checkFullPermissionOnce = async (): Promise<boolean> => {
     if (cachedFullPermission === null) {
@@ -73,6 +75,7 @@ async function runCoordinatedBackgroundIndexBatch(
   }
   const checkpoint = await loadBackgroundIndexCursor();
   const resume = checkpoint?.generation === activeGeneration ? checkpoint : undefined;
+  const startOffset = resume ? previousProcessed : 0;
   if (checkpoint && !resume) {
     if (activeGeneration !== null) {
       throw new FaceRecognitionError(
@@ -153,7 +156,7 @@ async function runCoordinatedBackgroundIndexBatch(
       await persistBackgroundState({
         status: 'completed',
         scope: 'gallery',
-        processedAssets: result.processedAssets,
+        processedAssets: startOffset + result.processedAssets,
         totalAssets: result.totalAssets,
         lastAssetId: result.lastAssetId ?? null,
         lastCompletedAt: Date.now(),
@@ -164,7 +167,7 @@ async function runCoordinatedBackgroundIndexBatch(
       await persistBackgroundState({
         status: 'paused',
         scope: 'gallery',
-        processedAssets: result.processedAssets,
+        processedAssets: startOffset + result.processedAssets,
         totalAssets: result.totalAssets,
         lastAssetId: result.lastAssetId ?? null,
         lastError: null,
@@ -175,7 +178,7 @@ async function runCoordinatedBackgroundIndexBatch(
       await persistBackgroundState({
         status: 'cancelled',
         scope: 'gallery',
-        processedAssets: result.processedAssets,
+        processedAssets: startOffset + result.processedAssets,
         totalAssets: result.totalAssets,
         lastAssetId: result.lastAssetId ?? null,
         lastError: null,
