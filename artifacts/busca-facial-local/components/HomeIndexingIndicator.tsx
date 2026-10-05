@@ -122,12 +122,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
+    flexShrink: 1,
     fontFamily: 'Inter_500Medium',
     fontSize: 12,
   },
   count: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 12,
-    marginLeft: 'auto',
   },
 });
