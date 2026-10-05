@@ -68,8 +68,8 @@ test('classifica os três níveis de limiar', () => {
   assert.equal(classifySimilarity(0.69, thresholds), 'rejected');
 });
 
-test('agrupa rostos por foto, usa o maior score e ordena', () => {
-  const results = groupBestResults(
+test('agrupa rostos por foto, usa o maior score e ordena', async () => {
+  const results = await groupBestResults(
     [
       candidate('photo-a', 0, [0.8, 0.6]),
       candidate('photo-a', 1, [1, 0]),
@@ -91,8 +91,8 @@ test('agrupa rostos por foto, usa o maior score e ordena', () => {
   assert.ok(results[0].similarity > results[1].similarity);
 });
 
-test('limita resultados e retorna vazio sem correspondências sintéticas', () => {
-  const results = groupBestResults(
+test('limita resultados e retorna vazio sem correspondências sintéticas', async () => {
+  const results = await groupBestResults(
     [
       candidate('photo-a', 0, [1, 0]),
       candidate('photo-b', 0, [0.8, 0.6]),
@@ -104,7 +104,7 @@ test('limita resultados e retorna vazio sem correspondências sintéticas', () =
   assert.equal(results.length, 1);
   assert.equal(results[0].assetId, 'photo-a');
 
-  const empty = groupBestResults(
+  const empty = await groupBestResults(
     [candidate('photo-rejected', 0, [0, 1])],
     new Float32Array([1, 0]),
     thresholds,
@@ -113,9 +113,9 @@ test('limita resultados e retorna vazio sem correspondências sintéticas', () =
   assert.deepEqual(empty, []);
 });
 
-test('reports each photo best score and rank before the result floor is applied', () => {
+test('reports each photo best score and rank before the result floor is applied', async () => {
   let scores = [];
-  const results = groupBestResults(
+  const results = await groupBestResults(
     [
       candidate('photo-low', 0, [0.6, 0.8]),
       candidate('photo-high', 0, [0.8, 0.6]),
