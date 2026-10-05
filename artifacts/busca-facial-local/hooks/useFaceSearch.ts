@@ -496,13 +496,31 @@ export function useFaceSearch(): UseFaceSearchResult {
       if (mountedRef.current) {
         setResults([]);
       }
-      const indexResult = await startIndexing(albumId);
-      if (!indexResult || indexResult.status !== 'completed') {
-        return null;
+      const faceSearchModule = await getFaceSearchModule();
+      const statsBefore = await faceSearchModule.getStoredIndexStats();
+      const shouldWarmUp = statsBefore.indexedPhotos === 0;
+      if (shouldWarmUp) {
+        if (__DEV__) {
+          console.log(
+            '[Search] índice vazio; rodando aquecimento antes da busca',
+          );
+        }
+        const indexResult = await startIndexing(albumId);
+        if (
+          !indexResult ||
+          (indexResult.status !== 'completed' &&
+            indexResult.status !== 'paused')
+        ) {
+          return null;
+        }
+      } else if (__DEV__) {
+        console.log(
+          `[Search] índice já tem ${statsBefore.indexedPhotos} fotos; buscando direto`,
+        );
       }
       return search(faces);
     },
-    [search, startIndexing],
+    [getFaceSearchModule, search, startIndexing],
   );
 
   useEffect(() => {
