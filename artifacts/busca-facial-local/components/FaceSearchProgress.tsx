@@ -83,15 +83,25 @@ export function FaceSearchProgress({
         </View>
         <View style={styles.headingCopy}>
           <Text style={[styles.title, { color: colors.foreground }]}>
-            {status === 'searching' ? 'Consultando índice local' : 'Preparando índice local'}
+            {status === 'loading-model'
+              ? 'Preparando busca facial'
+              : status === 'requesting-permission'
+                ? 'Permissão necessária'
+                : status === 'searching'
+                  ? 'Comparando com o índice local'
+                  : status === 'completed'
+                    ? 'Busca concluída'
+                    : 'Preparando índice local'}
           </Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
             {status === 'loading-model'
-              ? 'Carregando o modelo facial no dispositivo…'
+              ? 'Ajustando os vetores para comparar com o índice local.'
               : status === 'requesting-permission'
                 ? 'Aguardando permissão para ler suas fotos…'
+                : status === 'indexing'
+                  ? 'Suas fotos permanecem no dispositivo.'
                 : status === 'searching'
-                  ? 'Comparando o rosto aprovado com os embeddings salvos…'
+                  ? 'Verificando quais fotos contêm o rosto procurado.'
                   : 'Suas fotos permanecem no dispositivo.'}
           </Text>
         </View>

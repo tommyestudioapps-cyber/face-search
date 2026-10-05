@@ -35,7 +35,12 @@ export class IndexCoordinator {
 
   shouldYieldBackground(): boolean {
     return this.active === 'background' &&
-      this.pending.some(({ kind }) => kind === 'search' || kind === 'clear' || kind === 'manual-index');
+      this.pending.some(({ kind }) =>
+        kind === 'search' ||
+        kind === 'clear' ||
+        kind === 'manual-index' ||
+        kind === 'initializing',
+      );
   }
 
   run<T>(kind: CoordinatedOperation, action: () => Promise<T>): Promise<T> {
