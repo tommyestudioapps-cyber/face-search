@@ -1172,6 +1172,7 @@ export default function HomeScreen() {
   const [hasGalleryPhotoAccess, setHasGalleryPhotoAccess] = useState(false);
   const [backgroundIndexState, setBackgroundIndexState] =
     useState<BackgroundIndexState>(initialBackgroundIndexState);
+  const [indexHydrated, setIndexHydrated] = useState(false);
   const [isUpdatingBackgroundIndex, setIsUpdatingBackgroundIndex] = useState(false);
   const mountedRef = useRef(true);
   const colors = useColors();
@@ -1298,8 +1299,14 @@ export default function HomeScreen() {
         setShowOnboardingPermissions(canAskForConsent);
       }
       await syncBackgroundTask();
+      if (!cancelled) {
+        setIndexHydrated(true);
+      }
     })().catch((error) => {
       console.error('[BackgroundIndex] não foi possível preparar a inicialização', error);
+      if (!cancelled) {
+        setIndexHydrated(true);
+      }
     });
     void AsyncStorage.getItem(ALBUM_STORAGE_KEY).then((value) => {
       if (!value) return;
@@ -1365,10 +1372,12 @@ export default function HomeScreen() {
     if (Platform.OS === 'web') return;
     if (backgroundIndexConsent !== 'accepted') return;
     if (!hasGalleryPhotoAccess) return;
+    if (backgroundIndexState.status === 'completed') return;
     void startForegroundIndexingIfNeeded();
   }, [
     backgroundIndexConsent,
     hasGalleryPhotoAccess,
+    backgroundIndexState.status,
     startForegroundIndexingIfNeeded,
   ]);
 
@@ -1382,6 +1391,7 @@ export default function HomeScreen() {
         if (nextState !== 'active') return;
         if (backgroundIndexConsent !== 'accepted') return;
         if (!hasGalleryPhotoAccess) return;
+        if (backgroundIndexState.status === 'completed') return;
         void startForegroundIndexingIfNeeded();
       });
     });
@@ -1392,6 +1402,7 @@ export default function HomeScreen() {
   }, [
     backgroundIndexConsent,
     hasGalleryPhotoAccess,
+    backgroundIndexState.status,
     startForegroundIndexingIfNeeded,
   ]);
 
@@ -1868,12 +1879,14 @@ export default function HomeScreen() {
             onContinueFace={continueFaceSearch}
             matchCount={results.length}
             indexingState={
-              backgroundIndexState.status === 'running' ||
-              backgroundIndexState.status === 'paused'
-                ? 'indexing'
-                : backgroundIndexState.status === 'completed'
-                  ? 'completed'
-                  : 'off'
+              !indexHydrated
+                ? 'loading'
+                : backgroundIndexState.status === 'running' ||
+                    backgroundIndexState.status === 'paused'
+                  ? 'indexing'
+                  : backgroundIndexState.status === 'completed'
+                    ? 'completed'
+                    : 'off'
             }
             indexingCount={backgroundIndexState.processedAssets}
             indexingTotalAssets={backgroundIndexState.totalAssets}

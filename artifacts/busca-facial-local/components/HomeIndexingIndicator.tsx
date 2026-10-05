@@ -8,7 +8,7 @@ const LIGHT_GREEN = '#6EE7B7';  // texto "ATIVO"
 const COUNT_COLOR = '#F8FAFC';  // colors.foreground
 const LABEL_MUTED = '#94A3B8';  // colors.mutedForeground
 
-export type HomeIndexingState = 'indexing' | 'completed' | 'off';
+export type HomeIndexingState = 'loading' | 'indexing' | 'completed' | 'off';
 
 interface HomeIndexingIndicatorProps {
   state: HomeIndexingState;
@@ -67,7 +67,9 @@ export function HomeIndexingIndicator({
       ? 'Indexação em andamento:'
       : state === 'completed'
         ? 'Indexação concluída:'
-        : 'Indexação desligada';
+        : state === 'loading'
+          ? 'Verificando índice…'
+          : 'Indexação desligada';
 
   const labelColor =
     state === 'completed'
@@ -96,7 +98,7 @@ export function HomeIndexingIndicator({
         <Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
           {label}
         </Text>
-        {state !== 'off' ? (
+        {state !== 'off' && state !== 'loading' ? (
           <Text style={[styles.count, { color: COUNT_COLOR }]}>
             {countLabel}
           </Text>
