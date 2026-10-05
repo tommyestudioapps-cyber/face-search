@@ -58,9 +58,11 @@ export interface UseFaceSearchResult {
   ) => Promise<GalleryIndexResult | null>;
   cancelIndexing: () => void;
   clearIndex: () => Promise<void>;
-  search: (alignedFace: AlignedFace | null) => Promise<FaceSearchSummary | null>;
+  search: (
+    faces: AlignedFace | AlignedFace[] | null,
+  ) => Promise<FaceSearchSummary | null>;
   indexAndSearch: (
-    alignedFace: AlignedFace | null,
+    faces: AlignedFace | AlignedFace[] | null,
     albumId?: string | null,
   ) => Promise<FaceSearchSummary | null>;
 }
@@ -409,11 +411,17 @@ export function useFaceSearch(): UseFaceSearchResult {
   }, [getFaceSearchModule]);
 
   const search = useCallback(
-    async (alignedFace: AlignedFace | null): Promise<FaceSearchSummary | null> => {
+    async (
+      faces: AlignedFace | AlignedFace[] | null,
+    ): Promise<FaceSearchSummary | null> => {
       if (searchPromiseRef.current) {
         return searchPromiseRef.current;
       }
-      if (!alignedFace || !alignedFace.standardized) {
+      const faceArray: AlignedFace[] = Array.isArray(faces)
+        ? faces
+        : faces ? [faces] : [];
+      const validFaces = faceArray.filter((face) => face && face.standardized);
+      if (validFaces.length === 0) {
         const nextError = new FaceRecognitionError(
           'invalid-input',
           'Selecione e aprove um rosto antes de iniciar a busca.',
@@ -443,7 +451,9 @@ export function useFaceSearch(): UseFaceSearchResult {
         }
 
         const faceSearchModule = await getFaceSearchModule();
-        const nextSummary = await faceSearchModule.searchFace(alignedFace);
+        const nextSummary = validFaces.length === 1
+          ? await faceSearchModule.searchFace(validFaces[0]!)
+          : await faceSearchModule.searchMultiFace(validFaces);
         if (mountedRef.current) {
           setSummary(nextSummary);
           setResults(nextSummary.results);
@@ -480,7 +490,7 @@ export function useFaceSearch(): UseFaceSearchResult {
 
   const indexAndSearch = useCallback(
     async (
-      alignedFace: AlignedFace | null,
+      faces: AlignedFace | AlignedFace[] | null,
       albumId?: string | null,
     ): Promise<FaceSearchSummary | null> => {
       if (mountedRef.current) {
@@ -490,7 +500,7 @@ export function useFaceSearch(): UseFaceSearchResult {
       if (!indexResult || indexResult.status !== 'completed') {
         return null;
       }
-      return search(alignedFace);
+      return search(faces);
     },
     [search, startIndexing],
   );

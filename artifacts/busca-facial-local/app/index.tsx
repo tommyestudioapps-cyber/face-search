@@ -54,6 +54,7 @@ import type {
   FaceSearchResult,
 } from '@/services/faceSearch';
 import type {
+  AlignedFace,
   DetectedFace,
   FaceCaptureError,
   FaceCaptureStatus,
@@ -1606,38 +1607,43 @@ export default function HomeScreen() {
     setScreen('select');
   };
 
-  const beginSearch = async () => {
-    if (alignedFace && alignedFace.standardized) {
-      setActiveAlignedFace(alignedFace);
+  const collectAlignedFaces = (): AlignedFace[] => {
+    const collected: AlignedFace[] = [];
+    for (const slot of slots) {
+      if (slot.alignedFace && slot.alignedFace.standardized) {
+        collected.push(slot.alignedFace);
+      }
     }
-    if (
-      !selectedImage ||
-      !alignedFace ||
-      captureStatus !== 'completed' ||
-      !alignedFace.standardized
-    ) {
+    return collected;
+  };
+
+  const beginSearch = async () => {
+    const alignedFaces = collectAlignedFaces();
+    if (alignedFaces.length === 0) {
       return;
+    }
+    if (alignedFaces[0]) {
+      setActiveAlignedFace(alignedFaces[0]);
     }
     setShowReward(true);
   };
 
   const startAnalysis = async () => {
-    if (alignedFace && alignedFace.standardized) {
-      setActiveAlignedFace(alignedFace);
-    }
-    if (
-      !selectedImage ||
-      !alignedFace ||
-      captureStatus !== 'completed' ||
-      !alignedFace.standardized
-    ) {
+    const alignedFaces = collectAlignedFaces();
+    if (alignedFaces.length === 0) {
       return;
+    }
+    if (alignedFaces[0]) {
+      setActiveAlignedFace(alignedFaces[0]);
     }
     setShowReward(false);
     setMatchesReturnScreen(screen);
     setScreen('analyzing');
     try {
-      const searchSummary = await indexAndSearch(alignedFace, selectedAlbumId);
+      const searchSummary = await indexAndSearch(
+        alignedFaces,
+        selectedAlbumId,
+      );
       if (searchSummary) {
         setScreen('results');
       }
