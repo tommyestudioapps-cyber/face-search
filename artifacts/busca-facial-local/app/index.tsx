@@ -26,6 +26,7 @@ import { clearPersistedSession } from '@/services/faceCapture/sessionPersistence
 import { FaceCaptureFeedback } from '@/components/FaceCaptureFeedback';
 import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
 import { FaceSearchProgress } from '@/components/FaceSearchProgress';
+import { HomeIndexingIndicator } from '@/components/HomeIndexingIndicator';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { IndexSettings } from '@/components/IndexSettings';
 import { IndexedGallery } from '@/components/IndexedGallery';
@@ -418,6 +419,8 @@ function Home({
   onOpenIndexed,
   onContinueFace,
   matchCount,
+  indexingInProgress,
+  indexingCount,
   onOpenMatches,
   hasActiveFace,
 }: {
@@ -426,12 +429,16 @@ function Home({
   onOpenIndexed: () => void;
   onContinueFace: () => void;
   matchCount: number;
+  indexingInProgress: boolean;
+  indexingCount: number;
   onOpenMatches: () => void;
   hasActiveFace: boolean;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { contentWidth } = useResponsiveLayout();
+  const showIndexingIndicator =
+    indexingInProgress || indexingCount > 0;
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -441,6 +448,12 @@ function Home({
         onNext={onSelect}
         centeredTitle
       />
+      {showIndexingIndicator ? (
+        <HomeIndexingIndicator
+          isIndexing={indexingInProgress}
+          processedAssets={indexingCount}
+        />
+      ) : null}
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
         showsVerticalScrollIndicator={false}
@@ -1761,6 +1774,11 @@ export default function HomeScreen() {
             onOpenIndexed={openIndexed}
             onContinueFace={continueFaceSearch}
             matchCount={results.length}
+            indexingInProgress={
+              backgroundIndexState.status === 'running' ||
+              backgroundIndexState.status === 'paused'
+            }
+            indexingCount={backgroundIndexState.processedAssets}
             onOpenMatches={openMatches}
             hasActiveFace={Boolean(alignedFace)}
           />
@@ -1795,6 +1813,7 @@ export default function HomeScreen() {
     handleSelectAlbum,
     cancelIndexing,
     results,
+    backgroundIndexState,
     matchesReturnScreen,
   ]);
 
