@@ -64,6 +64,7 @@ import type {
   FaceIndexProgress,
   FaceRecognitionError,
   FaceSearchResult,
+  SearchProgressEvent,
 } from '@/services/faceSearch';
 import type {
   AlignedFace,
@@ -908,6 +909,7 @@ function Analyzing({
   status,
   error,
   matchCount,
+  searchProgress,
   onCancel,
   onDismiss,
 }: {
@@ -915,6 +917,7 @@ function Analyzing({
   status: FaceSearchStatus;
   error: FaceRecognitionError | null;
   matchCount: number;
+  searchProgress: SearchProgressEvent | null;
   onCancel: () => void;
   onDismiss: () => void;
 }) {
@@ -936,6 +939,7 @@ function Analyzing({
           status={status}
           error={error}
           matchCount={matchCount}
+          searchProgress={searchProgress}
           onCancel={onCancel}
           onDismiss={onDismiss}
         />
@@ -1203,6 +1207,7 @@ export default function HomeScreen() {
     isOperationActive: faceSearchOperationActive,
     clearState: faceSearchClearState,
     progress: faceSearchProgress,
+    searchProgress: faceSearchSearchProgress,
     results,
     summary,
     storedIndexStats,
@@ -1838,6 +1843,7 @@ export default function HomeScreen() {
             status={faceSearchStatus}
             error={faceSearchError}
             matchCount={results.length}
+            searchProgress={faceSearchSearchProgress}
             onCancel={cancelIndexing}
             onDismiss={dismissSearchProgress}
           />

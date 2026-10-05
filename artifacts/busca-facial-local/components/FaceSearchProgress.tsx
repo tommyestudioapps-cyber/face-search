@@ -1,7 +1,11 @@
 import { Alert, ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import type { FaceIndexProgress, FaceRecognitionError } from '@/services/faceSearch';
+import type {
+  FaceIndexProgress,
+  FaceRecognitionError,
+  SearchProgressEvent,
+} from '@/services/faceSearch';
 import type { FaceSearchStatus } from '@/hooks/useFaceSearch';
 
 interface FaceSearchProgressProps {
@@ -9,6 +13,7 @@ interface FaceSearchProgressProps {
   status: FaceSearchStatus;
   error: FaceRecognitionError | null;
   matchCount: number;
+  searchProgress: SearchProgressEvent | null;
   onCancel: () => void;
   onDismiss?: () => void;
 }
@@ -37,6 +42,7 @@ export function FaceSearchProgress({
   status,
   error,
   matchCount,
+  searchProgress,
   onCancel,
   onDismiss,
 }: FaceSearchProgressProps) {
@@ -117,19 +123,65 @@ export function FaceSearchProgress({
         </View>
       ) : null}
 
-      {!error && status !== 'loading-model' && status !== 'searching' ? (
+      {!error && status !== 'loading-model' ? (
         <>
-          <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}>
-            <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${percentage}%` }]} />
-          </View>
-          <View style={styles.statsRow}>
-            <Text style={[styles.stat, { color: colors.mutedForeground }]}>
-              {total === null ? 'Fotos: preparando…' : `${progress.processedAssets} de ${total} fotos processadas`}
-            </Text>
-            <Text style={[styles.stat, { color: colors.foreground }]}>
-              {matchCount} {matchCount === 1 ? 'foto encontrada' : 'fotos encontradas'}
-            </Text>
-          </View>
+          {status === 'searching' && searchProgress ? (
+            <>
+              <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      backgroundColor: colors.primary,
+                      width: `${
+                        searchProgress.distinctPhotosTotal > 0
+                          ? Math.min(
+                              100,
+                              Math.round(
+                                (searchProgress.distinctPhotosProcessed /
+                                  searchProgress.distinctPhotosTotal) *
+                                  100,
+                              ),
+                            )
+                          : 0
+                      }%`,
+                    },
+                  ]}
+                />
+              </View>
+              <View style={styles.statsRow}>
+                <Text style={[styles.stat, { color: colors.mutedForeground }]}>
+                  {`${searchProgress.distinctPhotosProcessed.toLocaleString('pt-BR')} de ${searchProgress.distinctPhotosTotal.toLocaleString('pt-BR')} fotos analisadas`}
+                </Text>
+                <Text style={[styles.stat, { color: colors.foreground }]}>
+                  {searchProgress.matchesSoFar}{' '}
+                  {searchProgress.matchesSoFar === 1
+                    ? 'foto encontrada'
+                    : 'fotos encontradas'}
+                </Text>
+              </View>
+            </>
+          ) : status === 'searching' ? (
+            <View style={styles.statsRow}>
+              <Text style={[styles.stat, { color: colors.mutedForeground }]}>
+                Preparando comparação…
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}>
+                <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${percentage}%` }]} />
+              </View>
+              <View style={styles.statsRow}>
+                <Text style={[styles.stat, { color: colors.mutedForeground }]}>
+                  {total === null ? 'Fotos: preparando…' : `${progress.processedAssets} de ${total} fotos processadas`}
+                </Text>
+                <Text style={[styles.stat, { color: colors.foreground }]}>
+                  {matchCount} {matchCount === 1 ? 'foto encontrada' : 'fotos encontradas'}
+                </Text>
+              </View>
+            </>
+          )}
         </>
       ) : null}
 

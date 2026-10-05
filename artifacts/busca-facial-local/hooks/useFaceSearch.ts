@@ -461,9 +461,18 @@ export function useFaceSearch(): UseFaceSearchResult {
             setSearchProgress(event);
           }
         };
-        const nextSummary = validFaces.length === 1
-          ? await faceSearchModule.searchFace(validFaces[0]!, handleProgress)
-          : await faceSearchModule.searchMultiFace(validFaces);
+        const searchStartedAt = Date.now();
+        const MIN_SEARCH_DURATION_MS = 800;
+        const runSearch = validFaces.length === 1
+          ? faceSearchModule.searchFace(validFaces[0]!, handleProgress)
+          : faceSearchModule.searchMultiFace(validFaces);
+        const nextSummary = await runSearch.then(async (summary) => {
+          const pending = MIN_SEARCH_DURATION_MS - (Date.now() - searchStartedAt);
+          if (pending > 0) {
+            await new Promise<void>((resolve) => setTimeout(resolve, pending));
+          }
+          return summary;
+        });
         if (mountedRef.current) {
           setSummary(nextSummary);
           setResults(nextSummary.results);
