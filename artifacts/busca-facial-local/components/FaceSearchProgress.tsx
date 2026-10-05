@@ -151,13 +151,19 @@ export function FaceSearchProgress({
               </View>
               <View style={styles.statsRow}>
                 <Text style={[styles.stat, { color: colors.mutedForeground }]}>
-                  {`${searchProgress.distinctPhotosProcessed.toLocaleString('pt-BR')} de ${searchProgress.distinctPhotosTotal.toLocaleString('pt-BR')} fotos analisadas`}
+                  {searchProgress.phaseTotal > 1
+                    ? `Rosto ${searchProgress.phase} de ${searchProgress.phaseTotal}: ${searchProgress.distinctPhotosProcessed.toLocaleString('pt-BR')} de ${searchProgress.distinctPhotosTotal.toLocaleString('pt-BR')} fotos`
+                    : `${searchProgress.distinctPhotosProcessed.toLocaleString('pt-BR')} de ${searchProgress.distinctPhotosTotal.toLocaleString('pt-BR')} fotos analisadas`}
                 </Text>
                 <Text style={[styles.stat, { color: colors.foreground }]}>
-                  {searchProgress.matchesSoFar}{' '}
-                  {searchProgress.matchesSoFar === 1
-                    ? 'foto encontrada'
-                    : 'fotos encontradas'}
+                  {searchProgress.phaseTotal > 1 &&
+                  searchProgress.phase < searchProgress.phaseTotal
+                    ? 'Comparando...'
+                    : `${searchProgress.matchesSoFar} ${
+                        searchProgress.matchesSoFar === 1
+                          ? 'foto encontrada'
+                          : 'fotos encontradas'
+                      }`}
                 </Text>
               </View>
             </>

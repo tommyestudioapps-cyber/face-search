@@ -465,7 +465,7 @@ export function useFaceSearch(): UseFaceSearchResult {
         const MIN_SEARCH_DURATION_MS = 800;
         const runSearch = validFaces.length === 1
           ? faceSearchModule.searchFace(validFaces[0]!, handleProgress)
-          : faceSearchModule.searchMultiFace(validFaces);
+          : faceSearchModule.searchMultiFace(validFaces, handleProgress);
         const nextSummary = await runSearch.then(async (summary) => {
           const pending = MIN_SEARCH_DURATION_MS - (Date.now() - searchStartedAt);
           if (pending > 0) {

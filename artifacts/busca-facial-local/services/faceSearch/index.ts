@@ -107,8 +107,9 @@ export async function searchFace(
 
 export async function searchMultiFace(
   alignedFaces: AlignedFace[],
+  onProgress?: (event: SearchProgressEvent) => void,
 ): Promise<FaceSearchSummary> {
-  return searchMultiAlignedFaces(alignedFaces);
+  return searchMultiAlignedFaces(alignedFaces, onProgress);
 }
 
 export async function readIndexedPhotos(): Promise<IndexedPhoto[]> {

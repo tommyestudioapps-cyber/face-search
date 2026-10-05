@@ -26,14 +26,24 @@ import { getRecognitionModelIdentity } from './modelIdentity';
 export async function searchAlignedFace(
   alignedFace: AlignedFace,
   onProgress?: (event: SearchProgressEvent) => void,
+  phase: number = 1,
+  phaseTotal: number = 1,
+  progressMatchPhotoIds?: ReadonlySet<string>,
 ): Promise<FaceSearchSummary> {
   return indexCoordinator.run('search', () =>
-    runSearchAlignedFace(alignedFace, onProgress),
+    runSearchAlignedFace(
+      alignedFace,
+      onProgress,
+      phase,
+      phaseTotal,
+      progressMatchPhotoIds,
+    ),
   );
 }
 
 export async function searchMultiAlignedFaces(
   alignedFaces: AlignedFace[],
+  onProgress?: (event: SearchProgressEvent) => void,
 ): Promise<FaceSearchSummary> {
   if (alignedFaces.length === 0) {
     throw new FaceRecognitionError(
@@ -48,11 +58,26 @@ export async function searchMultiAlignedFaces(
     );
   }
   if (alignedFaces.length === 1) {
-    return searchAlignedFace(alignedFaces[0]!);
+    return searchAlignedFace(alignedFaces[0]!, onProgress, 1, 1);
   }
 
-  const summaryA = await searchAlignedFace(alignedFaces[0]!);
-  const summaryB = await searchAlignedFace(alignedFaces[1]!);
+  const phaseTotal = 2;
+  const summaryA = await searchAlignedFace(
+    alignedFaces[0]!,
+    onProgress,
+    1,
+    phaseTotal,
+  );
+  const progressMatchPhotoIds = new Set(
+    summaryA.results.map((result) => result.assetId),
+  );
+  const summaryB = await searchAlignedFace(
+    alignedFaces[1]!,
+    onProgress,
+    2,
+    phaseTotal,
+    progressMatchPhotoIds,
+  );
   const resultsA = new Map(
     summaryA.results.map((result) => [result.assetId, result] as const),
   );
@@ -88,6 +113,9 @@ export async function searchMultiAlignedFaces(
 async function runSearchAlignedFace(
   alignedFace: AlignedFace,
   onProgress?: (event: SearchProgressEvent) => void,
+  phase: number = 1,
+  phaseTotal: number = 1,
+  progressMatchPhotoIds?: ReadonlySet<string>,
 ): Promise<FaceSearchSummary> {
   if (Platform.OS === 'web') {
     throw new FaceRecognitionError(
@@ -154,6 +182,9 @@ async function runSearchAlignedFace(
         }
       },
       onProgress,
+      phase,
+      phaseTotal,
+      progressMatchPhotoIds,
     );
     console.warn(`[Search:diag] finalResults=${results.length}`);
 

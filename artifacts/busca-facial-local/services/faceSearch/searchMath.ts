@@ -36,6 +36,8 @@ export interface SearchProgressEvent {
   distinctPhotosProcessed: number;
   distinctPhotosTotal: number;
   matchesSoFar: number;
+  phase: number;
+  phaseTotal: number;
 }
 
 export function normalizeL2(values: Float32Array): Float32Array {
@@ -127,6 +129,9 @@ export async function groupBestResults(
   maxResults: number,
   onDiagnostic: ((scores: PhotoSimilarityScore[]) => void) | undefined,
   onProgress?: (event: SearchProgressEvent) => void,
+  phase: number = 1,
+  phaseTotal: number = 1,
+  progressMatchPhotoIds?: ReadonlySet<string>,
 ): Promise<FaceSearchResult[]> {
   const minimumSimilarity = Math.max(
     thresholds.review,
@@ -166,7 +171,9 @@ export async function groupBestResults(
       const result = createResult(candidate, similarity, thresholds);
       const previous = bestByPhoto.get(result.assetId);
       if (!previous) {
-        matchesSoFar += 1;
+        if (!progressMatchPhotoIds || progressMatchPhotoIds.has(result.assetId)) {
+          matchesSoFar += 1;
+        }
       }
       if (!previous || result.similarity > previous.similarity) {
         bestByPhoto.set(result.assetId, result);
@@ -180,6 +187,8 @@ export async function groupBestResults(
         distinctPhotosProcessed: seenAssetIds.size,
         distinctPhotosTotal,
         matchesSoFar,
+        phase,
+        phaseTotal,
       });
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
@@ -191,6 +200,8 @@ export async function groupBestResults(
     distinctPhotosProcessed: seenAssetIds.size,
     distinctPhotosTotal,
     matchesSoFar,
+    phase,
+    phaseTotal,
   });
 
   const sortedAll = [...allScores].sort((a, b) => b - a);
