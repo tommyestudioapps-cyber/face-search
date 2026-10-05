@@ -26,7 +26,10 @@ import { clearPersistedSession } from '@/services/faceCapture/sessionPersistence
 import { FaceCaptureFeedback } from '@/components/FaceCaptureFeedback';
 import { FaceSelectionOverlay } from '@/components/FaceSelectionOverlay';
 import { FaceSearchProgress } from '@/components/FaceSearchProgress';
-import { HomeIndexingIndicator } from '@/components/HomeIndexingIndicator';
+import {
+  HomeIndexingIndicator,
+  type HomeIndexingState,
+} from '@/components/HomeIndexingIndicator';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { IndexSettings } from '@/components/IndexSettings';
 import { IndexedGallery } from '@/components/IndexedGallery';
@@ -419,7 +422,7 @@ function Home({
   onOpenIndexed,
   onContinueFace,
   matchCount,
-  indexingInProgress,
+  indexingState,
   indexingCount,
   onOpenMatches,
   hasActiveFace,
@@ -429,7 +432,7 @@ function Home({
   onOpenIndexed: () => void;
   onContinueFace: () => void;
   matchCount: number;
-  indexingInProgress: boolean;
+  indexingState: HomeIndexingState;
   indexingCount: number;
   onOpenMatches: () => void;
   hasActiveFace: boolean;
@@ -437,8 +440,6 @@ function Home({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { contentWidth } = useResponsiveLayout();
-  const showIndexingIndicator =
-    indexingInProgress || indexingCount > 0;
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -448,12 +449,10 @@ function Home({
         onNext={onSelect}
         centeredTitle
       />
-      {showIndexingIndicator ? (
-        <HomeIndexingIndicator
-          isIndexing={indexingInProgress}
-          processedAssets={indexingCount}
-        />
-      ) : null}
+      <HomeIndexingIndicator
+        state={indexingState}
+        processedAssets={indexingCount}
+      />
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
         showsVerticalScrollIndicator={false}
@@ -1774,9 +1773,13 @@ export default function HomeScreen() {
             onOpenIndexed={openIndexed}
             onContinueFace={continueFaceSearch}
             matchCount={results.length}
-            indexingInProgress={
+            indexingState={
               backgroundIndexState.status === 'running' ||
               backgroundIndexState.status === 'paused'
+                ? 'indexing'
+                : backgroundIndexState.status === 'completed'
+                  ? 'completed'
+                  : 'off'
             }
             indexingCount={backgroundIndexState.processedAssets}
             onOpenMatches={openMatches}

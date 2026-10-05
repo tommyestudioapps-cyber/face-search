@@ -8,20 +8,22 @@ const LIGHT_GREEN = '#6EE7B7';  // texto "ATIVO"
 const COUNT_COLOR = '#F8FAFC';  // colors.foreground
 const LABEL_MUTED = '#94A3B8';  // colors.mutedForeground
 
+export type HomeIndexingState = 'indexing' | 'completed' | 'off';
+
 interface HomeIndexingIndicatorProps {
-  isIndexing: boolean;
+  state: HomeIndexingState;
   processedAssets: number;
 }
 
 export function HomeIndexingIndicator({
-  isIndexing,
+  state,
   processedAssets,
 }: HomeIndexingIndicatorProps) {
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!isIndexing) {
-      pulse.setValue(1);
+    if (state !== 'indexing') {
+      pulse.setValue(0);
       return;
     }
     const loop = Animated.loop(
@@ -42,15 +44,31 @@ export function HomeIndexingIndicator({
     return () => {
       loop.stop();
     };
-  }, [isIndexing, pulse]);
+  }, [state, pulse]);
 
-  const backgroundColor = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [DARK_GREEN, LIGHT_GREEN],
-  });
+  const backgroundColor =
+    state === 'indexing'
+      ? pulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [DARK_GREEN, LIGHT_GREEN],
+        })
+      : state === 'completed'
+        ? LIGHT_GREEN
+        : DARK_GREEN;
 
-  const label = isIndexing ? 'Indexação em andamento:' : 'Indexação concluída:';
-  const labelColor = isIndexing ? LABEL_MUTED : LIGHT_GREEN;
+  const label =
+    state === 'indexing'
+      ? 'Indexação em andamento:'
+      : state === 'completed'
+        ? 'Indexação concluída:'
+        : 'Indexação desligada';
+
+  const labelColor =
+    state === 'completed'
+      ? LIGHT_GREEN
+      : state === 'indexing'
+        ? LABEL_MUTED
+        : LABEL_MUTED;
 
   return (
     <View style={styles.row}>
@@ -58,7 +76,11 @@ export function HomeIndexingIndicator({
       <Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
         {label}
       </Text>
-      <Text style={[styles.count, { color: COUNT_COLOR }]}>{processedAssets}</Text>
+      {state !== 'off' ? (
+        <Text style={[styles.count, { color: COUNT_COLOR }]}>
+          {processedAssets}
+        </Text>
+      ) : null}
     </View>
   );
 }
