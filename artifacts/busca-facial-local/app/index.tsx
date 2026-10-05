@@ -67,6 +67,7 @@ import type {
 type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results' | 'indexed';
 
 const ALBUM_STORAGE_KEY = 'visage.index.album';
+const HEADER_ACTION_SIZE = 38;
 
 const initialBackgroundIndexState: BackgroundIndexState = {
   status: 'idle',
@@ -439,7 +440,7 @@ function Home({
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { contentWidth } = useResponsiveLayout();
+  const { contentWidth, horizontalPadding } = useResponsiveLayout();
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -452,6 +453,8 @@ function Home({
       <HomeIndexingIndicator
         state={indexingState}
         processedAssets={indexingCount}
+        horizontalPadding={horizontalPadding}
+        anchorColumnWidth={HEADER_ACTION_SIZE}
       />
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
@@ -1902,8 +1905,8 @@ const styles = StyleSheet.create({
   centeredHeaderTitleWrap: { alignItems: 'center' },
   headerTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
   headerSubtitle: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
-  headerAction: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  headerActionPlaceholder: { width: 38 },
+  headerAction: { width: HEADER_ACTION_SIZE, height: HEADER_ACTION_SIZE, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  headerActionPlaceholder: { width: HEADER_ACTION_SIZE },
   homeContent: { paddingTop: 11 },
   homeHero: { minHeight: 278, borderRadius: 25, padding: 22, justifyContent: 'flex-end', overflow: 'hidden' },
   heroGlow: { position: 'absolute', width: 210, height: 210, borderRadius: 105, backgroundColor: '#292672', right: -62, top: -55, opacity: 0.65 },

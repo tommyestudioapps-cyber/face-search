@@ -13,11 +13,15 @@ export type HomeIndexingState = 'indexing' | 'completed' | 'off';
 interface HomeIndexingIndicatorProps {
   state: HomeIndexingState;
   processedAssets: number;
+  horizontalPadding: number;
+  anchorColumnWidth: number;
 }
 
 export function HomeIndexingIndicator({
   state,
   processedAssets,
+  horizontalPadding,
+  anchorColumnWidth,
 }: HomeIndexingIndicatorProps) {
   const pulse = useRef(new Animated.Value(0)).current;
 
@@ -71,33 +75,51 @@ export function HomeIndexingIndicator({
         : LABEL_MUTED;
 
   return (
-    <View style={styles.row}>
+    <View
+      style={[
+        styles.row,
+        {
+          paddingLeft:
+            horizontalPadding + (anchorColumnWidth - DOT_SIZE) / 2,
+          paddingRight: horizontalPadding,
+        },
+      ]}
+    >
       <Animated.View style={[styles.dot, { backgroundColor }]} />
-      <Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
-        {label}
-      </Text>
-      {state !== 'off' ? (
-        <Text style={[styles.count, { color: COUNT_COLOR }]}>
-          {processedAssets}
+      <View style={styles.content}>
+        <Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
+          {label}
         </Text>
-      ) : null}
+        {state !== 'off' ? (
+          <Text style={[styles.count, { color: COUNT_COLOR }]}>
+            {processedAssets}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }
+
+const DOT_SIZE = 8;
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 22,
     paddingTop: 6,
     paddingBottom: 6,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: DOT_SIZE / 2,
+  },
+  content: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   label: {
     fontFamily: 'Inter_500Medium',
