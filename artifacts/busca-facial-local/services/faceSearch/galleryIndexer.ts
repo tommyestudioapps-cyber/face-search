@@ -30,6 +30,7 @@ import {
   runFaceEmbedding,
 } from './model';
 import { getRecognitionModelIdentity } from './modelIdentity';
+import { cosineSimilarity } from './searchMath';
 import {
   shouldLogPhoto,
   logIndexProgress,
@@ -61,6 +62,8 @@ export interface GalleryIndexOptions {
   cancellation?: GalleryIndexCancellation;
   albumId?: string | null;
   batch?: GalleryIndexBatch;
+  queryEmbeddings?: Float32Array[];
+  onMatch?: (assetId: string, similarity: number) => void;
 }
 
 export interface GalleryIndexResult {
@@ -73,11 +76,20 @@ export interface GalleryIndexResult {
   skippedAssets: number;
   indexedFaces: number;
   removedPhotos: number;
+  matches: Array<{ assetId: string; similarity: number }>;
 }
 
 export interface GalleryIndexTask {
   promise: Promise<GalleryIndexResult>;
   cancel: () => void;
+}
+
+interface MatchContext {
+  queryEmbeddings: Float32Array[];
+  threshold: number;
+  storedEmbeddingsByAsset: Map<string, Float32Array[]>;
+  matches: Array<{ assetId: string; similarity: number }>;
+  onMatch?: (assetId: string, similarity: number) => void;
 }
 
 export class GalleryIndexCancellation {
@@ -247,6 +259,26 @@ function createIndexedPhoto(
   };
 }
 
+function computeAssetMatch(
+  faceEmbeddings: Float32Array[],
+  queryEmbeddings: Float32Array[],
+  threshold: number,
+): number | null {
+  if (queryEmbeddings.length === 0) return null;
+  if (faceEmbeddings.length === 0) return null;
+  let minBestSim = Number.POSITIVE_INFINITY;
+  for (const query of queryEmbeddings) {
+    let bestSim = -1;
+    for (const face of faceEmbeddings) {
+      const sim = cosineSimilarity(query, face);
+      if (sim > bestSim) bestSim = sim;
+    }
+    if (bestSim < threshold) return null;
+    if (bestSim < minBestSim) minBestSim = bestSim;
+  }
+  return minBestSim === Number.POSITIVE_INFINITY ? null : minBestSim;
+}
+
 async function indexAsset(
   asset: MediaLibrary.Asset,
   indexedPhoto: IndexedPhoto | undefined,
@@ -254,10 +286,24 @@ async function indexAsset(
   shouldContinue?: () => Promise<boolean>,
   generation?: number,
   leaseOwner?: string,
+  matchContext?: MatchContext,
 ): Promise<AssetIndexResult> {
   throwIfCancelled(cancellation);
 
   if (isUnchangedAsset(asset, indexedPhoto)) {
+    if (matchContext && matchContext.queryEmbeddings.length > 0) {
+      const faceEmbeddings =
+        matchContext.storedEmbeddingsByAsset.get(asset.id) ?? [];
+      const similarity = computeAssetMatch(
+        faceEmbeddings,
+        matchContext.queryEmbeddings,
+        matchContext.threshold,
+      );
+      if (similarity !== null) {
+        matchContext.matches.push({ assetId: asset.id, similarity });
+        matchContext.onMatch?.(asset.id, similarity);
+      }
+    }
     return { indexed: false, skipped: false, faceCount: 0 };
   }
 
@@ -335,6 +381,19 @@ async function indexAsset(
       leaseOwner,
     );
 
+    if (matchContext && matchContext.queryEmbeddings.length > 0) {
+      const faceEmbeddings = indexedFaces.map((face) => face.embedding.values);
+      const similarity = computeAssetMatch(
+        faceEmbeddings,
+        matchContext.queryEmbeddings,
+        matchContext.threshold,
+      );
+      if (similarity !== null) {
+        matchContext.matches.push({ assetId: asset.id, similarity });
+        matchContext.onMatch?.(asset.id, similarity);
+      }
+    }
+
     if (shouldLogPhoto()) {
       logPhotoTiming({
         assetId: asset.id,
@@ -391,6 +450,7 @@ async function runGalleryIndex(
   let scanGeneration: number | null = null;
   const manualOwner = batch ? undefined : `${Date.now()}-${Math.random()}`;
   let manualLeaseHeartbeat: ReturnType<typeof setInterval> | null = null;
+  let matchContext: MatchContext | undefined;
 
   const emitProgress = (
     patch: Partial<FaceIndexProgress>,
@@ -444,6 +504,25 @@ async function runGalleryIndex(
     const indexedById = new Map(
       indexedPhotos.map((photo) => [photo.assetId, photo]),
     );
+    if (options.queryEmbeddings && options.queryEmbeddings.length > 0) {
+      const storedEmbeddingsByAsset = new Map<string, Float32Array[]>();
+      const modelVersion = getCurrentModelStorageVersion();
+      const allIndexed = await faceSearchRepository.getIndexedEmbeddings(
+        modelVersion,
+      );
+      for (const item of allIndexed) {
+        const list = storedEmbeddingsByAsset.get(item.photo.assetId) ?? [];
+        list.push(item.face.embedding.values);
+        storedEmbeddingsByAsset.set(item.photo.assetId, list);
+      }
+      matchContext = {
+        queryEmbeddings: options.queryEmbeddings,
+        threshold: faceSearch.similarityThresholds.review,
+        storedEmbeddingsByAsset,
+        matches: [],
+        onMatch: options.onMatch,
+      };
+    }
     // A restricted album or limited photo permission is not a complete gallery snapshot.
     const canPrune = !albumId && await hasFullGalleryPhotoPermission();
     if (!batch && canPrune) {
@@ -516,6 +595,7 @@ async function runGalleryIndex(
           skippedAssets,
           indexedFaces: indexedFaceCount,
           removedPhotos: 0,
+          matches: matchContext ? matchContext.matches : [],
         };
       }
 
@@ -565,6 +645,7 @@ async function runGalleryIndex(
           batch?.shouldContinue,
           generation ?? undefined,
           batch?.leaseOwner ?? (generation !== null ? manualOwner : undefined),
+          matchContext,
         );
         if (generation !== null && !result.indexed) {
           await faceSearchRepository.markAssetSeen(asset.id, generation, batch?.leaseOwner ?? manualOwner);
@@ -638,6 +719,7 @@ async function runGalleryIndex(
       skippedAssets,
       indexedFaces: indexedFaceCount,
       removedPhotos,
+      matches: matchContext ? matchContext.matches : [],
     };
   } catch (error) {
     if (!batch && scanGeneration !== null) {
@@ -663,6 +745,7 @@ async function runGalleryIndex(
         skippedAssets,
         indexedFaces: indexedFaceCount,
         removedPhotos,
+        matches: matchContext ? matchContext.matches : [],
       };
     }
 
