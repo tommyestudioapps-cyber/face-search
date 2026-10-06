@@ -165,3 +165,4 @@ export type {
 } from '../backgroundIndexing/status';
 export type { SearchProgressEvent } from './searchMath';
 export { searchAlignedFace };
+export { computeQueryEmbedding } from './search';

@@ -48,6 +48,7 @@ export interface UseFaceSearchResult {
   results: FaceSearchResult[];
   summary: FaceSearchSummary | null;
   searchProgress: SearchProgressEvent | null;
+  liveMatches: number;
   storedIndexStats: StoredIndexStats;
   indexedPhotos: IndexedPhoto[];
   isLoadingIndexedPhotos: boolean;
@@ -57,6 +58,8 @@ export interface UseFaceSearchResult {
   rehydrateSession: (alignedFace: AlignedFace) => Promise<void>;
   startIndexing: (
     albumId?: string | null,
+    queryEmbeddings?: Float32Array[],
+    onMatch?: (assetId: string, similarity: number) => void,
   ) => Promise<GalleryIndexResult | null>;
   cancelIndexing: () => void;
   clearIndex: () => Promise<void>;
@@ -125,6 +128,7 @@ export function useFaceSearch(): UseFaceSearchResult {
   const [summary, setSummary] = useState<FaceSearchSummary | null>(null);
   const [searchProgress, setSearchProgress] =
     useState<SearchProgressEvent | null>(null);
+  const [liveMatches, setLiveMatches] = useState<number>(0);
   const [storedIndexStats, setStoredIndexStats] =
     useState<StoredIndexStats>(initialStoredIndexStats);
   const [indexedPhotos, setIndexedPhotos] = useState<IndexedPhoto[]>([]);
@@ -249,6 +253,8 @@ export function useFaceSearch(): UseFaceSearchResult {
 
   const startIndexing = useCallback(async (
     albumId?: string | null,
+    queryEmbeddings?: Float32Array[],
+    onMatch?: (assetId: string, similarity: number) => void,
   ): Promise<GalleryIndexResult | null> => {
     if (indexPromiseRef.current) {
       return indexPromiseRef.current;
@@ -270,6 +276,8 @@ export function useFaceSearch(): UseFaceSearchResult {
       const task = faceSearchModule.startGalleryIndexing({
         onProgress: handleProgress,
         albumId: albumId ?? null,
+        queryEmbeddings,
+        onMatch,
       });
       indexTaskRef.current = task;
 
@@ -514,32 +522,66 @@ export function useFaceSearch(): UseFaceSearchResult {
     ): Promise<FaceSearchSummary | null> => {
       if (mountedRef.current) {
         setResults([]);
+        setLiveMatches(0);
       }
+      const faceArray: AlignedFace[] = Array.isArray(faces)
+        ? faces
+        : faces ? [faces] : [];
+      const validFaces = faceArray.filter((face) => face && face.standardized);
+      if (validFaces.length === 0) {
+        const nextError = new FaceRecognitionError(
+          'invalid-input',
+          'Selecione e aprove um rosto antes de iniciar a busca.',
+        );
+        if (mountedRef.current) {
+          setError(nextError);
+          setStatus('error');
+        }
+        return null;
+      }
+      await ensureInitialized();
       const faceSearchModule = await getFaceSearchModule();
-      const statsBefore = await faceSearchModule.getStoredIndexStats();
-      const shouldWarmUp = statsBefore.indexedPhotos === 0;
-      if (shouldWarmUp) {
-        if (__DEV__) {
-          console.log(
-            '[Search] índice vazio; rodando aquecimento antes da busca',
-          );
-        }
-        const indexResult = await startIndexing(albumId);
-        if (
-          !indexResult ||
-          (indexResult.status !== 'completed' &&
-            indexResult.status !== 'paused')
-        ) {
-          return null;
-        }
-      } else if (__DEV__) {
+      const queryEmbeddings: Float32Array[] = [];
+      for (const face of validFaces) {
+        const embedding = await faceSearchModule.computeQueryEmbedding(face);
+        queryEmbeddings.push(embedding.values);
+      }
+      if (__DEV__) {
         console.log(
-          `[Search] índice já tem ${statsBefore.indexedPhotos} fotos; buscando direto`,
+          `[Search] query embeddings prontos; indexando com ${queryEmbeddings.length} alvo(s)`,
         );
       }
+      const handleMatch = (assetId: string, similarity: number) => {
+        if (mountedRef.current) {
+          setLiveMatches((current) => current + 1);
+        }
+        if (__DEV__) {
+          console.log(
+            `[Search:liveMatch] assetId=${assetId} similarity=${similarity.toFixed(4)}`,
+          );
+        }
+      };
+      const indexResult = await startIndexing(
+        albumId,
+        queryEmbeddings,
+        handleMatch,
+      );
+      if (
+        !indexResult ||
+        (indexResult.status !== 'completed' &&
+          indexResult.status !== 'paused')
+      ) {
+        return null;
+      }
+      if (__DEV__) {
+        console.log(
+          `[Search] indexação terminou status=${indexResult.status} matches=${indexResult.matches.length}`,
+        );
+      }
+      // Agora roda a busca final para ordenar e montar o resultado completo.
       return search(faces);
     },
-    [getFaceSearchModule, search, startIndexing],
+    [ensureInitialized, getFaceSearchModule, search, startIndexing],
   );
 
   useEffect(() => {
@@ -584,6 +626,7 @@ export function useFaceSearch(): UseFaceSearchResult {
     results,
     summary,
     searchProgress,
+    liveMatches,
     storedIndexStats,
     indexedPhotos,
     isLoadingIndexedPhotos,

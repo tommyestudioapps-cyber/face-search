@@ -12,6 +12,7 @@ import {
 } from './repository';
 import {
   FaceRecognitionError,
+  type FaceEmbedding,
   type FaceSearchResult,
   type FaceSearchSummary,
 } from './types';
@@ -108,6 +109,13 @@ export async function searchMultiAlignedFaces(
     returnedPhotos: results.length,
     results,
   };
+}
+
+export async function computeQueryEmbedding(
+  alignedFace: AlignedFace,
+): Promise<FaceEmbedding> {
+  const inputTensor = await preprocessAlignedFace(alignedFace);
+  return runFaceEmbedding(inputTensor);
 }
 
 async function runSearchAlignedFace(
