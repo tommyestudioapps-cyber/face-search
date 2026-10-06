@@ -13,6 +13,7 @@ interface FaceSearchProgressProps {
   status: FaceSearchStatus;
   error: FaceRecognitionError | null;
   matchCount: number;
+  liveMatches: number;
   searchProgress: SearchProgressEvent | null;
   onCancel: () => void;
   onDismiss?: () => void;
@@ -42,6 +43,7 @@ export function FaceSearchProgress({
   status,
   error,
   matchCount,
+  liveMatches,
   searchProgress,
   onCancel,
   onDismiss,
@@ -180,10 +182,11 @@ export function FaceSearchProgress({
               </View>
               <View style={styles.statsRow}>
                 <Text style={[styles.stat, { color: colors.mutedForeground }]}>
-                  {total === null ? 'Fotos: preparando…' : `${progress.processedAssets} de ${total} fotos processadas`}
+                  {total === null ? 'Fotos: preparando…' : `${progress.processedAssets.toLocaleString('pt-BR')} de ${total.toLocaleString('pt-BR')} fotos analisadas`}
                 </Text>
                 <Text style={[styles.stat, { color: colors.foreground }]}>
-                  {matchCount} {matchCount === 1 ? 'foto encontrada' : 'fotos encontradas'}
+                  {liveMatches}{' '}
+                  {liveMatches === 1 ? 'foto encontrada' : 'fotos encontradas'}
                 </Text>
               </View>
             </>

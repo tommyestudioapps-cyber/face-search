@@ -909,6 +909,7 @@ function Analyzing({
   status,
   error,
   matchCount,
+  liveMatches,
   searchProgress,
   onCancel,
   onDismiss,
@@ -917,6 +918,7 @@ function Analyzing({
   status: FaceSearchStatus;
   error: FaceRecognitionError | null;
   matchCount: number;
+  liveMatches: number;
   searchProgress: SearchProgressEvent | null;
   onCancel: () => void;
   onDismiss: () => void;
@@ -939,6 +941,7 @@ function Analyzing({
           status={status}
           error={error}
           matchCount={matchCount}
+          liveMatches={liveMatches}
           searchProgress={searchProgress}
           onCancel={onCancel}
           onDismiss={onDismiss}
@@ -1208,6 +1211,7 @@ export default function HomeScreen() {
     clearState: faceSearchClearState,
     progress: faceSearchProgress,
     searchProgress: faceSearchSearchProgress,
+    liveMatches: faceSearchLiveMatches,
     results,
     summary,
     storedIndexStats,
@@ -1843,6 +1847,7 @@ export default function HomeScreen() {
             status={faceSearchStatus}
             error={faceSearchError}
             matchCount={results.length}
+            liveMatches={faceSearchLiveMatches}
             searchProgress={faceSearchSearchProgress}
             onCancel={cancelIndexing}
             onDismiss={dismissSearchProgress}
