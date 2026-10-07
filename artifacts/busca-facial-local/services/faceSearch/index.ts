@@ -132,6 +132,13 @@ export async function getBackgroundIndexState() {
   return faceSearchRepository.getBackgroundIndexState();
 }
 
+export async function updateBackgroundIndexState(
+  patch: Parameters<typeof faceSearchRepository.updateBackgroundIndexState>[0],
+) {
+  await faceSearchRepository.initialize();
+  return faceSearchRepository.updateBackgroundIndexState(patch);
+}
+
 export async function clearStoredIndex(): Promise<void> {
   await indexCoordinator.run('clear', async () => {
     await clearAfterGalleryIndexStops(async () => {
