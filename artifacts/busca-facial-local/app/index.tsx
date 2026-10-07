@@ -1215,6 +1215,7 @@ export default function HomeScreen() {
     results,
     summary,
     storedIndexStats,
+    backgroundSyncToken: faceSearchBackgroundSyncToken,
     indexedPhotos,
     isLoadingIndexedPhotos,
     refreshIndexedPhotos,
@@ -1333,6 +1334,26 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (faceSearchBackgroundSyncToken === 0 || Platform.OS === 'web') return;
+    let cancelled = false;
+    void (async () => {
+      const module = await import('@/services/faceSearch');
+      const state = await module.getBackgroundIndexState();
+      if (!cancelled && mountedRef.current) {
+        setBackgroundIndexState(state);
+      }
+    })().catch((error) => {
+      console.error(
+        '[BackgroundIndex] não foi possível atualizar estado após busca',
+        error,
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [faceSearchBackgroundSyncToken]);
 
   useEffect(() => {
     mountedRef.current = true;

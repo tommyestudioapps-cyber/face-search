@@ -50,6 +50,7 @@ export interface UseFaceSearchResult {
   searchProgress: SearchProgressEvent | null;
   liveMatches: number;
   storedIndexStats: StoredIndexStats;
+  backgroundSyncToken: number;
   indexedPhotos: IndexedPhoto[];
   isLoadingIndexedPhotos: boolean;
   refreshIndexedPhotos: () => Promise<void>;
@@ -131,6 +132,7 @@ export function useFaceSearch(): UseFaceSearchResult {
   const [liveMatches, setLiveMatches] = useState<number>(0);
   const [storedIndexStats, setStoredIndexStats] =
     useState<StoredIndexStats>(initialStoredIndexStats);
+  const [backgroundSyncToken, setBackgroundSyncToken] = useState(0);
   const [indexedPhotos, setIndexedPhotos] = useState<IndexedPhoto[]>([]);
   const [isLoadingIndexedPhotos, setIsLoadingIndexedPhotos] = useState(false);
   const [error, setError] = useState<FaceRecognitionError | null>(null);
@@ -578,6 +580,28 @@ export function useFaceSearch(): UseFaceSearchResult {
           `[Search] indexação terminou status=${indexResult.status} matches=${indexResult.matches.length}`,
         );
       }
+      try {
+        const statsAfter = await faceSearchModule.getStoredIndexStats();
+        const bgState = await faceSearchModule.getBackgroundIndexState();
+        if (statsAfter.indexedPhotos > bgState.processedAssets) {
+          await faceSearchModule.updateBackgroundIndexState({
+            processedAssets: statsAfter.indexedPhotos,
+            lastCompletedAt: Date.now(),
+          });
+          if (__DEV__) {
+            console.log(
+              `[Search] processedAssets sincronizado: ${bgState.processedAssets} → ${statsAfter.indexedPhotos}`,
+            );
+          }
+          if (mountedRef.current) {
+            setBackgroundSyncToken((n) => n + 1);
+          }
+        }
+      } catch (syncError) {
+        if (__DEV__) {
+          console.log('[Search] falha ao sincronizar processedAssets', syncError);
+        }
+      }
       // Agora roda a busca final para ordenar e montar o resultado completo.
       return search(faces);
     },
@@ -628,6 +652,7 @@ export function useFaceSearch(): UseFaceSearchResult {
     searchProgress,
     liveMatches,
     storedIndexStats,
+    backgroundSyncToken,
     indexedPhotos,
     isLoadingIndexedPhotos,
     refreshIndexedPhotos,
