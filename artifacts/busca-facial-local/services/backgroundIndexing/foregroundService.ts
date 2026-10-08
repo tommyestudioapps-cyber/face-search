@@ -1,0 +1,144 @@
+import notifee, {
+  AndroidImportance,
+  EventType,
+} from '@notifee/react-native';
+import { Platform } from 'react-native';
+
+export const INDEXING_CHANNEL_ID = 'search-face-indexing';
+export const INDEXING_NOTIFICATION_ID = 'search-face-indexing-foreground';
+export const INDEXING_PAUSE_ACTION = 'search-face-pause-indexing';
+
+let pauseHandler: (() => void) | null = null;
+
+export function registerPauseHandler(handler: () => void): () => void {
+  pauseHandler = handler;
+  return () => {
+    if (pauseHandler === handler) pauseHandler = null;
+  };
+}
+
+function handlePauseAction(): void {
+  if (pauseHandler) {
+    pauseHandler();
+  } else {
+    void (async () => {
+      try {
+        const mod = await import('./foregroundIndexLoop');
+        mod.getActiveForegroundIndexing()?.cancel();
+      } catch {
+        // ignore
+      }
+    })();
+  }
+}
+
+notifee.onForegroundEvent(({ type, detail }) => {
+  if (
+    type === EventType.ACTION_PRESS &&
+    detail.pressAction?.id === INDEXING_PAUSE_ACTION
+  ) {
+    handlePauseAction();
+  }
+});
+
+notifee.onBackgroundEvent(async ({ type, detail }) => {
+  if (
+    type === EventType.ACTION_PRESS &&
+    detail.pressAction?.id === INDEXING_PAUSE_ACTION
+  ) {
+    handlePauseAction();
+  }
+});
+
+export async function ensureIndexingChannel(): Promise<string | null> {
+  if (Platform.OS !== 'android') return null;
+  return notifee.createChannel({
+    id: INDEXING_CHANNEL_ID,
+    name: 'Preparação do índice',
+    importance: AndroidImportance.LOW,
+    description: 'Progresso da preparação automática do índice local.',
+  });
+}
+
+export async function startIndexingForeground(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await ensureIndexingChannel();
+  await notifee.displayNotification({
+    id: INDEXING_NOTIFICATION_ID,
+    title: 'Preparando índice local',
+    body: 'Search Face está analisando suas fotos em segundo plano.',
+    android: {
+      channelId: INDEXING_CHANNEL_ID,
+      smallIcon: 'ic_notification',
+      asForegroundService: true,
+      ongoing: true,
+      onlyAlertOnce: true,
+      progress: {
+        max: 100,
+        current: 0,
+        indeterminate: true,
+      },
+      pressAction: { id: 'default' },
+      actions: [
+        {
+          title: 'Pausar',
+          pressAction: { id: INDEXING_PAUSE_ACTION },
+        },
+      ],
+    },
+  });
+}
+
+export async function updateIndexingProgress(
+  processedAssets: number,
+  totalAssets: number | null,
+): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  const hasTotal =
+    typeof totalAssets === 'number' && totalAssets > 0;
+  const safeMax = hasTotal ? totalAssets : 100;
+  const safeCurrent = hasTotal
+    ? Math.min(processedAssets, safeMax)
+    : 0;
+  const body = hasTotal
+    ? `Analisando ${processedAssets} de ${totalAssets} fotos…`
+    : `Analisando ${processedAssets} fotos…`;
+  await notifee.displayNotification({
+    id: INDEXING_NOTIFICATION_ID,
+    title: 'Preparando índice local',
+    body,
+    android: {
+      channelId: INDEXING_CHANNEL_ID,
+      smallIcon: 'ic_notification',
+      asForegroundService: true,
+      ongoing: true,
+      onlyAlertOnce: true,
+      progress: {
+        max: safeMax,
+        current: safeCurrent,
+        indeterminate: !hasTotal,
+      },
+      pressAction: { id: 'default' },
+      actions: [
+        {
+          title: 'Pausar',
+          pressAction: { id: INDEXING_PAUSE_ACTION },
+        },
+      ],
+    },
+  });
+}
+
+export async function stopIndexingForeground(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  try {
+    await notifee.stopForegroundService();
+  } catch {
+    // ignore
+  }
+  try {
+    await notifee.cancelNotification(INDEXING_NOTIFICATION_ID);
+  } catch {
+    // ignore
+  }
+}

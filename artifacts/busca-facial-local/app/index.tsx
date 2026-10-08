@@ -72,6 +72,7 @@ import type {
   FaceCaptureError,
   FaceCaptureStatus,
 } from '@/services/faceCapture';
+import '@/services/backgroundIndexing/foregroundService';
 
 type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results' | 'indexed';
 
