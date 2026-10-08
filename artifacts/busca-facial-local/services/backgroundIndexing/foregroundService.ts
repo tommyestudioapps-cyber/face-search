@@ -10,6 +10,14 @@ export const INDEXING_PAUSE_ACTION = 'search-face-pause-indexing';
 
 let pauseHandler: (() => void) | null = null;
 
+notifee.registerForegroundService(() => {
+  return new Promise<void>(() => {
+    // Promise intencionalmente pendente para manter o serviço vivo
+    // enquanto o loop JS estiver rodando. O serviço é interrompido
+    // via notifee.stopForegroundService() em stopIndexingForeground().
+  });
+});
+
 export function registerPauseHandler(handler: () => void): () => void {
   pauseHandler = handler;
   return () => {
