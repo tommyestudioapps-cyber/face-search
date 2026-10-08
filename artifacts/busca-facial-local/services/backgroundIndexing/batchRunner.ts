@@ -170,17 +170,27 @@ async function runCoordinatedBackgroundIndexBatch(
         },
       },
     });
-    console.warn('[Batch] terminou status=' + result.status + ' processed=' + result.processedAssets + ' total=' + result.totalAssets);
+    console.warn(
+      '[Batch] terminou status=' + result.status +
+      ' processed=' + result.processedAssets +
+      ' total=' + result.totalAssets +
+      ' skipped=' + result.skippedAssets +
+      ' removed=' + result.removedPhotos,
+    );
     if (result.status === 'completed') {
       await clearBackgroundIndexCursor();
+      const finalProcessed = Math.max(
+        previousProcessed,
+        startOffset + result.processedAssets,
+      );
       await persistBackgroundState({
         status: 'completed',
         scope: 'gallery',
-        processedAssets: Math.max(
-          previousProcessed,
-          startOffset + result.processedAssets,
-        ),
-        totalAssets: result.totalAssets,
+        processedAssets: finalProcessed,
+        // Ao concluir, o total DEVE ser igual ao processado. Isso evita
+        // mostrar "X de Y fotos" com X < Y na UI — que parece incompleto
+        // mesmo estando finalizado.
+        totalAssets: finalProcessed,
         lastAssetId: result.lastAssetId ?? null,
         lastCompletedAt: Date.now(),
         lastError: null,
