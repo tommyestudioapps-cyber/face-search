@@ -67,15 +67,10 @@ export function startForegroundIndexing(
           break;
         }
 
-        if (AppState.currentState !== 'active') {
-          if (__DEV__) {
-            console.log(
-              `[ForegroundIndex] loop saindo: AppState=${AppState.currentState}`,
-            );
-          }
-          break;
-        }
-
+        // NÃO checamos AppState aqui. O foreground service mantém o processo
+        // vivo mesmo em background, então o loop deve continuar rodando.
+        // A única forma de parar é via cancelamento explícito, consentimento
+        // revogado ou status terminal (logo abaixo).
         try {
           await runBackgroundIndexBatch({
             maxAssets,
