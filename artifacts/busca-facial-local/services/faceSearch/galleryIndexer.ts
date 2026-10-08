@@ -46,6 +46,30 @@ import { shouldPauseBatch } from '../backgroundIndexing/batchPolicy';
 import { indexCoordinator } from '../backgroundIndexing/indexCoordinator';
 import { clearBackgroundIndexCursor, loadBackgroundIndexCursor } from '../backgroundIndexing/checkpoint';
 
+export async function countGalleryAssets(
+  albumId?: string | null,
+): Promise<number> {
+  let cursor: string | undefined;
+  let total = 0;
+  let hasNextPage = true;
+  while (hasNextPage) {
+    const page = await MediaLibrary.getAssetsAsync({
+      first: 500,
+      after: cursor,
+      mediaType: MediaLibrary.MediaType.photo,
+      sortBy: [MediaLibrary.SortBy.modificationTime],
+      ...(albumId ? { album: albumId } : {}),
+    });
+    total += page.assets.length;
+    if (page.assets.length === 0) break;
+    const previousCursor = cursor;
+    cursor = page.endCursor;
+    hasNextPage = page.hasNextPage;
+    if (hasNextPage && (!cursor || cursor === previousCursor)) break;
+  }
+  return total;
+}
+
 export interface GalleryIndexBatch {
   after?: string;
   generation: number;
@@ -64,6 +88,7 @@ export interface GalleryIndexOptions {
   batch?: GalleryIndexBatch;
   queryEmbeddings?: Float32Array[];
   onMatch?: (assetId: string, similarity: number) => void;
+  assumedTotalAssets?: number;
 }
 
 export interface GalleryIndexResult {
@@ -616,7 +641,11 @@ async function runGalleryIndex(
           cause,
         );
       }
-      totalAssets = page.totalCount;
+      if (options.assumedTotalAssets === undefined) {
+        totalAssets = page.totalCount;
+      } else if (totalAssets === 0) {
+        totalAssets = options.assumedTotalAssets;
+      }
       emitProgress({
         status: 'indexing',
         totalAssets,
@@ -696,7 +725,7 @@ async function runGalleryIndex(
     }
 
     throwIfCancelled(cancellation);
-    if (generation !== null && await hasFullGalleryPhotoPermission()) {
+    if (generation !== null && !albumId && await hasFullGalleryPhotoPermission()) {
       if (batch && !(await batch.shouldContinue())) {
         cancellation.cancel();
         throwIfCancelled(cancellation);

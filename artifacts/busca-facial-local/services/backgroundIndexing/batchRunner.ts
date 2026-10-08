@@ -1,4 +1,7 @@
-import { indexGallery } from '@/services/faceSearch/galleryIndexer';
+import {
+  countGalleryAssets,
+  indexGallery,
+} from '@/services/faceSearch/galleryIndexer';
 import { FaceRecognitionError } from '@/services/faceSearch/types';
 import { faceSearchRepository } from '@/services/faceSearch/repository';
 import {
@@ -18,6 +21,7 @@ const TIME_BUDGET_MS = 15_000;
 export interface RunBackgroundIndexBatchOptions {
   maxAssets?: number;
   timeBudgetMs?: number;
+  albumId?: string | null;
   onPartialProgress?: (processedAssets: number, totalAssets: number | null) => void;
 }
 
@@ -107,6 +111,21 @@ async function runCoordinatedBackgroundIndexBatch(
     return; // Another runtime owns this execution; it will keep the checkpoint.
   }
 
+  let assumedTotal: number | undefined =
+    resume && typeof previousState.totalAssets === 'number'
+      ? previousState.totalAssets
+      : undefined;
+  if (!resume) {
+    console.warn('[Batch] contando fotos reais antes de indexar gen=' + generation);
+    try {
+      assumedTotal = await countGalleryAssets(options.albumId ?? null);
+      console.warn('[Batch] total real de fotos=' + assumedTotal);
+    } catch (countError) {
+      console.warn('[Batch] falha ao contar fotos; usando fallback', countError);
+      assumedTotal = undefined;
+    }
+  }
+
   console.warn('[Batch] iniciando batch gen=' + generation);
   await persistBackgroundState(resume
     ? {
@@ -119,7 +138,7 @@ async function runCoordinatedBackgroundIndexBatch(
         status: 'running',
         scope: 'gallery',
         processedAssets: 0,
-        totalAssets: null,
+        totalAssets: assumedTotal ?? null,
         lastAssetId: null,
         lastStartedAt: Date.now(),
         lastCompletedAt: null,
@@ -137,6 +156,8 @@ async function runCoordinatedBackgroundIndexBatch(
   }, 15_000);
   try {
     const result = await indexGallery({
+      albumId: options.albumId,
+      assumedTotalAssets: assumedTotal,
       onProgress: (() => {
         let lastEmitAt = 0;
         return (progress: { processedAssets: number; totalAssets: number | null }) => {
