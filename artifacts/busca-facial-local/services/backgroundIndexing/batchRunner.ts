@@ -77,7 +77,10 @@ async function runCoordinatedBackgroundIndexBatch(
   }
   const checkpoint = await loadBackgroundIndexCursor();
   const resume = checkpoint?.generation === activeGeneration ? checkpoint : undefined;
-  const startOffset = resume ? previousProcessed : 0;
+  const startOffset = resume
+    ? Math.max(previousProcessed, resume.processedAssets ?? 0)
+    : 0;
+  const currentBatchProcessedRef = { current: 0 };
   if (checkpoint && !resume) {
     if (activeGeneration !== null) {
       throw new FaceRecognitionError(
@@ -134,17 +137,17 @@ async function runCoordinatedBackgroundIndexBatch(
   }, 15_000);
   try {
     const result = await indexGallery({
-      onProgress: onPartialProgress
-        ? (() => {
-            let lastEmitAt = 0;
-            return (progress: { processedAssets: number; totalAssets: number | null }) => {
-              const now = Date.now();
-              if (now - lastEmitAt < 500) return;
-              lastEmitAt = now;
-              onPartialProgress(startOffset + progress.processedAssets, progress.totalAssets);
-            };
-          })()
-        : undefined,
+      onProgress: (() => {
+        let lastEmitAt = 0;
+        return (progress: { processedAssets: number; totalAssets: number | null }) => {
+          currentBatchProcessedRef.current = progress.processedAssets;
+          if (!onPartialProgress) return;
+          const now = Date.now();
+          if (now - lastEmitAt < 500) return;
+          lastEmitAt = now;
+          onPartialProgress(startOffset + progress.processedAssets, progress.totalAssets);
+        };
+      })(),
       batch: {
         after,
         generation,
@@ -158,7 +161,11 @@ async function runCoordinatedBackgroundIndexBatch(
             await clearBackgroundIndexCursor();
             return;
           }
-          await saveBackgroundIndexCursor(cursor, generation);
+          await saveBackgroundIndexCursor(
+            cursor,
+            generation,
+            startOffset + currentBatchProcessedRef.current,
+          );
           if (!(await canContinue())) await clearBackgroundIndexCursor();
         },
       },
@@ -169,7 +176,10 @@ async function runCoordinatedBackgroundIndexBatch(
       await persistBackgroundState({
         status: 'completed',
         scope: 'gallery',
-        processedAssets: startOffset + result.processedAssets,
+        processedAssets: Math.max(
+          previousProcessed,
+          startOffset + result.processedAssets,
+        ),
         totalAssets: result.totalAssets,
         lastAssetId: result.lastAssetId ?? null,
         lastCompletedAt: Date.now(),
@@ -180,7 +190,10 @@ async function runCoordinatedBackgroundIndexBatch(
       await persistBackgroundState({
         status: 'paused',
         scope: 'gallery',
-        processedAssets: startOffset + result.processedAssets,
+        processedAssets: Math.max(
+          previousProcessed,
+          startOffset + result.processedAssets,
+        ),
         totalAssets: result.totalAssets,
         lastAssetId: result.lastAssetId ?? null,
         lastError: null,
@@ -191,7 +204,10 @@ async function runCoordinatedBackgroundIndexBatch(
       await persistBackgroundState({
         status: 'cancelled',
         scope: 'gallery',
-        processedAssets: startOffset + result.processedAssets,
+        processedAssets: Math.max(
+          previousProcessed,
+          startOffset + result.processedAssets,
+        ),
         totalAssets: result.totalAssets,
         lastAssetId: result.lastAssetId ?? null,
         lastError: null,
