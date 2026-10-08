@@ -22,30 +22,13 @@ export async function showTestNotification(): Promise<void> {
   if (Platform.OS !== 'android') return;
   await ensureTestChannel();
   await requestNotificationPermission();
-
-  const notification = {
-    title: 'Search Face',
-    body: 'Notificação de teste funcionando.',
+  await notifee.displayNotification({
+    title: 'Notificação de teste',
+    body: 'Search Face está funcionando em segundo plano.',
     android: {
       channelId: TEST_CHANNEL_ID,
-      smallIcon: 'ic_dialog_info',
+      smallIcon: 'ic_notification',
       pressAction: { id: 'default' },
     },
-  };
-
-  try {
-    await notifee.displayNotification(notification);
-  } catch (error) {
-    console.warn(
-      '[Test:notif] ic_dialog_info não foi resolvido; tentando ic_launcher',
-      error,
-    );
-    await notifee.displayNotification({
-      ...notification,
-      android: {
-        ...notification.android,
-        smallIcon: 'ic_launcher',
-      },
-    });
-  }
+  });
 }

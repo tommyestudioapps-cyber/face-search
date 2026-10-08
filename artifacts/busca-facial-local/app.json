@@ -64,6 +64,7 @@
         }
       ],
       "react-native-fast-tflite",
+      "./plugins/withNotificationIcon",
       "./plugins/withFaceLandmarkerModel",
       "./plugins/withFaceRecognitionModel"
     ],
