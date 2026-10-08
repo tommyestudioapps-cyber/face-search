@@ -1302,11 +1302,42 @@ export default function HomeScreen() {
       const persistedIndexState = faceSearchModule
         ? await faceSearchModule.getBackgroundIndexState()
         : null;
+      // O checkpoint (AsyncStorage) é atualizado a cada página; o SQLite só
+      // ao fim do batch. Se o app foi fechado no meio, o checkpoint tem o
+      // valor mais recente. Usar o maior dos dois evita mostrar 0 na Home.
+      let reconciledState = persistedIndexState;
+      if (persistedIndexState && Platform.OS !== 'web') {
+        try {
+          const checkpointMod = await import(
+            '@/services/backgroundIndexing/checkpoint'
+          );
+          const checkpoint = await checkpointMod.loadBackgroundIndexCursor();
+          if (
+            checkpoint &&
+            typeof checkpoint.processedAssets === 'number' &&
+            checkpoint.processedAssets > persistedIndexState.processedAssets
+          ) {
+            reconciledState = {
+              ...persistedIndexState,
+              processedAssets: checkpoint.processedAssets,
+            };
+            if (__DEV__) {
+              console.log(
+                `[Boot] checkpoint mais recente: ${checkpoint.processedAssets} > ${persistedIndexState.processedAssets}; usando checkpoint`,
+              );
+            }
+          }
+        } catch (checkpointError) {
+          if (__DEV__) {
+            console.log('[Boot] falha ao ler checkpoint', checkpointError);
+          }
+        }
+      }
       if (cancelled) return;
 
       setHasGalleryPhotoAccess(galleryPermissionGranted);
-      if (persistedIndexState) {
-        setBackgroundIndexState(persistedIndexState);
+      if (reconciledState) {
+        setBackgroundIndexState(reconciledState);
       }
       if (onboardingValue === 'true') {
         const canAskForConsent = consent === 'unknown' && galleryPermissionGranted;
