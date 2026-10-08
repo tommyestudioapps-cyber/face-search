@@ -1237,14 +1237,6 @@ export default function HomeScreen() {
   const startForegroundIndexingIfNeeded = useCallback(async (): Promise<void> => {
     if (Platform.OS === 'web') return;
 
-    if (mountedRef.current) {
-      setBackgroundIndexState((current) => ({
-        ...current,
-        status: 'running',
-        lastError: null,
-      }));
-    }
-
     const foregroundIndexLoop = await import(
       '@/services/backgroundIndexing/foregroundIndexLoop'
     );
@@ -1415,7 +1407,20 @@ export default function HomeScreen() {
     if (backgroundIndexConsent !== 'accepted') return;
     if (!hasGalleryPhotoAccess) return;
     if (backgroundIndexState.status === 'completed') return;
-    void startForegroundIndexingIfNeeded();
+    if (backgroundIndexState.status === 'cancelled') return;
+    let cancelled = false;
+    void (async () => {
+      const mod = await import(
+        '@/services/backgroundIndexing/foregroundIndexLoop'
+      );
+      if (cancelled) return;
+      const active = mod.getActiveForegroundIndexing();
+      if (active && active.isRunning()) return;
+      void startForegroundIndexingIfNeeded();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [
     backgroundIndexConsent,
     hasGalleryPhotoAccess,
