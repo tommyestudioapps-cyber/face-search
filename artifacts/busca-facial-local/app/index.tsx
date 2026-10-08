@@ -1272,6 +1272,18 @@ export default function HomeScreen() {
     if (__DEV__) {
       console.info('[startup] HomeScreen mounted');
     }
+    if (Platform.OS === 'android') {
+      void (async () => {
+        try {
+          const { showTestNotification } = await import(
+            '@/services/notifications/testNotification'
+          );
+          await showTestNotification();
+        } catch (error) {
+          console.log('[Test:notif] falhou', error);
+        }
+      })();
+    }
     let cancelled = false;
     void (async () => {
       const [onboardingValue, consent] = await Promise.all([
