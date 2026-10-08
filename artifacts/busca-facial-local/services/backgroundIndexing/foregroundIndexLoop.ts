@@ -1,4 +1,10 @@
 import { AppState } from 'react-native';
+import {
+  registerPauseHandler,
+  startIndexingForeground,
+  stopIndexingForeground,
+  updateIndexingProgress,
+} from './foregroundService';
 import { runBackgroundIndexBatch } from './batchRunner';
 import { getBackgroundIndexConsent } from './consent';
 import { faceSearchRepository } from '../faceSearch/repository';
@@ -42,6 +48,15 @@ export function startForegroundIndexing(
     if (__DEV__) {
       console.log('[ForegroundIndex] loop iniciado');
     }
+    // Registra o handler de "Pausar" ANTES de iniciar o serviço.
+    registerPauseHandler(() => {
+      cancelled = true;
+    });
+    try {
+      await startIndexingForeground();
+    } catch (error) {
+      console.warn('[ForegroundIndex] falha ao iniciar serviço', error);
+    }
     try {
       while (!cancelled) {
         const consent = await getBackgroundIndexConsent();
@@ -65,7 +80,10 @@ export function startForegroundIndexing(
           await runBackgroundIndexBatch({
             maxAssets,
             timeBudgetMs,
-            onPartialProgress: options.onPartialProgress,
+            onPartialProgress: (processedAssets, totalAssets) => {
+              options.onPartialProgress?.(processedAssets, totalAssets);
+              void updateIndexingProgress(processedAssets, totalAssets);
+            },
           });
         } catch (error) {
           console.warn('[ForegroundIndex] batch falhou', error);
@@ -83,6 +101,10 @@ export function startForegroundIndexing(
         if (options.onProgress) {
           await options.onProgress(state);
         }
+        void updateIndexingProgress(
+          state.processedAssets,
+          state.totalAssets,
+        );
         if (
           state.status === 'completed' ||
           state.status === 'error' ||
@@ -99,6 +121,11 @@ export function startForegroundIndexing(
     } finally {
       if (__DEV__) {
         console.log('[ForegroundIndex] loop finalizado');
+      }
+      try {
+        await stopIndexingForeground();
+      } catch (error) {
+        console.warn('[ForegroundIndex] falha ao parar serviço', error);
       }
       activeHandle = null;
     }
