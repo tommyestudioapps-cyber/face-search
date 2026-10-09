@@ -15,6 +15,12 @@ import {
 } from './galleryPermission';
 import { indexCoordinator } from './indexCoordinator';
 
+export interface BackgroundIndexBatchOutcome {
+  status: 'completed' | 'paused' | 'cancelled' | 'waiting' | 'blocked';
+  cumulativeProcessed: number;
+  cumulativeTotal: number | null;
+}
+
 const MAX_ASSETS_PER_RUN = 16;
 const TIME_BUDGET_MS = 15_000;
 
@@ -42,7 +48,7 @@ async function canContinue(): Promise<boolean> {
 
 export async function runBackgroundIndexBatch(
   options: RunBackgroundIndexBatchOptions = {},
-): Promise<void> {
+): Promise<BackgroundIndexBatchOutcome | null> {
   return indexCoordinator.run(
     'background',
     () => runCoordinatedBackgroundIndexBatch(options),
@@ -51,7 +57,7 @@ export async function runBackgroundIndexBatch(
 
 async function runCoordinatedBackgroundIndexBatch(
   options: RunBackgroundIndexBatchOptions = {},
-): Promise<void> {
+): Promise<BackgroundIndexBatchOutcome | null> {
   const maxAssets = options.maxAssets ?? MAX_ASSETS_PER_RUN;
   const timeBudgetMs = options.timeBudgetMs ?? TIME_BUDGET_MS;
   const activeGeneration = await faceSearchRepository.getActiveScanGeneration();
@@ -77,7 +83,11 @@ async function runCoordinatedBackgroundIndexBatch(
       scope: 'gallery',
       lastError: null,
     });
-    return;
+    return {
+      status: 'waiting',
+      cumulativeProcessed: previousProcessed,
+      cumulativeTotal: previousState.totalAssets,
+    };
   }
   const checkpoint = await loadBackgroundIndexCursor();
   const resume = checkpoint?.generation === activeGeneration ? checkpoint : undefined;
@@ -101,14 +111,22 @@ async function runCoordinatedBackgroundIndexBatch(
         scope: 'gallery',
         lastError: null,
       });
-      return;
+      return {
+        status: 'blocked',
+        cumulativeProcessed: previousProcessed,
+        cumulativeTotal: previousState.totalAssets,
+      };
     }
   }
   const leaseOwner = `${Date.now()}-${Math.random()}`;
   const generation = resume ? resume.generation : await faceSearchRepository.beginScan(leaseOwner);
   const after = resume?.cursor;
   if (resume && !(await faceSearchRepository.claimScan(generation, leaseOwner))) {
-    return; // Another runtime owns this execution; it will keep the checkpoint.
+    return {
+      status: 'blocked',
+      cumulativeProcessed: previousProcessed,
+      cumulativeTotal: previousState.totalAssets,
+    }; // Another runtime owns this execution; it will keep the checkpoint.
   }
 
   let assumedTotal: number | undefined =
@@ -198,12 +216,12 @@ async function runCoordinatedBackgroundIndexBatch(
       ' skipped=' + result.skippedAssets +
       ' removed=' + result.removedPhotos,
     );
+    const finalProcessed = Math.max(
+      previousProcessed,
+      startOffset + result.processedAssets,
+    );
     if (result.status === 'completed') {
       await clearBackgroundIndexCursor();
-      const finalProcessed = Math.max(
-        previousProcessed,
-        startOffset + result.processedAssets,
-      );
       await persistBackgroundState({
         status: 'completed',
         scope: 'gallery',
@@ -221,10 +239,7 @@ async function runCoordinatedBackgroundIndexBatch(
       await persistBackgroundState({
         status: 'paused',
         scope: 'gallery',
-        processedAssets: Math.max(
-          previousProcessed,
-          startOffset + result.processedAssets,
-        ),
+        processedAssets: finalProcessed,
         totalAssets: result.totalAssets,
         lastAssetId: result.lastAssetId ?? null,
         lastError: null,
@@ -235,16 +250,19 @@ async function runCoordinatedBackgroundIndexBatch(
       await persistBackgroundState({
         status: 'cancelled',
         scope: 'gallery',
-        processedAssets: Math.max(
-          previousProcessed,
-          startOffset + result.processedAssets,
-        ),
+        processedAssets: finalProcessed,
         totalAssets: result.totalAssets,
         lastAssetId: result.lastAssetId ?? null,
         lastError: null,
       });
     }
     // A cancelled batch leaves its last completed page checkpoint intact.
+    return {
+      status: result.status,
+      cumulativeProcessed: finalProcessed,
+      cumulativeTotal:
+        result.status === 'completed' ? finalProcessed : result.totalAssets,
+    };
   } catch (error) {
     // Other errors can retry the saved page; an invalid cursor must restart
     // the generation from the beginning on the next run.

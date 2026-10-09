@@ -1,14 +1,14 @@
-import { AppState } from 'react-native';
 import {
   registerPauseHandler,
   startIndexingForeground,
   stopIndexingForeground,
   updateIndexingProgress,
 } from './foregroundService';
-import { runBackgroundIndexBatch } from './batchRunner';
+import {
+  runBackgroundIndexBatch,
+  type BackgroundIndexBatchOutcome,
+} from './batchRunner';
 import { getBackgroundIndexConsent } from './consent';
-import { faceSearchRepository } from '../faceSearch/repository';
-import type { BackgroundIndexState } from './status';
 
 export interface ForegroundIndexingHandle {
   promise: Promise<void>;
@@ -19,8 +19,10 @@ export interface ForegroundIndexingHandle {
 export interface ForegroundIndexingOptions {
   maxAssets?: number;
   timeBudgetMs?: number;
-  onProgress?: (state: BackgroundIndexState) => void | Promise<void>;
   onPartialProgress?: (processedAssets: number, totalAssets: number | null) => void;
+  onFinalOutcome?: (
+    outcome: BackgroundIndexBatchOutcome,
+  ) => void | Promise<void>;
 }
 
 const DEFAULT_MAX_ASSETS = 500;
@@ -30,6 +32,19 @@ let activeHandle: ForegroundIndexingHandle | null = null;
 
 export function getActiveForegroundIndexing(): ForegroundIndexingHandle | null {
   return activeHandle;
+}
+
+async function waitOrCancel(
+  ms: number,
+  isCancelled: () => boolean,
+): Promise<boolean> {
+  const step = 500;
+  const iterations = Math.ceil(ms / step);
+  for (let i = 0; i < iterations; i += 1) {
+    if (isCancelled()) return true;
+    await new Promise<void>((resolve) => setTimeout(resolve, step));
+  }
+  return isCancelled();
 }
 
 export function startForegroundIndexing(
@@ -58,28 +73,20 @@ export function startForegroundIndexing(
       console.warn('[ForegroundIndex] falha ao iniciar serviço', error);
     }
     try {
-      let loopIteration = 0;
+      let finalOutcome: BackgroundIndexBatchOutcome | null = null;
+      let lastOutcome: BackgroundIndexBatchOutcome | null = null;
       while (!cancelled) {
-        loopIteration += 1;
-        console.warn(`[LoopDiag] iter=${loopIteration} inicio`);
-        console.warn(`[LoopDiag] iter=${loopIteration} antes-consent`);
         const consent = await getBackgroundIndexConsent();
-        console.warn(`[LoopDiag] iter=${loopIteration} depois-consent consent=${consent}`);
         if (consent !== 'accepted') {
-          console.warn(`[LoopDiag] iter=${loopIteration} saindo: consent=${consent}`);
           if (__DEV__) {
             console.log(`[ForegroundIndex] loop saindo: consent=${consent}`);
           }
           break;
         }
 
-        // NÃO checamos AppState aqui. O foreground service mantém o processo
-        // vivo mesmo em background, então o loop deve continuar rodando.
-        // A única forma de parar é via cancelamento explícito, consentimento
-        // revogado ou status terminal (logo abaixo).
-        console.warn(`[LoopDiag] iter=${loopIteration} antes-batch`);
+        let outcome: BackgroundIndexBatchOutcome | null = null;
         try {
-          await runBackgroundIndexBatch({
+          outcome = await runBackgroundIndexBatch({
             maxAssets,
             timeBudgetMs,
             onPartialProgress: (processedAssets, totalAssets) => {
@@ -91,44 +98,63 @@ export function startForegroundIndexing(
           console.warn('[ForegroundIndex] batch falhou', error);
           break;
         }
-        console.warn(`[LoopDiag] iter=${loopIteration} depois-batch`);
+        if (outcome) {
+          lastOutcome = outcome;
+        }
 
         if (cancelled) {
-          console.warn(`[LoopDiag] iter=${loopIteration} saindo: cancelado`);
+          finalOutcome = outcome ?? lastOutcome ?? {
+            status: 'cancelled',
+            cumulativeProcessed: 0,
+            cumulativeTotal: null,
+          };
           if (__DEV__) {
             console.log('[ForegroundIndex] loop saindo: cancelado');
           }
           break;
         }
 
-        console.warn(`[LoopDiag] iter=${loopIteration} antes-getState`);
-        const state = await faceSearchRepository.getBackgroundIndexState();
-        console.warn(
-          `[LoopDiag] iter=${loopIteration} depois-getState status=${state.status} processed=${state.processedAssets}`,
-        );
-        if (options.onProgress) {
-          console.warn(`[LoopDiag] iter=${loopIteration} antes-onProgress`);
-          await options.onProgress(state);
-          console.warn(`[LoopDiag] iter=${loopIteration} depois-onProgress`);
+        if (!outcome) {
+          const wasCancelled = await waitOrCancel(30_000, () => cancelled);
+          if (wasCancelled) break;
+          continue;
         }
-        console.warn(`[LoopDiag] iter=${loopIteration} antes-updateNotif`);
+
+        if (outcome.status === 'waiting' || outcome.status === 'blocked') {
+          finalOutcome = outcome;
+          break;
+        }
+
         void updateIndexingProgress(
-          state.processedAssets,
-          state.totalAssets,
+          outcome.cumulativeProcessed,
+          outcome.cumulativeTotal,
         );
-        console.warn(`[LoopDiag] iter=${loopIteration} fim`);
-        if (
-          state.status === 'completed' ||
-          state.status === 'error' ||
-          state.status === 'cancelled'
-        ) {
-          console.warn(`[LoopDiag] iter=${loopIteration} saindo: status=${state.status}`);
+        if (outcome.status === 'completed' || outcome.status === 'cancelled') {
+          finalOutcome = outcome;
           if (__DEV__) {
             console.log(
-              `[ForegroundIndex] loop saindo: status=${state.status}`,
+              `[ForegroundIndex] loop saindo: status=${outcome.status}`,
             );
           }
           break;
+        }
+      }
+      if (cancelled && !finalOutcome) {
+        finalOutcome = lastOutcome ?? {
+          status: 'cancelled',
+          cumulativeProcessed: 0,
+          cumulativeTotal: null,
+        };
+      }
+      if (finalOutcome && options.onFinalOutcome) {
+        try {
+          void Promise.resolve(options.onFinalOutcome(finalOutcome)).catch(
+            (error) => {
+              console.warn('[ForegroundIndex] callback final falhou', error);
+            },
+          );
+        } catch (error) {
+          console.warn('[ForegroundIndex] callback final falhou', error);
         }
       }
     } finally {

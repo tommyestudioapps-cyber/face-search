@@ -1242,18 +1242,6 @@ export default function HomeScreen() {
       '@/services/backgroundIndexing/foregroundIndexLoop'
     );
     foregroundIndexLoop.startForegroundIndexing({
-      onProgress: async (state) => {
-        console.warn(`[LoopDiag:UI] onProgress inicio status=${state.status}`);
-        if (mountedRef.current) {
-          setBackgroundIndexState(state);
-          console.warn('[LoopDiag:UI] onProgress setState ok');
-        } else {
-          console.warn('[LoopDiag:UI] onProgress skip setState (unmounted)');
-        }
-        console.warn('[LoopDiag:UI] onProgress antes-refreshIndexedPhotos');
-        await refreshIndexedPhotos();
-        console.warn('[LoopDiag:UI] onProgress depois-refreshIndexedPhotos');
-      },
       onPartialProgress: (processedAssets, totalAssets) => {
         if (!mountedRef.current) return;
         setBackgroundIndexState((current) => ({
@@ -1263,6 +1251,33 @@ export default function HomeScreen() {
           totalAssets: totalAssets ?? current.totalAssets,
           lastError: null,
         }));
+      },
+      onFinalOutcome: async (outcome) => {
+        if (!mountedRef.current) return;
+        const status = outcome.status === 'blocked'
+          ? 'waiting'
+          : outcome.status;
+        setBackgroundIndexState((current) => ({
+          ...current,
+          status,
+          processedAssets: outcome.cumulativeProcessed,
+          totalAssets: outcome.cumulativeTotal,
+          lastCompletedAt: outcome.status === 'completed'
+            ? Date.now()
+            : current.lastCompletedAt,
+          lastError: null,
+        }));
+
+        if (
+          outcome.status === 'completed' ||
+          outcome.status === 'cancelled' ||
+          outcome.status === 'paused'
+        ) {
+          const { AppState } = await import('react-native');
+          if (AppState.currentState === 'active') {
+            await refreshIndexedPhotos();
+          }
+        }
       },
     });
   }, [refreshIndexedPhotos]);
@@ -1474,10 +1489,24 @@ export default function HomeScreen() {
       if (cancelled) return;
       subscription = AppState.addEventListener('change', (nextState) => {
         if (nextState !== 'active') return;
-        if (backgroundIndexConsent !== 'accepted') return;
-        if (!hasGalleryPhotoAccess) return;
-        if (backgroundIndexState.status === 'completed') return;
-        void startForegroundIndexingIfNeeded();
+        void (async () => {
+          try {
+            const module = await import('@/services/faceSearch');
+            const state = await module.getBackgroundIndexState();
+            if (!mountedRef.current) return;
+            setBackgroundIndexState(state);
+            await refreshIndexedPhotos();
+
+            if (backgroundIndexConsent !== 'accepted') return;
+            if (!hasGalleryPhotoAccess) return;
+            if (state.status === 'completed') return;
+            void startForegroundIndexingIfNeeded();
+          } catch (error) {
+            if (__DEV__) {
+              console.log('[AppState] falha ao reler estado', error);
+            }
+          }
+        })();
       });
     });
     return () => {
@@ -1488,6 +1517,7 @@ export default function HomeScreen() {
     backgroundIndexConsent,
     hasGalleryPhotoAccess,
     backgroundIndexState.status,
+    refreshIndexedPhotos,
     startForegroundIndexingIfNeeded,
   ]);
 
