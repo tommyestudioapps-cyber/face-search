@@ -1243,10 +1243,16 @@ export default function HomeScreen() {
     );
     foregroundIndexLoop.startForegroundIndexing({
       onProgress: async (state) => {
+        console.warn(`[LoopDiag:UI] onProgress inicio status=${state.status}`);
         if (mountedRef.current) {
           setBackgroundIndexState(state);
+          console.warn('[LoopDiag:UI] onProgress setState ok');
+        } else {
+          console.warn('[LoopDiag:UI] onProgress skip setState (unmounted)');
         }
+        console.warn('[LoopDiag:UI] onProgress antes-refreshIndexedPhotos');
         await refreshIndexedPhotos();
+        console.warn('[LoopDiag:UI] onProgress depois-refreshIndexedPhotos');
       },
       onPartialProgress: (processedAssets, totalAssets) => {
         if (!mountedRef.current) return;

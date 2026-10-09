@@ -58,9 +58,15 @@ export function startForegroundIndexing(
       console.warn('[ForegroundIndex] falha ao iniciar serviço', error);
     }
     try {
+      let loopIteration = 0;
       while (!cancelled) {
+        loopIteration += 1;
+        console.warn(`[LoopDiag] iter=${loopIteration} inicio`);
+        console.warn(`[LoopDiag] iter=${loopIteration} antes-consent`);
         const consent = await getBackgroundIndexConsent();
+        console.warn(`[LoopDiag] iter=${loopIteration} depois-consent consent=${consent}`);
         if (consent !== 'accepted') {
+          console.warn(`[LoopDiag] iter=${loopIteration} saindo: consent=${consent}`);
           if (__DEV__) {
             console.log(`[ForegroundIndex] loop saindo: consent=${consent}`);
           }
@@ -71,6 +77,7 @@ export function startForegroundIndexing(
         // vivo mesmo em background, então o loop deve continuar rodando.
         // A única forma de parar é via cancelamento explícito, consentimento
         // revogado ou status terminal (logo abaixo).
+        console.warn(`[LoopDiag] iter=${loopIteration} antes-batch`);
         try {
           await runBackgroundIndexBatch({
             maxAssets,
@@ -84,27 +91,38 @@ export function startForegroundIndexing(
           console.warn('[ForegroundIndex] batch falhou', error);
           break;
         }
+        console.warn(`[LoopDiag] iter=${loopIteration} depois-batch`);
 
         if (cancelled) {
+          console.warn(`[LoopDiag] iter=${loopIteration} saindo: cancelado`);
           if (__DEV__) {
             console.log('[ForegroundIndex] loop saindo: cancelado');
           }
           break;
         }
 
+        console.warn(`[LoopDiag] iter=${loopIteration} antes-getState`);
         const state = await faceSearchRepository.getBackgroundIndexState();
+        console.warn(
+          `[LoopDiag] iter=${loopIteration} depois-getState status=${state.status} processed=${state.processedAssets}`,
+        );
         if (options.onProgress) {
+          console.warn(`[LoopDiag] iter=${loopIteration} antes-onProgress`);
           await options.onProgress(state);
+          console.warn(`[LoopDiag] iter=${loopIteration} depois-onProgress`);
         }
+        console.warn(`[LoopDiag] iter=${loopIteration} antes-updateNotif`);
         void updateIndexingProgress(
           state.processedAssets,
           state.totalAssets,
         );
+        console.warn(`[LoopDiag] iter=${loopIteration} fim`);
         if (
           state.status === 'completed' ||
           state.status === 'error' ||
           state.status === 'cancelled'
         ) {
+          console.warn(`[LoopDiag] iter=${loopIteration} saindo: status=${state.status}`);
           if (__DEV__) {
             console.log(
               `[ForegroundIndex] loop saindo: status=${state.status}`,
