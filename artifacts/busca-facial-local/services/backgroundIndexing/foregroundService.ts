@@ -11,10 +11,26 @@ export const INDEXING_PAUSE_ACTION = 'search-face-pause-indexing';
 let pauseHandler: (() => void) | null = null;
 
 notifee.registerForegroundService(() => {
+  // PROBE TEMPORÁRIO — remover após A9-preview.
+  console.warn('[HeadlessProbe] callback registerForegroundService chamado');
+  let tickCount = 0;
+  const startedAt = Date.now();
+  const probe = setInterval(() => {
+    tickCount += 1;
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    console.warn(
+      `[HeadlessProbe] tick=${tickCount} elapsed=${elapsed}s`,
+    );
+  }, 5000);
+  // Fim do probe.
+
   return new Promise<void>(() => {
     // Promise intencionalmente pendente para manter o serviço vivo
     // enquanto o loop JS estiver rodando. O serviço é interrompido
     // via notifee.stopForegroundService() em stopIndexingForeground().
+    // O interval acima NÃO é limpo aqui de propósito — é um probe
+    // temporário e será removido após a coleta de dados.
+    void probe;
   });
 });
 
