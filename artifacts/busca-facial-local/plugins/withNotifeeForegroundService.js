@@ -1,5 +1,8 @@
 const { withAndroidManifest } = require('expo/config-plugins');
 
+const SERVICE_NAME = 'app.notifee.core.ForegroundService';
+const DATA_SYNC_ONLY = 'dataSync';
+
 module.exports = function withNotifeeForegroundService(config) {
   return withAndroidManifest(config, async (config) => {
     const manifest = config.modResults;
@@ -12,19 +15,24 @@ module.exports = function withNotifeeForegroundService(config) {
     if (!app.service) {
       app.service = [];
     }
-    const serviceName = 'app.notifee.core.ForegroundService';
-    const alreadyDeclared = app.service.some(
-      (s) => s.$?.['android:name'] === serviceName,
+
+    const existing = app.service.find(
+      (s) => s.$?.['android:name'] === SERVICE_NAME,
     );
-    if (!alreadyDeclared) {
+
+    if (existing) {
+      existing.$['android:foregroundServiceType'] = DATA_SYNC_ONLY;
+      existing.$['android:exported'] = 'false';
+    } else {
       app.service.push({
         $: {
-          'android:name': serviceName,
-          'android:foregroundServiceType': 'dataSync',
+          'android:name': SERVICE_NAME,
+          'android:foregroundServiceType': DATA_SYNC_ONLY,
           'android:exported': 'false',
         },
       });
     }
+
     return config;
   });
 };
