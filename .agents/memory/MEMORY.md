@@ -11,3 +11,4 @@
 - [Varredura da galeria](gallery-scan-safety.md) — cursor e geração do SQLite devem coincidir; acesso limitado ou ciclo incompleto nunca autorizam excluir resultados.
 - [Invalidação do pipeline facial](face-pipeline-invalidation.md) — persistir a versão do pipeline em cada foto indexada, inclusive quando não há embeddings.
 - [Mocks nativos em testes Node](node-native-test-mocks.md) — no Expo monorepo, isole o contrato do batchRunner quando TSX tenta transformar módulos nativos durante mocks.
+- [Indexação como requisito do produto](background-indexing-product.md) — bibliotecas de 10 mil ou mais fotos precisam progredir sem manter a interface aberta.
