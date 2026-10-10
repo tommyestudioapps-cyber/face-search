@@ -106,12 +106,10 @@ export function startForegroundIndexing(
         try {
           outcome = await Promise.race([batchPromise, timeoutPromise]);
         } catch (error) {
+          console.warn('[ForegroundIndex] batch timeout ou erro:', error);
           if (batchTimedOut) {
-            console.warn('[ForegroundIndex] batch timeout ou erro:', error);
             indexCoordinator.forceRelease();
-            break;
           }
-          console.warn('[ForegroundIndex] batch falhou', error);
           break;
         } finally {
           if (batchTimeoutId !== null) {

@@ -86,19 +86,6 @@ export class IndexCoordinator {
     });
   }
 
-  forceRelease(): void {
-    this.active = null;
-    this.activeRunId = null;
-
-    const discarded = this.pending.splice(0);
-    const error = new Error(
-      'Operação descartada após timeout de indexação.',
-    );
-    for (const operation of discarded) {
-      operation.reject(error);
-    }
-  }
-
   private updateStatus(
     operation: IndexOperation,
     state: IndexOperationState,
@@ -111,6 +98,33 @@ export class IndexCoordinator {
       .catch((error) => {
         console.warn('[IndexCoordinator] Não foi possível salvar o estado.', error);
       });
+  }
+
+  /**
+   * Descarta o estado interno de lock. Usado quando uma operação fica
+   * presa em um await nativo que nunca resolve. Não cancela a promise
+   * subjacente — ela continua pendente no runtime, mas deixa de bloquear
+   * novas tentativas.
+   */
+  forceRelease(): void {
+    const droppedActive = this.active;
+    const droppedPending = this.pending.length;
+    this.active = null;
+    this.activeRunId = null;
+
+    const discarded = this.pending.splice(0);
+    const error = new Error(
+      'Operação descartada após timeout de indexação.',
+    );
+    for (const operation of discarded) {
+      operation.reject(error);
+    }
+    if (droppedActive || droppedPending > 0) {
+      console.warn(
+        `[IndexCoordinator] forceRelease: active=${droppedActive} pending=${droppedPending}`,
+      );
+    }
+    this.dispatchNext();
   }
 
   private dispatchNext(): void {
