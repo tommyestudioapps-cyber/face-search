@@ -143,6 +143,9 @@ async function runCoordinatedBackgroundIndexBatch(
       assumedTotal = undefined;
     }
   }
+  const latestTotalRef: { current: number | null } = {
+    current: assumedTotal ?? null,
+  };
 
   console.warn('[Batch] iniciando batch gen=' + generation);
   await persistBackgroundState(resume
@@ -180,11 +183,19 @@ async function runCoordinatedBackgroundIndexBatch(
         let lastEmitAt = 0;
         return (progress: { processedAssets: number; totalAssets: number | null }) => {
           currentBatchProcessedRef.current = progress.processedAssets;
+          if (typeof progress.totalAssets === 'number') {
+            latestTotalRef.current = progress.totalAssets;
+          }
           if (!onPartialProgress) return;
           const now = Date.now();
           if (now - lastEmitAt < 500) return;
           lastEmitAt = now;
-          onPartialProgress(startOffset + progress.processedAssets, progress.totalAssets);
+          const cumulative = startOffset + progress.processedAssets;
+          const total = latestTotalRef.current ?? assumedTotal ?? null;
+          const capped = total !== null
+            ? Math.min(cumulative, total)
+            : cumulative;
+          onPartialProgress(capped, total);
         };
       })(),
       batch: {
@@ -200,10 +211,17 @@ async function runCoordinatedBackgroundIndexBatch(
             await clearBackgroundIndexCursor();
             return;
           }
+          const cumulativeForCheckpoint =
+            startOffset + currentBatchProcessedRef.current;
+          const totalForCheckpoint =
+            latestTotalRef.current ?? assumedTotal ?? null;
+          const cappedForCheckpoint = totalForCheckpoint !== null
+            ? Math.min(cumulativeForCheckpoint, totalForCheckpoint)
+            : cumulativeForCheckpoint;
           await saveBackgroundIndexCursor(
             cursor,
             generation,
-            startOffset + currentBatchProcessedRef.current,
+            cappedForCheckpoint,
           );
           if (!(await canContinue())) await clearBackgroundIndexCursor();
         },
@@ -216,10 +234,14 @@ async function runCoordinatedBackgroundIndexBatch(
       ' skipped=' + result.skippedAssets +
       ' removed=' + result.removedPhotos,
     );
-    const finalProcessed = Math.max(
-      previousProcessed,
-      startOffset + result.processedAssets,
-    );
+    // Só usa a base da geração atual (zero em nova, checkpoint em retomada).
+    // NÃO herda previousProcessed de gerações anteriores.
+    const baseFromGeneration = startOffset + result.processedAssets;
+    const totalForCap =
+      result.totalAssets ?? latestTotalRef.current ?? assumedTotal ?? null;
+    const finalProcessed = totalForCap !== null
+      ? Math.min(baseFromGeneration, totalForCap)
+      : baseFromGeneration;
     if (result.status === 'completed') {
       await clearBackgroundIndexCursor();
       await persistBackgroundState({
