@@ -168,4 +168,13 @@ export async function stopIndexingForeground(): Promise<void> {
   } catch (error) {
     console.warn('[A12Diag] notifee.cancelNotification falhou', error);
   }
+  // Segunda tentativa: garante que uma notificação recriada por update
+  // pendente seja também cancelada.
+  try {
+    await new Promise<void>((resolve) => setTimeout(resolve, 200));
+    await notifee.cancelNotification(INDEXING_NOTIFICATION_ID);
+    console.warn('[A12Diag] notifee.cancelNotification (2a) OK');
+  } catch (error) {
+    console.warn('[A12Diag] notifee.cancelNotification (2a) falhou', error);
+  }
 }

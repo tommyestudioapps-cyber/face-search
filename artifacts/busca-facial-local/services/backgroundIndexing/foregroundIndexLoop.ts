@@ -128,10 +128,15 @@ export function startForegroundIndexing(
           break;
         }
 
-        void updateIndexingProgress(
-          outcome.cumulativeProcessed,
-          outcome.cumulativeTotal,
-        );
+        // Só atualiza a notificação enquanto o loop ainda está ativo.
+        // Se o batch terminou (completed/cancelled), NÃO emitir — evita
+        // recriar a notificação depois que stopIndexingForeground cancelar.
+        if (outcome.status !== 'completed' && outcome.status !== 'cancelled') {
+          void updateIndexingProgress(
+            outcome.cumulativeProcessed,
+            outcome.cumulativeTotal,
+          );
+        }
         if (outcome.status === 'completed' || outcome.status === 'cancelled') {
           console.warn(
             '[A12Diag] loop terminando status=' + outcome.status,
@@ -153,24 +158,25 @@ export function startForegroundIndexing(
         };
       }
       if (finalOutcome && options.onFinalOutcome) {
+        if (
+          finalOutcome.status === 'completed' ||
+          finalOutcome.status === 'cancelled'
+        ) {
+          // Deixa qualquer updateIndexingProgress pendente resolver antes
+          // de notificar o estado final e encerrar o serviço.
+          await new Promise<void>((resolve) => setTimeout(resolve, 300));
+        }
         try {
-          void Promise.resolve(options.onFinalOutcome(finalOutcome)).then(
-            () => {
-              console.warn('[A12Diag] onFinalOutcome OK');
-            },
-            (error) => {
-              console.warn('[A12Diag] onFinalOutcome falhou', error);
-            },
-          );
+          await options.onFinalOutcome(finalOutcome);
+          console.warn('[A12Diag] onFinalOutcome OK');
         } catch (error) {
           console.warn('[A12Diag] onFinalOutcome falhou', error);
         }
       }
     } finally {
       console.warn('[A12Diag] finally iniciado');
-      if (__DEV__) {
-        console.log('[ForegroundIndex] loop finalizado');
-      }
+      // Delay extra para garantir que updates pendentes resolveram.
+      await new Promise<void>((resolve) => setTimeout(resolve, 300));
       try {
         await stopIndexingForeground();
         console.warn('[A12Diag] stopIndexingForeground OK');
