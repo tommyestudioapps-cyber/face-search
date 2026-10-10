@@ -155,14 +155,17 @@ export async function updateIndexingProgress(
 
 export async function stopIndexingForeground(): Promise<void> {
   if (Platform.OS !== 'android') return;
+  console.warn('[A12Diag] stopIndexingForeground iniciando');
   try {
     await notifee.stopForegroundService();
-  } catch {
-    // ignore
+    console.warn('[A12Diag] notifee.stopForegroundService OK');
+  } catch (error) {
+    console.warn('[A12Diag] notifee.stopForegroundService falhou', error);
   }
   try {
     await notifee.cancelNotification(INDEXING_NOTIFICATION_ID);
-  } catch {
-    // ignore
+    console.warn('[A12Diag] notifee.cancelNotification OK');
+  } catch (error) {
+    console.warn('[A12Diag] notifee.cancelNotification falhou', error);
   }
 }

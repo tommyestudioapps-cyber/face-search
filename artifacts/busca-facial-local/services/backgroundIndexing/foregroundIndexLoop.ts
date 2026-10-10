@@ -108,6 +108,9 @@ export function startForegroundIndexing(
             cumulativeProcessed: 0,
             cumulativeTotal: null,
           };
+          console.warn(
+            '[A12Diag] loop terminando status=' + finalOutcome.status,
+          );
           if (__DEV__) {
             console.log('[ForegroundIndex] loop saindo: cancelado');
           }
@@ -130,6 +133,9 @@ export function startForegroundIndexing(
           outcome.cumulativeTotal,
         );
         if (outcome.status === 'completed' || outcome.status === 'cancelled') {
+          console.warn(
+            '[A12Diag] loop terminando status=' + outcome.status,
+          );
           finalOutcome = outcome;
           if (__DEV__) {
             console.log(
@@ -148,25 +154,31 @@ export function startForegroundIndexing(
       }
       if (finalOutcome && options.onFinalOutcome) {
         try {
-          void Promise.resolve(options.onFinalOutcome(finalOutcome)).catch(
+          void Promise.resolve(options.onFinalOutcome(finalOutcome)).then(
+            () => {
+              console.warn('[A12Diag] onFinalOutcome OK');
+            },
             (error) => {
-              console.warn('[ForegroundIndex] callback final falhou', error);
+              console.warn('[A12Diag] onFinalOutcome falhou', error);
             },
           );
         } catch (error) {
-          console.warn('[ForegroundIndex] callback final falhou', error);
+          console.warn('[A12Diag] onFinalOutcome falhou', error);
         }
       }
     } finally {
+      console.warn('[A12Diag] finally iniciado');
       if (__DEV__) {
         console.log('[ForegroundIndex] loop finalizado');
       }
       try {
         await stopIndexingForeground();
+        console.warn('[A12Diag] stopIndexingForeground OK');
       } catch (error) {
-        console.warn('[ForegroundIndex] falha ao parar serviço', error);
+        console.warn('[A12Diag] stopIndexingForeground falhou', error);
       }
       activeHandle = null;
+      console.warn('[A12Diag] loop finalizado');
     }
   })();
 
