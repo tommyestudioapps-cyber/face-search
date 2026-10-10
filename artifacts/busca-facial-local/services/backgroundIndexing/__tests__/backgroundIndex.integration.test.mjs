@@ -370,7 +370,7 @@ test('retoma após encerramento entre checkpoint e conclusão sem apagar resulta
   mediaLibrary.crashAfterCheckpoint = true;
 
   await assert.rejects(
-    runBackgroundIndexBatch(),
+    runBackgroundIndexBatch({ trigger: 'explicit' }),
     /simulated abrupt process termination/,
   );
 
