@@ -9,17 +9,29 @@ export async function hasGalleryPhotoPermission(): Promise<boolean> {
 
   const available = await MediaLibrary.isAvailableAsync();
   if (!available) {
+    console.warn('[A14Diag] perm: not available');
     return false;
   }
 
   const permission = await MediaLibrary.getPermissionsAsync(false, ['photo']);
-  return permission.granted && permission.accessPrivileges !== 'none';
+  const result = permission.granted && permission.accessPrivileges !== 'none';
+  console.warn(
+    `[A14Diag] perm: granted=${permission.granted} accessPrivileges=${permission.accessPrivileges} status=${permission.status} → result=${result}`,
+  );
+  return result;
 }
 
 export async function hasFullGalleryPhotoPermission(): Promise<boolean> {
-  if (!(await hasGalleryPhotoPermission())) return false;
+  if (!(await hasGalleryPhotoPermission())) {
+    console.warn('[A14Diag] fullPerm: partial negou, retornando false');
+    return false;
+  }
   const permission = await MediaLibrary.getPermissionsAsync(false, ['photo']);
-  return permission.granted && permission.accessPrivileges === 'all';
+  const result = permission.granted && permission.accessPrivileges === 'all';
+  console.warn(
+    `[A14Diag] fullPerm: granted=${permission.granted} accessPrivileges=${permission.accessPrivileges} → result=${result}`,
+  );
+  return result;
 }
 
 export async function requestGalleryPhotoPermission(): Promise<void> {

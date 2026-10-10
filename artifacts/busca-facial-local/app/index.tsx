@@ -1310,10 +1310,14 @@ export default function HomeScreen() {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           galleryPermissionGranted = await hasGalleryPhotoPermission();
+          console.warn(
+            `[A14Diag] boot perm attempt=${attempt + 1} result=${galleryPermissionGranted}`,
+          );
         } catch (error) {
-          if (__DEV__) {
-            console.log('[Boot] falha ao ler permissão', error);
-          }
+          console.warn(
+            `[A14Diag] boot perm attempt=${attempt + 1} erro`,
+            error,
+          );
           galleryPermissionGranted = false;
         }
         if (galleryPermissionGranted) break;
@@ -1321,6 +1325,9 @@ export default function HomeScreen() {
           await new Promise<void>((resolve) => setTimeout(resolve, 500));
         }
       }
+      console.warn(
+        `[A14Diag] boot galleryPermissionGranted final=${galleryPermissionGranted}`,
+      );
       const faceSearchModule = Platform.OS === 'web'
         ? null
         : await import('@/services/faceSearch');
@@ -1366,8 +1373,14 @@ export default function HomeScreen() {
       }
       if (cancelled) return;
 
+      console.warn(
+        `[A14Diag] boot setHasGalleryPhotoAccess=${galleryPermissionGranted}`,
+      );
       setHasGalleryPhotoAccess(galleryPermissionGranted);
       if (reconciledState) {
+        console.warn(
+          `[A14Diag] boot setBackgroundIndexState status=${reconciledState?.status} processed=${reconciledState?.processedAssets} total=${reconciledState?.totalAssets}`,
+        );
         setBackgroundIndexState(reconciledState);
       }
       if (onboardingValue === 'true') {
@@ -1376,11 +1389,13 @@ export default function HomeScreen() {
       }
       await syncBackgroundTask();
       if (!cancelled) {
+        console.warn('[A14Diag] boot setIndexHydrated=true');
         setIndexHydrated(true);
       }
     })().catch((error) => {
       console.error('[BackgroundIndex] não foi possível preparar a inicialização', error);
       if (!cancelled) {
+        console.warn('[A14Diag] boot setIndexHydrated=true');
         setIndexHydrated(true);
       }
     });
@@ -1497,17 +1512,19 @@ export default function HomeScreen() {
     void import('react-native').then(({ AppState }) => {
       if (cancelled) return;
       subscription = AppState.addEventListener('change', (nextState) => {
+        console.warn(`[A14Diag] AppState change=${nextState}`);
         if (nextState !== 'active') return;
         void (async () => {
           try {
             const accessOk = await hasGalleryPhotoPermission();
+            console.warn(
+              `[A14Diag] AppState accessOk=${accessOk} atual=${hasGalleryPhotoAccess}`,
+            );
             if (mountedRef.current && accessOk !== hasGalleryPhotoAccess) {
               setHasGalleryPhotoAccess(accessOk);
             }
           } catch (error) {
-            if (__DEV__) {
-              console.log('[AppState] falha ao revalidar acesso', error);
-            }
+            console.warn('[A14Diag] AppState falha access', error);
           }
 
           let fullPermissionOk = false;
@@ -1515,10 +1532,11 @@ export default function HomeScreen() {
           try {
             fullPermissionOk = await hasFullGalleryPhotoPermission();
             permissionConfirmed = true;
+            console.warn(
+              `[A14Diag] AppState fullPermissionOk=${fullPermissionOk}`,
+            );
           } catch (error) {
-            if (__DEV__) {
-              console.log('[AppState] falha ao validar permissão completa', error);
-            }
+            console.warn('[A14Diag] AppState falha fullPerm', error);
             permissionConfirmed = false;
           }
 
@@ -1526,29 +1544,32 @@ export default function HomeScreen() {
           try {
             const module = await import('@/services/faceSearch');
             latestState = await module.getBackgroundIndexState();
+            console.warn(
+              `[A14Diag] AppState readState status=${latestState?.status} processed=${latestState?.processedAssets} total=${latestState?.totalAssets}`,
+            );
             if (mountedRef.current) {
               setBackgroundIndexState(latestState);
             }
           } catch (error) {
-            if (__DEV__) {
-              console.log('[AppState] falha ao reler estado', error);
-            }
+            console.warn('[A14Diag] AppState falha readState', error);
             return;
           }
 
           try {
             await refreshIndexedPhotos();
           } catch (error) {
-            if (__DEV__) {
-              console.log('[AppState] falha ao atualizar fotos', error);
-            }
+            console.warn('[A14Diag] AppState falha refreshFotos', error);
           }
 
+          console.warn(
+            `[A14Diag] AppState decisão: permissionConfirmed=${permissionConfirmed} fullPermissionOk=${fullPermissionOk} consent=${backgroundIndexConsent} status=${latestState?.status}`,
+          );
           if (!permissionConfirmed) return;
           if (!fullPermissionOk) return;
           if (backgroundIndexConsent !== 'accepted') return;
           if (latestState?.status === 'completed') return;
           if (latestState?.status === 'cancelled') return;
+          console.warn('[A14Diag] AppState iniciando loop');
           void startForegroundIndexingIfNeeded();
         })();
       });
@@ -1571,6 +1592,9 @@ export default function HomeScreen() {
     const id = setInterval(() => {
       void (async () => {
         try {
+            console.warn(
+              `[A14Diag] Watchdog tick status=${backgroundIndexState.status} consent=${backgroundIndexConsent}`,
+            );
           if (backgroundIndexConsent !== 'accepted') return;
           if (
             backgroundIndexState.status === 'completed' ||
@@ -1580,13 +1604,14 @@ export default function HomeScreen() {
           }
           try {
             const accessOk = await hasGalleryPhotoPermission();
+            console.warn(
+              `[A14Diag] Watchdog accessOk=${accessOk} atual=${hasGalleryPhotoAccess}`,
+            );
             if (mountedRef.current && accessOk !== hasGalleryPhotoAccess) {
               setHasGalleryPhotoAccess(accessOk);
             }
           } catch (error) {
-            if (__DEV__) {
-              console.log('[Watchdog] falha ao revalidar acesso', error);
-            }
+            console.warn('[A14Diag] Watchdog falha access', error);
           }
 
           let fullPermissionOk = false;
@@ -1594,10 +1619,11 @@ export default function HomeScreen() {
           try {
             fullPermissionOk = await hasFullGalleryPhotoPermission();
             permissionConfirmed = true;
+            console.warn(
+              `[A14Diag] Watchdog fullPermissionOk=${fullPermissionOk}`,
+            );
           } catch (error) {
-            if (__DEV__) {
-              console.log('[Watchdog] falha ao validar permissão completa', error);
-            }
+            console.warn('[A14Diag] Watchdog falha fullPerm', error);
             permissionConfirmed = false;
           }
           if (!permissionConfirmed) return;
