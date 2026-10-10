@@ -51,6 +51,7 @@ import {
   type BackgroundIndexConsentStatus,
 } from '@/services/backgroundIndexing/consent';
 import {
+  hasFullGalleryPhotoPermission,
   hasGalleryPhotoPermission,
   requestGalleryPhotoPermission,
 } from '@/services/backgroundIndexing/galleryPermission';
@@ -1305,7 +1306,21 @@ export default function HomeScreen() {
         setScreen('home');
       }
 
-      const galleryPermissionGranted = await hasGalleryPhotoPermission();
+      let galleryPermissionGranted = false;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          galleryPermissionGranted = await hasGalleryPhotoPermission();
+        } catch (error) {
+          if (__DEV__) {
+            console.log('[Boot] falha ao ler permissão', error);
+          }
+          galleryPermissionGranted = false;
+        }
+        if (galleryPermissionGranted) break;
+        if (attempt < 2) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 500));
+        }
+      }
       const faceSearchModule = Platform.OS === 'web'
         ? null
         : await import('@/services/faceSearch');
@@ -1485,21 +1500,56 @@ export default function HomeScreen() {
         if (nextState !== 'active') return;
         void (async () => {
           try {
-            const module = await import('@/services/faceSearch');
-            const state = await module.getBackgroundIndexState();
-            if (!mountedRef.current) return;
-            setBackgroundIndexState(state);
-            await refreshIndexedPhotos();
+            const accessOk = await hasGalleryPhotoPermission();
+            if (mountedRef.current && accessOk !== hasGalleryPhotoAccess) {
+              setHasGalleryPhotoAccess(accessOk);
+            }
+          } catch (error) {
+            if (__DEV__) {
+              console.log('[AppState] falha ao revalidar acesso', error);
+            }
+          }
 
-            if (backgroundIndexConsent !== 'accepted') return;
-            if (!hasGalleryPhotoAccess) return;
-            if (state.status === 'completed') return;
-            void startForegroundIndexingIfNeeded();
+          let fullPermissionOk = false;
+          let permissionConfirmed = false;
+          try {
+            fullPermissionOk = await hasFullGalleryPhotoPermission();
+            permissionConfirmed = true;
+          } catch (error) {
+            if (__DEV__) {
+              console.log('[AppState] falha ao validar permissão completa', error);
+            }
+            permissionConfirmed = false;
+          }
+
+          let latestState: BackgroundIndexState | null = null;
+          try {
+            const module = await import('@/services/faceSearch');
+            latestState = await module.getBackgroundIndexState();
+            if (mountedRef.current) {
+              setBackgroundIndexState(latestState);
+            }
           } catch (error) {
             if (__DEV__) {
               console.log('[AppState] falha ao reler estado', error);
             }
+            return;
           }
+
+          try {
+            await refreshIndexedPhotos();
+          } catch (error) {
+            if (__DEV__) {
+              console.log('[AppState] falha ao atualizar fotos', error);
+            }
+          }
+
+          if (!permissionConfirmed) return;
+          if (!fullPermissionOk) return;
+          if (backgroundIndexConsent !== 'accepted') return;
+          if (latestState?.status === 'completed') return;
+          if (latestState?.status === 'cancelled') return;
+          void startForegroundIndexingIfNeeded();
         })();
       });
     });
@@ -1522,13 +1572,37 @@ export default function HomeScreen() {
       void (async () => {
         try {
           if (backgroundIndexConsent !== 'accepted') return;
-          if (!hasGalleryPhotoAccess) return;
           if (
             backgroundIndexState.status === 'completed' ||
             backgroundIndexState.status === 'cancelled'
           ) {
             return;
           }
+          try {
+            const accessOk = await hasGalleryPhotoPermission();
+            if (mountedRef.current && accessOk !== hasGalleryPhotoAccess) {
+              setHasGalleryPhotoAccess(accessOk);
+            }
+          } catch (error) {
+            if (__DEV__) {
+              console.log('[Watchdog] falha ao revalidar acesso', error);
+            }
+          }
+
+          let fullPermissionOk = false;
+          let permissionConfirmed = false;
+          try {
+            fullPermissionOk = await hasFullGalleryPhotoPermission();
+            permissionConfirmed = true;
+          } catch (error) {
+            if (__DEV__) {
+              console.log('[Watchdog] falha ao validar permissão completa', error);
+            }
+            permissionConfirmed = false;
+          }
+          if (!permissionConfirmed) return;
+          if (!fullPermissionOk) return;
+
           const foregroundIndexLoop = await import(
             '@/services/backgroundIndexing/foregroundIndexLoop'
           );
