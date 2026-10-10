@@ -29,6 +29,7 @@ export interface RunBackgroundIndexBatchOptions {
   timeBudgetMs?: number;
   albumId?: string | null;
   onPartialProgress?: (processedAssets: number, totalAssets: number | null) => void;
+  trigger?: 'auto' | 'explicit';
 }
 
 async function persistBackgroundState(
@@ -119,6 +120,22 @@ async function runCoordinatedBackgroundIndexBatch(
     }
   }
   const leaseOwner = `${Date.now()}-${Math.random()}`;
+  const trigger = options.trigger ?? 'auto';
+  if (
+    trigger === 'auto' &&
+    !resume &&
+    previousState.status === 'completed' &&
+    activeGeneration === null
+  ) {
+    console.warn(
+      '[Batch] pulando reindexação automática (estado já completed)',
+    );
+    return {
+      status: 'completed',
+      cumulativeProcessed: previousState.processedAssets,
+      cumulativeTotal: previousState.totalAssets,
+    };
+  }
   const generation = resume ? resume.generation : await faceSearchRepository.beginScan(leaseOwner);
   const after = resume?.cursor;
   if (resume && !(await faceSearchRepository.claimScan(generation, leaseOwner))) {

@@ -20,6 +20,7 @@ export interface ForegroundIndexingHandle {
 export interface ForegroundIndexingOptions {
   maxAssets?: number;
   timeBudgetMs?: number;
+  trigger?: 'auto' | 'explicit';
   onPartialProgress?: (processedAssets: number, totalAssets: number | null) => void;
   onFinalOutcome?: (
     outcome: BackgroundIndexBatchOutcome,
@@ -92,6 +93,7 @@ export function startForegroundIndexing(
         const batchPromise = runBackgroundIndexBatch({
           maxAssets,
           timeBudgetMs,
+          trigger: options.trigger,
           onPartialProgress: (processedAssets, totalAssets) => {
             options.onPartialProgress?.(processedAssets, totalAssets);
             void updateIndexingProgress(processedAssets, totalAssets);

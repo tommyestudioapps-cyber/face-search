@@ -1237,57 +1237,61 @@ export default function HomeScreen() {
     await syncBackgroundIndexRegistration();
   };
 
-  const startForegroundIndexingIfNeeded = useCallback(async (): Promise<void> => {
-    if (Platform.OS === 'web') return;
+  const startForegroundIndexingIfNeeded = useCallback(
+    async (trigger: 'auto' | 'explicit' = 'auto'): Promise<void> => {
+      if (Platform.OS === 'web') return;
 
-    const foregroundIndexLoop = await import(
-      '@/services/backgroundIndexing/foregroundIndexLoop'
-    );
-    foregroundIndexLoop.startForegroundIndexing({
-      onPartialProgress: (processedAssets, totalAssets) => {
-        if (!mountedRef.current) return;
-        // Evita acumular setState em fila enquanto a UI está suspensa
-        // (tela apagada ou app em background). O valor real é lido do
-        // SQLite pelo listener de AppState quando o app volta a 'active',
-        // evitando o salto visual (ex: de 71 direto para 334).
-        if (AppState.currentState !== 'active') return;
-        setBackgroundIndexState((current) => ({
-          ...current,
-          status: 'running',
-          processedAssets,
-          totalAssets: totalAssets ?? current.totalAssets,
-          lastError: null,
-        }));
-      },
-      onFinalOutcome: async (outcome) => {
-        if (!mountedRef.current) return;
-        const status = outcome.status === 'blocked'
-          ? 'waiting'
-          : outcome.status;
-        setBackgroundIndexState((current) => ({
-          ...current,
-          status,
-          processedAssets: outcome.cumulativeProcessed,
-          totalAssets: outcome.cumulativeTotal,
-          lastCompletedAt: outcome.status === 'completed'
-            ? Date.now()
-            : current.lastCompletedAt,
-          lastError: null,
-        }));
+      const foregroundIndexLoop = await import(
+        '@/services/backgroundIndexing/foregroundIndexLoop'
+      );
+      foregroundIndexLoop.startForegroundIndexing({
+        trigger,
+        onPartialProgress: (processedAssets, totalAssets) => {
+          if (!mountedRef.current) return;
+          // Evita acumular setState em fila enquanto a UI está suspensa
+          // (tela apagada ou app em background). O valor real é lido do
+          // SQLite pelo listener de AppState quando o app volta a 'active',
+          // evitando o salto visual (ex: de 71 direto para 334).
+          if (AppState.currentState !== 'active') return;
+          setBackgroundIndexState((current) => ({
+            ...current,
+            status: 'running',
+            processedAssets,
+            totalAssets: totalAssets ?? current.totalAssets,
+            lastError: null,
+          }));
+        },
+        onFinalOutcome: async (outcome) => {
+          if (!mountedRef.current) return;
+          const status = outcome.status === 'blocked'
+            ? 'waiting'
+            : outcome.status;
+          setBackgroundIndexState((current) => ({
+            ...current,
+            status,
+            processedAssets: outcome.cumulativeProcessed,
+            totalAssets: outcome.cumulativeTotal,
+            lastCompletedAt: outcome.status === 'completed'
+              ? Date.now()
+              : current.lastCompletedAt,
+            lastError: null,
+          }));
 
-        if (
-          outcome.status === 'completed' ||
-          outcome.status === 'cancelled' ||
-          outcome.status === 'paused'
-        ) {
-          const { AppState } = await import('react-native');
-          if (AppState.currentState === 'active') {
-            await refreshIndexedPhotos();
+          if (
+            outcome.status === 'completed' ||
+            outcome.status === 'cancelled' ||
+            outcome.status === 'paused'
+          ) {
+            const { AppState } = await import('react-native');
+            if (AppState.currentState === 'active') {
+              await refreshIndexedPhotos();
+            }
           }
-        }
-      },
-    });
-  }, [refreshIndexedPhotos]);
+        },
+      });
+    },
+    [refreshIndexedPhotos],
+  );
 
   useEffect(() => {
     if (__DEV__) {
@@ -1632,6 +1636,20 @@ export default function HomeScreen() {
           const foregroundIndexLoop = await import(
             '@/services/backgroundIndexing/foregroundIndexLoop'
           );
+          // Revalidação fresca: o React pode estar desatualizado.
+          try {
+            const module = await import('@/services/faceSearch');
+            const fresh = await module.getBackgroundIndexState();
+            if (fresh.status === 'completed' || fresh.status === 'cancelled') {
+              console.warn(
+                `[Watchdog] abortando reinício (fresh status=${fresh.status})`,
+              );
+              return;
+            }
+          } catch (error) {
+            console.warn('[Watchdog] falha ao reler estado', error);
+            return;
+          }
           const active = foregroundIndexLoop.getActiveForegroundIndexing();
           if (active && active.isRunning()) return;
           if (__DEV__) {
@@ -1704,7 +1722,7 @@ export default function HomeScreen() {
     }
     try {
       const registration = syncBackgroundTask();
-      const immediateBatch = startForegroundIndexingIfNeeded();
+      const immediateBatch = startForegroundIndexingIfNeeded('explicit');
       const [registrationResult] = await Promise.allSettled([
         registration,
         immediateBatch,
@@ -1773,7 +1791,7 @@ export default function HomeScreen() {
         }
         try {
           const registration = syncBackgroundTask();
-          const immediateBatch = startForegroundIndexingIfNeeded();
+          const immediateBatch = startForegroundIndexingIfNeeded('explicit');
           const [registrationResult] = await Promise.allSettled([
             registration,
             immediateBatch,
