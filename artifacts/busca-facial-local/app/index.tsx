@@ -6,6 +6,7 @@ import { Feather, FontAwesome } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   FlatList,
   Image,
   Linking,
@@ -1244,6 +1245,11 @@ export default function HomeScreen() {
     foregroundIndexLoop.startForegroundIndexing({
       onPartialProgress: (processedAssets, totalAssets) => {
         if (!mountedRef.current) return;
+        // Evita acumular setState em fila enquanto a UI está suspensa
+        // (tela apagada ou app em background). O valor real é lido do
+        // SQLite pelo listener de AppState quando o app volta a 'active',
+        // evitando o salto visual (ex: de 71 direto para 334).
+        if (AppState.currentState !== 'active') return;
         setBackgroundIndexState((current) => ({
           ...current,
           status: 'running',
