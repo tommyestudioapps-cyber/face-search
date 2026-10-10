@@ -10,7 +10,8 @@ export interface IndexOperationStatus {
 
 interface PendingOperation {
   kind: CoordinatedOperation;
-  execute: () => void;
+  execute: (runId: number) => void;
+  reject: (error: Error) => void;
 }
 
 // Serializes native model use in one JS runtime. SQLite still owns the
@@ -20,6 +21,8 @@ export class IndexCoordinator {
   private pending: PendingOperation[] = [];
   private lastStatus: IndexOperationStatus | null = null;
   private pendingStatusWrite: Promise<void> = Promise.resolve();
+  private nextRunId = 0;
+  private activeRunId: number | null = null;
 
   constructor(
     private readonly saveStatus: (status: IndexOperationStatus) => Promise<void>,
@@ -45,25 +48,55 @@ export class IndexCoordinator {
 
   run<T>(kind: CoordinatedOperation, action: () => Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      const execute = () => {
+      const execute = (runId: number) => {
         void (async () => {
           try {
             if (kind !== 'dispose') this.updateStatus(kind, 'running');
             const result = await action();
-            if (kind !== 'dispose') this.updateStatus(kind, 'finished');
+            if (
+              kind !== 'dispose' &&
+              this.activeRunId === runId
+            ) {
+              this.updateStatus(kind, 'finished');
+            }
             resolve(result);
           } catch (error) {
-            if (kind !== 'dispose') this.updateStatus(kind, 'failed');
+            if (
+              kind !== 'dispose' &&
+              this.activeRunId === runId
+            ) {
+              this.updateStatus(kind, 'failed');
+            }
             reject(error);
           } finally {
-            this.active = null;
-            this.dispatchNext();
+            if (this.activeRunId === runId) {
+              this.active = null;
+              this.activeRunId = null;
+              this.dispatchNext();
+            }
           }
         })();
       };
-      this.pending.push({ kind, execute });
+      this.pending.push({
+        kind,
+        execute,
+        reject: (error) => reject(error),
+      });
       this.dispatchNext();
     });
+  }
+
+  forceRelease(): void {
+    this.active = null;
+    this.activeRunId = null;
+
+    const discarded = this.pending.splice(0);
+    const error = new Error(
+      'Operação descartada após timeout de indexação.',
+    );
+    for (const operation of discarded) {
+      operation.reject(error);
+    }
   }
 
   private updateStatus(
@@ -85,6 +118,8 @@ export class IndexCoordinator {
     const manualIndex = this.pending.findIndex(({ kind }) => kind !== 'background');
     const [next] = this.pending.splice(manualIndex === -1 ? 0 : manualIndex, 1);
     this.active = next.kind;
-    next.execute();
+    const runId = ++this.nextRunId;
+    this.activeRunId = runId;
+    next.execute(runId);
   }
 }

@@ -9,6 +9,7 @@ import {
   type BackgroundIndexBatchOutcome,
 } from './batchRunner';
 import { getBackgroundIndexConsent } from './consent';
+import { indexCoordinator } from './indexCoordinator';
 
 export interface ForegroundIndexingHandle {
   promise: Promise<void>;
@@ -85,18 +86,37 @@ export function startForegroundIndexing(
         }
 
         let outcome: BackgroundIndexBatchOutcome | null = null;
+        let batchTimeoutId: ReturnType<typeof setTimeout> | null = null;
+        let batchTimedOut = false;
+        const BATCH_HARD_TIMEOUT_MS = 5 * 60 * 1000;
+        const batchPromise = runBackgroundIndexBatch({
+          maxAssets,
+          timeBudgetMs,
+          onPartialProgress: (processedAssets, totalAssets) => {
+            options.onPartialProgress?.(processedAssets, totalAssets);
+            void updateIndexingProgress(processedAssets, totalAssets);
+          },
+        });
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          batchTimeoutId = setTimeout(() => {
+            batchTimedOut = true;
+            reject(new Error('batch hard timeout'));
+          }, BATCH_HARD_TIMEOUT_MS);
+        });
         try {
-          outcome = await runBackgroundIndexBatch({
-            maxAssets,
-            timeBudgetMs,
-            onPartialProgress: (processedAssets, totalAssets) => {
-              options.onPartialProgress?.(processedAssets, totalAssets);
-              void updateIndexingProgress(processedAssets, totalAssets);
-            },
-          });
+          outcome = await Promise.race([batchPromise, timeoutPromise]);
         } catch (error) {
+          if (batchTimedOut) {
+            console.warn('[ForegroundIndex] batch timeout ou erro:', error);
+            indexCoordinator.forceRelease();
+            break;
+          }
           console.warn('[ForegroundIndex] batch falhou', error);
           break;
+        } finally {
+          if (batchTimeoutId !== null) {
+            clearTimeout(batchTimeoutId);
+          }
         }
         if (outcome) {
           lastOutcome = outcome;
