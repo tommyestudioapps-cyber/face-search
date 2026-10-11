@@ -15,6 +15,7 @@ export interface ForegroundIndexingHandle {
   promise: Promise<void>;
   cancel: () => void;
   isRunning: () => boolean;
+  updateCallbacks: (options: ForegroundIndexingOptions) => void;
 }
 
 export interface ForegroundIndexingOptions {
@@ -53,6 +54,11 @@ export function startForegroundIndexing(
   options: ForegroundIndexingOptions = {},
 ): ForegroundIndexingHandle {
   if (activeHandle && activeHandle.isRunning()) {
+    // Handle ativo: substituir callbacks para que a nova tela (após
+    // remontagem) receba eventos a partir de agora. Sem isso, a UI nova
+    // fica presa no snapshot do SQLite enquanto a notificação continua
+    // avançando.
+    activeHandle.updateCallbacks(options);
     return activeHandle;
   }
 
@@ -60,6 +66,10 @@ export function startForegroundIndexing(
   const timeBudgetMs = options.timeBudgetMs ?? DEFAULT_TIME_BUDGET_MS;
 
   let cancelled = false;
+  // Refs mutáveis para os callbacks — permitem substituição em runtime
+  // quando a tela é remontada sem matar o handle.
+  let currentOnPartialProgress = options.onPartialProgress;
+  let currentOnFinalOutcome = options.onFinalOutcome;
 
   const promise = (async () => {
     if (__DEV__) {
@@ -95,7 +105,7 @@ export function startForegroundIndexing(
           timeBudgetMs,
           trigger: options.trigger,
           onPartialProgress: (processedAssets, totalAssets) => {
-            options.onPartialProgress?.(processedAssets, totalAssets);
+            currentOnPartialProgress?.(processedAssets, totalAssets);
             void updateIndexingProgress(processedAssets, totalAssets);
           },
         });
@@ -177,7 +187,7 @@ export function startForegroundIndexing(
           cumulativeTotal: null,
         };
       }
-      if (finalOutcome && options.onFinalOutcome) {
+      if (finalOutcome && currentOnFinalOutcome) {
         if (
           finalOutcome.status === 'completed' ||
           finalOutcome.status === 'cancelled'
@@ -187,7 +197,7 @@ export function startForegroundIndexing(
           await new Promise<void>((resolve) => setTimeout(resolve, 300));
         }
         try {
-          await options.onFinalOutcome(finalOutcome);
+          await currentOnFinalOutcome(finalOutcome);
           console.warn('[A12Diag] onFinalOutcome OK');
         } catch (error) {
           console.warn('[A12Diag] onFinalOutcome falhou', error);
@@ -214,6 +224,14 @@ export function startForegroundIndexing(
       cancelled = true;
     },
     isRunning: () => !cancelled && activeHandle === handle,
+    updateCallbacks: (nextOptions) => {
+      if (nextOptions.onPartialProgress !== undefined) {
+        currentOnPartialProgress = nextOptions.onPartialProgress;
+      }
+      if (nextOptions.onFinalOutcome !== undefined) {
+        currentOnFinalOutcome = nextOptions.onFinalOutcome;
+      }
+    },
   };
 
   activeHandle = handle;
