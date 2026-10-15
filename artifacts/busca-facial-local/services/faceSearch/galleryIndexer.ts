@@ -81,17 +81,23 @@ export interface GalleryIndexBatch {
   shouldYield?: () => boolean;
 }
 
+export type CancelReason = 'user' | 'lease' | 'ineligible';
+
+export interface GalleryIndexCancellationContract {
+  cancel(reason?: CancelReason): void;
+  isCancelled(): boolean;
+  getReason(): CancelReason;
+}
+
 export interface GalleryIndexOptions {
   onProgress?: (progress: FaceIndexProgress) => void;
-  cancellation?: GalleryIndexCancellation;
+  cancellation?: GalleryIndexCancellationContract;
   albumId?: string | null;
   batch?: GalleryIndexBatch;
   queryEmbeddings?: Float32Array[];
   onMatch?: (assetId: string, similarity: number) => void;
   assumedTotalAssets?: number;
 }
-
-export type CancelReason = 'user' | 'lease' | 'ineligible';
 
 export interface GalleryIndexResult {
   status: 'completed' | 'cancelled' | 'paused';
@@ -120,7 +126,7 @@ interface MatchContext {
   onMatch?: (assetId: string, similarity: number) => void;
 }
 
-export class GalleryIndexCancellation {
+export class GalleryIndexCancellation implements GalleryIndexCancellationContract {
   private cancelled = false;
   private reason: CancelReason | null = null;
 
@@ -204,7 +210,7 @@ function isCancellationError(error: unknown): boolean {
   return error instanceof FaceRecognitionError && error.code === 'cancelled';
 }
 
-function throwIfCancelled(cancellation: GalleryIndexCancellation): void {
+function throwIfCancelled(cancellation: GalleryIndexCancellationContract): void {
   if (cancellation.isCancelled()) {
     throw new FaceRecognitionError(
       'cancelled',
@@ -319,7 +325,7 @@ function computeAssetMatch(
 async function indexAsset(
   asset: MediaLibrary.Asset,
   indexedPhoto: IndexedPhoto | undefined,
-  cancellation: GalleryIndexCancellation,
+  cancellation: GalleryIndexCancellationContract,
   shouldContinue?: () => Promise<boolean>,
   generation?: number,
   leaseOwner?: string,

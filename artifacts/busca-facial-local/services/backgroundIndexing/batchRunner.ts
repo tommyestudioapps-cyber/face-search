@@ -1,7 +1,8 @@
 import {
-  GalleryIndexCancellation,
   countGalleryAssets,
   indexGallery,
+  type CancelReason,
+  type GalleryIndexCancellationContract,
 } from '@/services/faceSearch/galleryIndexer';
 import { FaceRecognitionError } from '@/services/faceSearch/types';
 import { faceSearchRepository } from '@/services/faceSearch/repository';
@@ -46,6 +47,20 @@ async function canContinue(): Promise<boolean> {
     console.log(`[Perm:diag] ctx=batch-canContinue consent=${consentOk} full=${hasFull}`);
   }
   return consentOk && hasFull;
+}
+
+function createBatchCancellation(): GalleryIndexCancellationContract {
+  let cancelled = false;
+  let reason: CancelReason | null = null;
+  return {
+    cancel(nextReason: CancelReason = 'user') {
+      if (cancelled) return;
+      cancelled = true;
+      reason = nextReason;
+    },
+    isCancelled: () => cancelled,
+    getReason: () => reason ?? 'user',
+  };
 }
 
 export async function runBackgroundIndexBatch(
@@ -184,6 +199,7 @@ async function runCoordinatedBackgroundIndexBatch(
         lastError: null,
       });
 
+  const cancellation = createBatchCancellation();
   let leaseHealthy = true;
   const heartbeat = setInterval(() => {
     void faceSearchRepository.renewScan(generation, leaseOwner)
@@ -193,7 +209,6 @@ async function runCoordinatedBackgroundIndexBatch(
         console.warn('[BackgroundIndex] Não foi possível renovar a reserva.', error);
       });
   }, 15_000);
-  const cancellation = new GalleryIndexCancellation();
   try {
     const result = await indexGallery({
       albumId: options.albumId,
