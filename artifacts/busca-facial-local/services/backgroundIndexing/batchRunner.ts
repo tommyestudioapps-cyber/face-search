@@ -1,4 +1,5 @@
 import {
+  GalleryIndexCancellation,
   countGalleryAssets,
   indexGallery,
 } from '@/services/faceSearch/galleryIndexer';
@@ -192,10 +193,12 @@ async function runCoordinatedBackgroundIndexBatch(
         console.warn('[BackgroundIndex] Não foi possível renovar a reserva.', error);
       });
   }, 15_000);
+  const cancellation = new GalleryIndexCancellation();
   try {
     const result = await indexGallery({
       albumId: options.albumId,
       assumedTotalAssets: assumedTotal,
+      cancellation,
       onProgress: (() => {
         let lastEmitAt = 0;
         return (progress: { processedAssets: number; totalAssets: number | null }) => {
@@ -221,7 +224,17 @@ async function runCoordinatedBackgroundIndexBatch(
         leaseOwner,
         maxAssets,
         timeBudgetMs,
-        shouldContinue: async () => leaseHealthy && await canContinue(),
+        shouldContinue: async () => {
+          if (!leaseHealthy) {
+            cancellation.cancel('lease');
+            return false;
+          }
+          if (!(await canContinue())) {
+            cancellation.cancel('ineligible');
+            return false;
+          }
+          return true;
+        },
         shouldYield: () => indexCoordinator.shouldYieldBackground(),
         onCheckpoint: async (cursor) => {
           if (!(await canContinue())) {
@@ -285,19 +298,42 @@ async function runCoordinatedBackgroundIndexBatch(
       });
     }
     if (result.status === 'cancelled') {
-      await faceSearchRepository.abortScan(generation, leaseOwner);
-      await persistBackgroundState({
-        status: 'cancelled',
-        scope: 'gallery',
-        processedAssets: finalProcessed,
-        totalAssets: result.totalAssets,
-        lastAssetId: result.lastAssetId ?? null,
-        lastError: null,
-      });
+      const reason = result.cancelReason ?? 'user';
+      if (reason === 'lease') {
+        console.warn(
+          '[Batch] cancelado por lease; convertendo para paused',
+        );
+        await persistBackgroundState({
+          status: 'paused',
+          scope: 'gallery',
+          processedAssets: finalProcessed,
+          totalAssets: result.totalAssets,
+          lastAssetId: result.lastAssetId ?? null,
+          lastError: null,
+        });
+      } else {
+        await faceSearchRepository.abortScan(generation, leaseOwner);
+        await persistBackgroundState({
+          status: 'cancelled',
+          scope: 'gallery',
+          processedAssets: finalProcessed,
+          totalAssets: result.totalAssets,
+          lastAssetId: result.lastAssetId ?? null,
+          lastError: null,
+        });
+      }
     }
     // A cancelled batch leaves its last completed page checkpoint intact.
+    const returnedStatus: BackgroundIndexBatchOutcome['status'] =
+      result.status === 'cancelled' && result.cancelReason === 'lease'
+        ? 'paused'
+        : result.status === 'cancelled'
+          ? 'cancelled'
+          : result.status === 'completed'
+            ? 'completed'
+            : 'paused';
     return {
-      status: result.status,
+      status: returnedStatus,
       cumulativeProcessed: finalProcessed,
       cumulativeTotal:
         result.status === 'completed' ? finalProcessed : result.totalAssets,

@@ -91,8 +91,11 @@ export interface GalleryIndexOptions {
   assumedTotalAssets?: number;
 }
 
+export type CancelReason = 'user' | 'lease' | 'ineligible';
+
 export interface GalleryIndexResult {
   status: 'completed' | 'cancelled' | 'paused';
+  cancelReason?: CancelReason;
   nextCursor?: string;
   processedAssets: number;
   totalAssets: number;
@@ -119,13 +122,22 @@ interface MatchContext {
 
 export class GalleryIndexCancellation {
   private cancelled = false;
+  private reason: CancelReason | null = null;
 
-  cancel(): void {
+  cancel(reason: CancelReason = 'user'): void {
+    if (this.cancelled) {
+      return;
+    }
     this.cancelled = true;
+    this.reason = reason;
   }
 
   isCancelled(): boolean {
     return this.cancelled;
+  }
+
+  getReason(): CancelReason {
+    return this.reason ?? 'user';
   }
 }
 
@@ -569,7 +581,7 @@ async function runGalleryIndex(
           try {
             const renewed = await faceSearchRepository.renewScan(generation, manualOwner);
             if (!renewed) {
-              cancellation.cancel();
+              cancellation.cancel('lease');
             }
           } catch (firstError) {
             // Uma falha transitória (SQLITE_BUSY) não deve cancelar a indexação.
@@ -577,10 +589,10 @@ async function runGalleryIndex(
               await new Promise((resolve) => setTimeout(resolve, 2_000));
               const renewed = await faceSearchRepository.renewScan(generation, manualOwner);
               if (!renewed) {
-                cancellation.cancel();
+                cancellation.cancel('lease');
               }
             } catch (secondError) {
-              cancellation.cancel();
+              cancellation.cancel('lease');
               console.warn('[Index] Não foi possível renovar a reserva após retry.', secondError);
             }
           }
@@ -767,6 +779,7 @@ async function runGalleryIndex(
       });
       return {
         status: 'cancelled',
+        cancelReason: cancellation.getReason(),
         processedAssets: progress.processedAssets,
         totalAssets,
         lastAssetId,
