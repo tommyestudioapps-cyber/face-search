@@ -1,12 +1,82 @@
 import notifee, {
   AndroidImportance,
+  AuthorizationStatus,
   EventType,
 } from '@notifee/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 export const INDEXING_CHANNEL_ID = 'search-face-indexing';
 export const INDEXING_NOTIFICATION_ID = 'search-face-indexing-foreground';
 export const INDEXING_PAUSE_ACTION = 'search-face-pause-indexing';
+
+const NOTIF_ASKED_KEY = 'visage.notifPermissionAsked';
+
+export async function hasNotificationPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  if (typeof Platform.Version === 'number' && Platform.Version < 33) {
+    return true;
+  }
+  try {
+    const settings = await notifee.getNotificationSettings();
+    return settings.authorizationStatus === AuthorizationStatus.AUTHORIZED;
+  } catch {
+    return false;
+  }
+}
+
+async function requestNotificationPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  if (typeof Platform.Version === 'number' && Platform.Version < 33) {
+    return true;
+  }
+  let granted = false;
+  try {
+    const settings = await notifee.requestPermission();
+    granted =
+      settings.authorizationStatus === AuthorizationStatus.AUTHORIZED;
+  } catch (error) {
+    console.warn('[Notif] falha ao pedir permissão', error);
+    granted = false;
+  }
+  try {
+    await AsyncStorage.setItem(NOTIF_ASKED_KEY, 'true');
+  } catch (error) {
+    console.warn('[Notif] falha ao gravar flag', error);
+  }
+  return granted;
+}
+
+async function readNotificationAskedFlag(): Promise<boolean | null> {
+  try {
+    const value = await AsyncStorage.getItem(NOTIF_ASKED_KEY);
+    return value === 'true';
+  } catch (error) {
+    console.warn('[Notif] falha ao ler flag', error);
+    return null;
+  }
+}
+
+export async function ensureNotificationPermissionAsked(): Promise<{
+  granted: boolean;
+  shouldShowWarning: boolean;
+}> {
+  if (
+    Platform.OS !== 'android' ||
+    (typeof Platform.Version === 'number' && Platform.Version < 33)
+  ) {
+    return { granted: true, shouldShowWarning: false };
+  }
+  if (await hasNotificationPermission()) {
+    return { granted: true, shouldShowWarning: false };
+  }
+  const asked = await readNotificationAskedFlag();
+  if (asked === null || asked) {
+    return { granted: false, shouldShowWarning: true };
+  }
+  const granted = await requestNotificationPermission();
+  return { granted, shouldShowWarning: !granted };
+}
 
 let pauseHandler: (() => void) | null = null;
 

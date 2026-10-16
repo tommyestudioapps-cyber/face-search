@@ -50,6 +50,7 @@ import {
   setBackgroundIndexConsent,
   type BackgroundIndexConsentStatus,
 } from '@/services/backgroundIndexing/consent';
+import { ensureNotificationPermissionAsked } from '@/services/backgroundIndexing/foregroundService';
 import {
   hasFullGalleryPhotoPermission,
   hasGalleryPhotoPermission,
@@ -1790,6 +1791,9 @@ export default function HomeScreen() {
           }));
         }
         try {
+          if (Platform.OS === 'android') {
+            await ensureNotificationPermissionAsked();
+          }
           const registration = syncBackgroundTask();
           const immediateBatch = startForegroundIndexingIfNeeded('explicit');
           const [registrationResult] = await Promise.allSettled([

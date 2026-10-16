@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AppState,
   ActivityIndicator,
@@ -16,6 +16,10 @@ import {
   hasGalleryPhotoPermission,
   requestGalleryPhotoPermission,
 } from '@/services/backgroundIndexing/galleryPermission';
+import {
+  ensureNotificationPermissionAsked,
+  hasNotificationPermission,
+} from '@/services/backgroundIndexing/foregroundService';
 
 interface OnboardingPermissionsProps {
   onComplete: (result: {
@@ -25,6 +29,7 @@ interface OnboardingPermissionsProps {
 }
 
 type OnboardingStep = 'checking' | 'permission' | 'permission-denied' | 'consent';
+type NotificationStep = 'idle' | 'warning' | 'awaiting-settings';
 
 function getPermissionSettingsCopy(): string {
   if (Platform.OS !== 'android') {
@@ -48,6 +53,13 @@ export function OnboardingPermissions({
   const [step, setStep] = useState<OnboardingStep>('checking');
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notificationStep, setNotificationStep] =
+    useState<NotificationStep>('idle');
+  const [pendingCompletion, setPendingCompletion] = useState<{
+    galleryGranted: boolean;
+    indexAccepted: boolean;
+  } | null>(null);
+  const notificationRequestInFlightRef = useRef(false);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -98,6 +110,75 @@ export function OnboardingPermissions({
     }
   };
 
+  const handleCompletion = async (result: {
+    galleryGranted: boolean;
+    indexAccepted: boolean;
+  }): Promise<void> => {
+    if (
+      !result.indexAccepted ||
+      Platform.OS !== 'android' ||
+      typeof Platform.Version !== 'number' ||
+      Platform.Version < 33
+    ) {
+      await complete(result);
+      return;
+    }
+    if (notificationRequestInFlightRef.current) return;
+
+    notificationRequestInFlightRef.current = true;
+    setIsBusy(true);
+    setError(null);
+    try {
+      const notifResult = await ensureNotificationPermissionAsked();
+      if (notifResult.granted) {
+        await complete(result);
+        return;
+      }
+      setPendingCompletion(result);
+      setNotificationStep('warning');
+    } catch (requestError) {
+      console.warn('[Notif] falha ao verificar permissão', requestError);
+      setPendingCompletion(result);
+      setNotificationStep('warning');
+    } finally {
+      notificationRequestInFlightRef.current = false;
+      setIsBusy(false);
+    }
+  };
+
+  const openNotificationSettings = async () => {
+    setError(null);
+    setNotificationStep('awaiting-settings');
+    try {
+      await Linking.openSettings();
+    } catch (settingsError) {
+      console.warn('[Notif] falha ao abrir configurações', settingsError);
+      setError('Não foi possível abrir as configurações do app.');
+      setNotificationStep('warning');
+    }
+  };
+
+  useEffect(() => {
+    if (notificationStep !== 'awaiting-settings') return;
+    let handlingResume = false;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active' || handlingResume) return;
+      handlingResume = true;
+      void (async () => {
+        const granted = await hasNotificationPermission();
+        if (granted && pendingCompletion) {
+          const result = pendingCompletion;
+          setPendingCompletion(null);
+          setNotificationStep('idle');
+          await complete(result);
+          return;
+        }
+        setNotificationStep('warning');
+      })();
+    });
+    return () => subscription.remove();
+  }, [notificationStep, pendingCompletion, complete]);
+
   const requestPermission = async () => {
     setIsBusy(true);
     setError(null);
@@ -146,7 +227,83 @@ export function OnboardingPermissions({
             { backgroundColor: colors.card, borderColor: colors.border },
           ]}
         >
-          {step === 'checking' ? (
+          {notificationStep !== 'idle' ? (
+            <>
+              <View style={[styles.icon, { backgroundColor: colors.accent }]}>
+                <Feather name="bell" size={21} color={colors.primary} />
+              </View>
+              <Text style={[styles.title, { color: colors.foreground }]}>
+                Notificação de progresso
+              </Text>
+              <Text style={[styles.body, { color: colors.mutedForeground }]}>
+                A indexação pode continuar sem essa permissão, mas o progresso
+                pode não aparecer na gaveta de notificações. O Android ainda
+                pode mostrar o serviço na tela de tarefas ativas.
+              </Text>
+              {error ? (
+                <Text style={[styles.error, { color: colors.destructive }]}>
+                  {error}
+                </Text>
+              ) : null}
+              {notificationStep === 'warning' ? (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={isBusy}
+                    onPress={() => void openNotificationSettings()}
+                    style={({ pressed }) => [
+                      styles.settingsButton,
+                      { borderColor: colors.border },
+                      pressed ? styles.pressed : null,
+                    ]}
+                    testID="onboarding-notification-settings"
+                  >
+                    <Feather name="settings" size={16} color={colors.foreground} />
+                    <Text
+                      style={[
+                        styles.secondaryButtonText,
+                        { color: colors.foreground },
+                      ]}
+                    >
+                      Abrir configurações
+                    </Text>
+                  </Pressable>
+                  <View style={styles.actions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={isBusy || !pendingCompletion}
+                      onPress={() => {
+                        if (!pendingCompletion) return;
+                        const result = pendingCompletion;
+                        setPendingCompletion(null);
+                        setNotificationStep('idle');
+                        void complete(result);
+                      }}
+                      style={({ pressed }) => [
+                        styles.primaryButton,
+                        { backgroundColor: colors.primary },
+                        pressed ? styles.pressed : null,
+                      ]}
+                      testID="onboarding-notification-continue"
+                    >
+                      <Text
+                        style={[
+                          styles.primaryButtonText,
+                          { color: colors.primaryForeground },
+                        ]}
+                      >
+                        Continuar assim
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : (
+                <Text style={[styles.body, { color: colors.mutedForeground }]}>
+                  Aguardando você voltar das configurações…
+                </Text>
+              )}
+            </>
+          ) : step === 'checking' ? (
             <View style={styles.loading}>
               <ActivityIndicator color={colors.primary} />
               <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
@@ -206,7 +363,10 @@ export function OnboardingPermissions({
                     accessibilityRole="button"
                     disabled={isBusy}
                     onPress={() =>
-                      void complete({ galleryGranted: true, indexAccepted: true })
+                      void handleCompletion({
+                        galleryGranted: true,
+                        indexAccepted: true,
+                      })
                     }
                     style={({ pressed }) => [
                       styles.primaryButton,
