@@ -97,7 +97,8 @@ export function startForegroundIndexing(
       await startIndexingForeground();
     } catch (error) {
       console.warn('[ForegroundIndex] FGS não subiu; abortando loop', error);
-      return createInactiveHandle();
+      activeHandle = null;
+      return;
     }
     try {
       let finalOutcome: BackgroundIndexBatchOutcome | null = null;
