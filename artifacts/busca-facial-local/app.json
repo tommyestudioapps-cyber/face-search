@@ -19,6 +19,7 @@
       },
       "allowBackup": false,
       "permissions": [
+        "WAKE_LOCK",
         "CAMERA",
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE",
@@ -27,6 +28,9 @@
         "FOREGROUND_SERVICE_DATA_SYNC",
         "POST_NOTIFICATIONS"
       ]
+    },
+    "autolinking": {
+      "nativeModulesDir": "./modules"
     },
     "web": {
       "favicon": "./assets/images/icon.png"

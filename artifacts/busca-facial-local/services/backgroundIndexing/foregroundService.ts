@@ -4,6 +4,7 @@ import notifee, {
   AuthorizationStatus,
   EventType,
 } from '@notifee/react-native';
+import { WakeLock } from '../../modules/wake-lock';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -142,6 +143,9 @@ export async function ensureIndexingChannel(): Promise<string | null> {
 export async function startIndexingForeground(): Promise<void> {
   if (Platform.OS !== 'android') return;
   await ensureIndexingChannel();
+  // Wake lock de 10 min, renovado a cada 5 min se a indexação ainda estiver ativa.
+  // Sem isso, a CPU suspende (mWakefulness=Dozing) e os timers JS congelam.
+  WakeLock.acquire(10 * 60 * 1000);
   await notifee.displayNotification({
     id: INDEXING_NOTIFICATION_ID,
     title: 'Preparando índice local',
@@ -174,6 +178,10 @@ export async function updateIndexingProgress(
   totalAssets: number | null,
 ): Promise<void> {
   if (Platform.OS !== 'android') return;
+  // Renova o wake lock a cada update (~2s por batch). O acquire substitui
+  // o anterior, então não há leak. Timeout de 10 min garante liberação
+  // se o app crashar sem chamar stop.
+  WakeLock.acquire(10 * 60 * 1000);
   const hasTotal =
     typeof totalAssets === 'number' && totalAssets > 0;
   const safeMax = hasTotal ? totalAssets : 100;
@@ -212,6 +220,7 @@ export async function updateIndexingProgress(
 
 export async function stopIndexingForeground(): Promise<void> {
   if (Platform.OS !== 'android') return;
+  WakeLock.release();
   console.warn('[A12Diag] stopIndexingForeground iniciando');
   try {
     await notifee.stopForegroundService();
