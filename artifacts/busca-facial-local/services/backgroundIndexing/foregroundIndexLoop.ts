@@ -10,6 +10,7 @@ import {
 } from './batchRunner';
 import { getBackgroundIndexConsent } from './consent';
 import { indexCoordinator } from './indexCoordinator';
+import { AppState } from 'react-native';
 
 export interface ForegroundIndexingHandle {
   promise: Promise<void>;
@@ -50,9 +51,22 @@ async function waitOrCancel(
   return isCancelled();
 }
 
+function createInactiveHandle(): ForegroundIndexingHandle {
+  return {
+    promise: Promise.resolve(),
+    cancel: () => {},
+    isRunning: () => false,
+    updateCallbacks: () => {},
+  };
+}
+
 export function startForegroundIndexing(
   options: ForegroundIndexingOptions = {},
 ): ForegroundIndexingHandle {
+  if (AppState.currentState !== 'active') {
+    console.warn('[ForegroundIndex] abortando: app não está em foreground');
+    return createInactiveHandle();
+  }
   if (activeHandle && activeHandle.isRunning()) {
     // Handle ativo: substituir callbacks para que a nova tela (após
     // remontagem) receba eventos a partir de agora. Sem isso, a UI nova
@@ -82,7 +96,8 @@ export function startForegroundIndexing(
     try {
       await startIndexingForeground();
     } catch (error) {
-      console.warn('[ForegroundIndex] falha ao iniciar serviço', error);
+      console.warn('[ForegroundIndex] FGS não subiu; abortando loop', error);
+      return createInactiveHandle();
     }
     try {
       let finalOutcome: BackgroundIndexBatchOutcome | null = null;
