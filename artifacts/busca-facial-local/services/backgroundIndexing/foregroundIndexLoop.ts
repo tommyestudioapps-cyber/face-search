@@ -103,6 +103,7 @@ export function startForegroundIndexing(
     try {
       let finalOutcome: BackgroundIndexBatchOutcome | null = null;
       let lastOutcome: BackgroundIndexBatchOutcome | null = null;
+      let consecutiveBatchErrors = 0;
       while (!cancelled) {
         const consent = await getBackgroundIndexConsent();
         if (consent !== 'accepted') {
@@ -133,12 +134,28 @@ export function startForegroundIndexing(
         });
         try {
           outcome = await Promise.race([batchPromise, timeoutPromise]);
+          consecutiveBatchErrors = 0;
         } catch (error) {
           console.warn('[ForegroundIndex] batch timeout ou erro:', error);
+          consecutiveBatchErrors += 1;
           if (batchTimedOut) {
             indexCoordinator.forceRelease();
           }
-          break;
+          // Escape hatch: se algo está persistentemente errado, não gira
+          // para sempre. 5 erros consecutivos = 5 * 70s ≈ 6 minutos.
+          if (consecutiveBatchErrors >= 5) {
+            console.warn(
+              `[ForegroundIndex] abortando após ${consecutiveBatchErrors} erros consecutivos`,
+            );
+            break;
+          }
+          // Em background, o watchdog (B3) não pode reiniciar. O while precisa
+          // sobreviver ao timeout e continuar. 70s > SCAN_LEASE_MS (60s) com
+          // margem, para o próximo claimScan ter sucesso mesmo se o lease
+          // foi renovado segundos antes.
+          const wasCancelled = await waitOrCancel(70_000, () => cancelled);
+          if (wasCancelled) break;
+          continue;
         } finally {
           if (batchTimeoutId !== null) {
             clearTimeout(batchTimeoutId);

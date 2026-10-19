@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
+import { File } from 'expo-file-system';
 import { faceSearch } from '@/constants/faceSearch';
 import {
   alignSelectedFace,
@@ -348,6 +349,26 @@ async function indexAsset(
       }
     }
     return { indexed: false, skipped: false, faceCount: 0 };
+  }
+
+  // Pré-validação de legibilidade. MediaProvider denied retorna
+  // exists=false aqui sem travar (a implementação Android abre
+  // InputStream para content:// e converte FileNotFoundException
+  // em exists=false). Se o check lançar, também pulamos.
+  try {
+    const sourceFile = new File(asset.uri);
+    if (!sourceFile.exists) {
+      console.warn(
+        `[Index:agg] asset=${asset.id} skip: file.exists=false (inacessível)`,
+      );
+      return { indexed: false, skipped: true, faceCount: 0 };
+    }
+  } catch (checkError) {
+    console.warn(
+      `[Index:agg] asset=${asset.id} skip: file check falhou`,
+      checkError,
+    );
+    return { indexed: false, skipped: true, faceCount: 0 };
   }
 
   const startedAt = Date.now();
