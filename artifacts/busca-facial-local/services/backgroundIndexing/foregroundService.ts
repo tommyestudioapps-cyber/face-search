@@ -146,31 +146,40 @@ export async function startIndexingForeground(): Promise<void> {
   // Wake lock de 10 min, renovado a cada 5 min se a indexação ainda estiver ativa.
   // Sem isso, a CPU suspende (mWakefulness=Dozing) e os timers JS congelam.
   WakeLock.acquire(10 * 60 * 1000);
-  await notifee.displayNotification({
-    id: INDEXING_NOTIFICATION_ID,
-    title: 'Preparando índice local',
-    body: 'Search Face está analisando suas fotos em segundo plano.',
-    android: {
-      channelId: INDEXING_CHANNEL_ID,
-      smallIcon: 'ic_notification',
-      asForegroundService: true,
-      foregroundServiceTypes: [AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_DATA_SYNC],
-      ongoing: true,
-      onlyAlertOnce: true,
-      progress: {
-        max: 100,
-        current: 0,
-        indeterminate: true,
-      },
-      pressAction: { id: 'default' },
-      actions: [
-        {
-          title: 'Pausar',
-          pressAction: { id: INDEXING_PAUSE_ACTION },
+  try {
+    await notifee.displayNotification({
+      id: INDEXING_NOTIFICATION_ID,
+      title: 'Preparando índice local',
+      body: 'Search Face está analisando suas fotos em segundo plano.',
+      android: {
+        channelId: INDEXING_CHANNEL_ID,
+        smallIcon: 'ic_notification',
+        asForegroundService: true,
+        foregroundServiceTypes: [AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_DATA_SYNC],
+        ongoing: true,
+        onlyAlertOnce: true,
+        progress: {
+          max: 100,
+          current: 0,
+          indeterminate: true,
         },
-      ],
-    },
-  });
+        pressAction: { id: 'default' },
+        actions: [
+          {
+            title: 'Pausar',
+            pressAction: { id: INDEXING_PAUSE_ACTION },
+          },
+        ],
+      },
+    });
+  } catch (error) {
+    try {
+      WakeLock.release();
+    } catch (releaseError) {
+      console.warn('[Indexing] falha ao liberar wake lock após erro de notificação', releaseError);
+    }
+    throw error;
+  }
 }
 
 export async function updateIndexingProgress(
