@@ -1,4 +1,5 @@
 import notifee, {
+  AndroidForegroundServiceType,
   AndroidImportance,
   AuthorizationStatus,
   EventType,
@@ -81,26 +82,10 @@ export async function ensureNotificationPermissionAsked(): Promise<{
 let pauseHandler: (() => void) | null = null;
 
 notifee.registerForegroundService(() => {
-  // PROBE TEMPORÁRIO — remover após A9-preview.
-  console.warn('[HeadlessProbe] callback registerForegroundService chamado');
-  let tickCount = 0;
-  const startedAt = Date.now();
-  const probe = setInterval(() => {
-    tickCount += 1;
-    const elapsed = Math.round((Date.now() - startedAt) / 1000);
-    console.warn(
-      `[HeadlessProbe] tick=${tickCount} elapsed=${elapsed}s`,
-    );
-  }, 5000);
-  // Fim do probe.
-
   return new Promise<void>(() => {
     // Promise intencionalmente pendente para manter o serviço vivo
     // enquanto o loop JS estiver rodando. O serviço é interrompido
     // via notifee.stopForegroundService() em stopIndexingForeground().
-    // O interval acima NÃO é limpo aqui de propósito — é um probe
-    // temporário e será removido após a coleta de dados.
-    void probe;
   });
 });
 
@@ -165,6 +150,7 @@ export async function startIndexingForeground(): Promise<void> {
       channelId: INDEXING_CHANNEL_ID,
       smallIcon: 'ic_notification',
       asForegroundService: true,
+      foregroundServiceTypes: [AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_DATA_SYNC],
       ongoing: true,
       onlyAlertOnce: true,
       progress: {
@@ -205,6 +191,7 @@ export async function updateIndexingProgress(
       channelId: INDEXING_CHANNEL_ID,
       smallIcon: 'ic_notification',
       asForegroundService: true,
+      foregroundServiceTypes: [AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_DATA_SYNC],
       ongoing: true,
       onlyAlertOnce: true,
       progress: {
