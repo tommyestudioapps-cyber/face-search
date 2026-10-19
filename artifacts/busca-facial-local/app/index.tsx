@@ -1597,6 +1597,9 @@ export default function HomeScreen() {
     const id = setInterval(() => {
       void (async () => {
         try {
+          // NÃO tentar iniciar FGS de background (Android 12+).
+          // Isso já causou code:DENIED e processos mortos em CEM.
+          if (AppState.currentState !== 'active') return;
             console.warn(
               `[A14Diag] Watchdog tick status=${backgroundIndexState.status} consent=${backgroundIndexConsent}`,
             );
