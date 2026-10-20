@@ -1,5 +1,6 @@
 import {
   countGalleryAssets,
+  forceResetActiveIndexing,
   indexGallery,
   type CancelReason,
   type GalleryIndexCancellationContract,
@@ -32,6 +33,7 @@ export interface RunBackgroundIndexBatchOptions {
   albumId?: string | null;
   onPartialProgress?: (processedAssets: number, totalAssets: number | null) => void;
   trigger?: 'auto' | 'explicit';
+  registerAbortHandler?: (abort: () => void) => void;
 }
 
 async function persistBackgroundState(
@@ -209,6 +211,14 @@ async function runCoordinatedBackgroundIndexBatch(
         console.warn('[BackgroundIndex] Não foi possível renovar a reserva.', error);
       });
   }, 15_000);
+  options.registerAbortHandler?.(() => {
+    clearInterval(heartbeat);
+    leaseHealthy = false;
+    cancellation.cancel('lease');
+    if (typeof forceResetActiveIndexing === 'function') {
+      forceResetActiveIndexing();
+    }
+  });
   try {
     const result = await indexGallery({
       albumId: options.albumId,

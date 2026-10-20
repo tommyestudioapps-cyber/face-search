@@ -4,6 +4,9 @@ interface WakeLockNativeModule {
   acquire(timeoutMs: number): boolean;
   release(): boolean;
   isHeld(): boolean;
+  isIgnoringBatteryOptimizations?(): boolean;
+  requestIgnoreBatteryOptimizations?(): boolean;
+  openBatteryOptimizationSettings?(): boolean;
 }
 
 let nativeModule: WakeLockNativeModule | null = null;
@@ -51,6 +54,42 @@ export const WakeLock = {
     try {
       return m.isHeld();
     } catch {
+      return false;
+    }
+  },
+  isIgnoringBatteryOptimizations(): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.isIgnoringBatteryOptimizations !== 'function') {
+      return false;
+    }
+    try {
+      return Boolean(m.isIgnoringBatteryOptimizations());
+    } catch (error) {
+      console.warn('[WakeLock] isIgnoringBatteryOptimizations falhou', error);
+      return false;
+    }
+  },
+  requestIgnoreBatteryOptimizations(): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.requestIgnoreBatteryOptimizations !== 'function') {
+      return false;
+    }
+    try {
+      return Boolean(m.requestIgnoreBatteryOptimizations());
+    } catch (error) {
+      console.warn('[WakeLock] requestIgnoreBatteryOptimizations falhou', error);
+      return false;
+    }
+  },
+  openBatteryOptimizationSettings(): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.openBatteryOptimizationSettings !== 'function') {
+      return false;
+    }
+    try {
+      return Boolean(m.openBatteryOptimizationSettings());
+    } catch (error) {
+      console.warn('[WakeLock] openBatteryOptimizationSettings falhou', error);
       return false;
     }
   },

@@ -167,7 +167,7 @@ jobs:
           echo "== targetSdkVersion confirmado: $TARGET_SDK"
 
           echo "== Permissões sensíveis presentes no APK"
-          PERMISSIONS="$(printf '%s\n' "$BADGING" | grep -E "^uses-permission(-sdk-[0-9]+)?: name='android\.permission\.(FOREGROUND_SERVICE|FOREGROUND_SERVICE_DATA_SYNC|POST_NOTIFICATIONS|WAKE_LOCK|READ_MEDIA_IMAGES|READ_MEDIA_VISUAL_USER_SELECTED|READ_EXTERNAL_STORAGE|CAMERA)" || true)"
+          PERMISSIONS="$(printf '%s\n' "$BADGING" | grep -E "^uses-permission(-sdk-[0-9]+)?: name='android\.permission\.(FOREGROUND_SERVICE|FOREGROUND_SERVICE_DATA_SYNC|POST_NOTIFICATIONS|WAKE_LOCK|REQUEST_IGNORE_BATTERY_OPTIMIZATIONS|READ_MEDIA_IMAGES|READ_MEDIA_VISUAL_USER_SELECTED|READ_EXTERNAL_STORAGE|CAMERA)" || true)"
           if [ -n "$PERMISSIONS" ]; then
             printf '%s\n' "$PERMISSIONS"
           else

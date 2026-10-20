@@ -159,6 +159,17 @@ let activeIndexingFinished: Promise<void> | null = null;
 let finishActiveIndexing: (() => void) | null = null;
 let clearingIndex = false;
 
+const ASSET_INDEX_TIMEOUT_MS = 30_000;
+
+export function forceResetActiveIndexing(): void {
+  if (!activeIndexing) return;
+  console.warn('[Index:agg] forceResetActiveIndexing acionado após timeout');
+  activeIndexing = false;
+  finishActiveIndexing?.();
+  finishActiveIndexing = null;
+  activeIndexingFinished = null;
+}
+
 export async function clearAfterGalleryIndexStops(
   clear: () => Promise<void>,
 ): Promise<void> {
@@ -706,7 +717,8 @@ async function runGalleryIndex(
         }
         emitProgress({ currentAssetId: asset.id });
 
-        const result = await indexAsset(
+        let assetTimeoutId: ReturnType<typeof setTimeout> | null = null;
+        const assetPromise = indexAsset(
           asset,
           indexedById.get(asset.id),
           cancellation,
@@ -715,6 +727,22 @@ async function runGalleryIndex(
           batch?.leaseOwner ?? (generation !== null ? manualOwner : undefined),
           matchContext,
         );
+        const assetTimeoutPromise = new Promise<AssetIndexResult>((resolve) => {
+          assetTimeoutId = setTimeout(() => {
+            console.warn(
+              `[Index:agg] asset=${asset.id} skip: timeout individual (${ASSET_INDEX_TIMEOUT_MS}ms)`,
+            );
+            resolve({ indexed: false, skipped: true, faceCount: 0 });
+          }, ASSET_INDEX_TIMEOUT_MS);
+        });
+        let result: AssetIndexResult;
+        try {
+          result = await Promise.race([assetPromise, assetTimeoutPromise]);
+        } finally {
+          if (assetTimeoutId !== null) {
+            clearTimeout(assetTimeoutId);
+          }
+        }
         if (generation !== null && !result.indexed) {
           await faceSearchRepository.markAssetSeen(asset.id, generation, batch?.leaseOwner ?? manualOwner);
         }

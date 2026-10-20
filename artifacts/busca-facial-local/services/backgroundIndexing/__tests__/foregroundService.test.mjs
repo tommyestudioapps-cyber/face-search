@@ -6,6 +6,8 @@ let displayNotification = async () => {};
 let acquireCalls = 0;
 let releaseCalls = 0;
 let releaseFailure = null;
+let batteryExempt = false;
+let requestExemptionCalls = 0;
 
 const notifeeMock = {
   registerForegroundService: () => {},
@@ -23,6 +25,11 @@ const wakeLockMock = {
   release: () => {
     releaseCalls += 1;
     if (releaseFailure) throw releaseFailure;
+    return true;
+  },
+  isIgnoringBatteryOptimizations: () => batteryExempt,
+  requestIgnoreBatteryOptimizations: () => {
+    requestExemptionCalls += 1;
     return true;
   },
 };
@@ -55,13 +62,18 @@ mock.module(new URL('../../../modules/wake-lock/index.ts', import.meta.url), {
   namedExports: { WakeLock: wakeLockMock },
 });
 
-const { startIndexingForeground } = await import('../foregroundService.ts');
+const {
+  startIndexingForeground,
+  ensureBatteryOptimizationExemptionAsked,
+} = await import('../foregroundService.ts');
 
 function resetMocks() {
   displayNotification = async () => {};
   acquireCalls = 0;
   releaseCalls = 0;
   releaseFailure = null;
+  batteryExempt = false;
+  requestExemptionCalls = 0;
 }
 
 test('libera o wake lock e permite nova inicialização após falha da notificação', async () => {

@@ -52,3 +52,78 @@ export function createIndexClearAlertOptions(
     },
   ];
 }
+
+export interface OemBatteryGuidance {
+  family: 'oplus' | 'xiaomi' | 'samsung' | 'huawei' | 'generic';
+  oemLabel: string;
+  steps: string[];
+}
+
+export function getOemBatteryGuidance(
+  manufacturer?: string | null,
+  brand?: string | null,
+): OemBatteryGuidance {
+  const combined = `${manufacturer ?? ''} ${brand ?? ''}`.toLowerCase();
+
+  if (
+    combined.includes('oppo') ||
+    combined.includes('realme') ||
+    combined.includes('oneplus') ||
+    combined.includes('oplus')
+  ) {
+    return {
+      family: 'oplus',
+      oemLabel: 'OPPO / Realme / OnePlus (ColorOS)',
+      steps: [
+        'Toque em "Liberar execução em 2º plano" abaixo e confirme "Permitir".',
+        'Em Configurações do app → Uso da bateria, ative "Permitir atividade em segundo plano" e "Inicialização automática".',
+        'Para galerias muito grandes, mantenha o aparelho conectado ao carregador ou com o app aberto.',
+      ],
+    };
+  }
+
+  if (
+    combined.includes('xiaomi') ||
+    combined.includes('redmi') ||
+    combined.includes('poco')
+  ) {
+    return {
+      family: 'xiaomi',
+      oemLabel: 'Xiaomi / Redmi / POCO (MIUI / HyperOS)',
+      steps: [
+        'Toque em "Liberar execução em 2º plano" abaixo e selecione "Nenhuma restrição".',
+        'Em Configurações do app, ative "Início automático" (Autostart) para evitar congelamento com a tela apagada.',
+      ],
+    };
+  }
+
+  if (combined.includes('samsung')) {
+    return {
+      family: 'samsung',
+      oemLabel: 'Samsung (One UI)',
+      steps: [
+        'Toque em "Liberar execução em 2º plano" abaixo para desativar a otimização.',
+        'Em Configurações do app → Bateria, mantenha a opção "Não restrito" selecionada.',
+      ],
+    };
+  }
+
+  if (combined.includes('huawei') || combined.includes('honor')) {
+    return {
+      family: 'huawei',
+      oemLabel: 'Huawei / Honor',
+      steps: [
+        'Toque em "Liberar execução em 2º plano" abaixo.',
+        'Em Configurações → Bateria → Inicialização de aplicativos, desative o gerenciamento automático deste app.',
+      ],
+    };
+  }
+
+  return {
+    family: 'generic',
+    oemLabel: 'Android',
+    steps: [
+      'Toque em "Liberar execução em 2º plano" abaixo para permitir que o preparo do índice continue com a tela apagada.',
+    ],
+  };
+}

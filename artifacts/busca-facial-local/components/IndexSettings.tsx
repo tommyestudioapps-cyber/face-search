@@ -1,9 +1,12 @@
 import { Feather } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   ActivityIndicator,
+  AppState,
+  Linking,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   ScrollView,
@@ -13,6 +16,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import {
+  isIgnoringBatteryOptimizations,
+  openBatteryOptimizationSettings,
+  requestBatteryOptimizationExemption,
+} from '@/services/backgroundIndexing/foregroundService';
 import type {
   BackgroundIndexState,
   FaceIndexProgress,
@@ -25,6 +33,7 @@ import type {
 import {
   clearIndexWithFeedback,
   createIndexClearAlertOptions,
+  getOemBatteryGuidance,
   INDEX_CLEAR_ALERT_MESSAGE,
   INDEX_CLEAR_ERROR_MESSAGE,
   INDEX_CLEAR_ALERT_TITLE,
@@ -66,6 +75,21 @@ export function IndexSettings({
   const insets = useSafeAreaInsets();
   const [isClearing, setIsClearing] = useState(false);
   const [clearError, setClearError] = useState<string | null>(null);
+  const [batteryExempt, setBatteryExempt] = useState<boolean>(() =>
+    Platform.OS === 'android' ? isIgnoringBatteryOptimizations() : true,
+  );
+
+  const oemGuidance = useMemo(() => {
+    const constants = (Platform as {
+      constants?: { Manufacturer?: string; Brand?: string };
+    }).constants;
+    return getOemBatteryGuidance(constants?.Manufacturer, constants?.Brand);
+  }, []);
+
+  const refreshBatteryStatus = useCallback(() => {
+    if (Platform.OS !== 'android') return;
+    setBatteryExempt(isIgnoringBatteryOptimizations());
+  }, []);
   const clearBlocked = isClearing || isOperationActive || clearState !== 'idle';
   const isWaitingForOperation =
     (isOperationActive && operation !== 'clearing') || clearState === 'waiting';
@@ -133,8 +157,37 @@ export function IndexSettings({
   useEffect(() => {
     if (visible) {
       setClearError(null);
+      refreshBatteryStatus();
     }
-  }, [visible]);
+  }, [visible, refreshBatteryStatus]);
+
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'android') return undefined;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        refreshBatteryStatus();
+      }
+    });
+    return () => subscription.remove();
+  }, [visible, refreshBatteryStatus]);
+
+  const handleBatteryExemptionPress = () => {
+    const opened = requestBatteryOptimizationExemption();
+    if (!opened) {
+      const settingsOpened = openBatteryOptimizationSettings();
+      if (!settingsOpened) {
+        void Linking.openSettings();
+      }
+    }
+    setTimeout(refreshBatteryStatus, 800);
+  };
+
+  const handleOpenAppSettingsPress = () => {
+    const opened = openBatteryOptimizationSettings();
+    if (!opened) {
+      void Linking.openSettings();
+    }
+  };
 
   const clearIndex = () => {
     if (isClearing) {
@@ -376,6 +429,99 @@ export function IndexSettings({
                 </Pressable>
               </View>
             </View>
+
+            {Platform.OS === 'android' ? (
+              <View
+                style={[
+                  styles.batteryCard,
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: batteryExempt ? colors.border : '#F59E0B',
+                  },
+                ]}
+              >
+                <View style={styles.batteryHeader}>
+                  <View
+                    style={[
+                      styles.batteryIconWrap,
+                      {
+                        backgroundColor: batteryExempt ? '#123429' : '#3B2811',
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name={batteryExempt ? 'check-circle' : 'battery-charging'}
+                      size={16}
+                      color={batteryExempt ? '#34D399' : '#FBBF24'}
+                    />
+                  </View>
+                  <View style={styles.batteryHeaderCopy}>
+                    <Text style={[styles.batteryTitle, { color: colors.foreground }]}>
+                      {batteryExempt
+                        ? 'Execução em 2º plano liberada'
+                        : 'Economia de bateria limitando o 2º plano'}
+                    </Text>
+                    <Text style={[styles.batterySubtitle, { color: colors.mutedForeground }]}>
+                      {`Perfil detectado: ${oemGuidance.oemLabel}`}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.batteryBody, { color: colors.mutedForeground }]}>
+                  {batteryExempt
+                    ? 'A isenção padrão do Android está ativa. Se a análise pausar com a tela apagada no seu aparelho, confira também as opções do fabricante:'
+                    : 'Com a otimização de bateria ativa, o sistema suspende o processador quando a tela apaga e pausa a preparação do índice:'}
+                </Text>
+
+                <View style={styles.batterySteps}>
+                  {oemGuidance.steps.map((step, index) => (
+                    <Text
+                      key={step}
+                      style={[styles.batteryStepText, { color: colors.mutedForeground }]}
+                    >
+                      {`${index + 1}. ${step}`}
+                    </Text>
+                  ))}
+                </View>
+
+                <View style={styles.batteryActions}>
+                  {!batteryExempt ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Liberar execução em segundo plano"
+                      onPress={handleBatteryExemptionPress}
+                      style={({ pressed }) => [
+                        styles.primaryActionButton,
+                        { backgroundColor: '#F59E0B' },
+                        pressed ? styles.pressed : null,
+                      ]}
+                      testID="battery-exemption-request"
+                    >
+                      <Feather name="zap" size={15} color="#080B14" />
+                      <Text style={[styles.primaryActionText, { color: '#080B14' }]}>
+                        Liberar execução em 2º plano
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Abrir configurações de bateria"
+                    onPress={handleOpenAppSettingsPress}
+                    style={({ pressed }) => [
+                      styles.secondaryActionButton,
+                      { borderColor: colors.border },
+                      pressed ? styles.pressed : null,
+                    ]}
+                    testID="battery-settings-open"
+                  >
+                    <Feather name="settings" size={15} color={colors.foreground} />
+                    <Text style={[styles.secondaryActionText, { color: colors.foreground }]}>
+                      Configurações de bateria
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
 
             <View style={[styles.infoCard, { backgroundColor: colors.background }]}>
               <Feather name="shield" size={17} color="#34D399" />
@@ -619,6 +765,55 @@ const styles = StyleSheet.create({
   backgroundIndexControlLabel: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 9,
+  },
+  batteryCard: {
+    borderWidth: 1,
+    borderRadius: 17,
+    marginTop: 10,
+    padding: 12,
+    gap: 8,
+  },
+  batteryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  batteryIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  batteryHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  batteryTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+  },
+  batterySubtitle: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: 10,
+  },
+  batteryBody: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  batterySteps: {
+    gap: 4,
+  },
+  batteryStepText: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  batteryActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
   },
   clearButton: {
     minHeight: 50,

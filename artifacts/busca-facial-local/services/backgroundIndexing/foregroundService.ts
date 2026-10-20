@@ -13,6 +13,57 @@ export const INDEXING_NOTIFICATION_ID = 'search-face-indexing-foreground';
 export const INDEXING_PAUSE_ACTION = 'search-face-pause-indexing';
 
 const NOTIF_ASKED_KEY = 'visage.notifPermissionAsked';
+const BATTERY_EXEMPTION_ASKED_KEY = 'visage.batteryOptimizationAsked';
+
+export function isIgnoringBatteryOptimizations(): boolean {
+  if (Platform.OS !== 'android') return true;
+  if (typeof WakeLock.isIgnoringBatteryOptimizations !== 'function') {
+    return false;
+  }
+  return WakeLock.isIgnoringBatteryOptimizations();
+}
+
+export function requestBatteryOptimizationExemption(): boolean {
+  if (Platform.OS !== 'android') return true;
+  if (typeof WakeLock.requestIgnoreBatteryOptimizations !== 'function') {
+    return false;
+  }
+  return WakeLock.requestIgnoreBatteryOptimizations();
+}
+
+export function openBatteryOptimizationSettings(): boolean {
+  if (Platform.OS !== 'android') return false;
+  if (typeof WakeLock.openBatteryOptimizationSettings !== 'function') {
+    return false;
+  }
+  return WakeLock.openBatteryOptimizationSettings();
+}
+
+export async function ensureBatteryOptimizationExemptionAsked(
+  force = false,
+): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+  if (isIgnoringBatteryOptimizations()) {
+    return true;
+  }
+  if (!force) {
+    try {
+      const alreadyAsked = await AsyncStorage.getItem(BATTERY_EXEMPTION_ASKED_KEY);
+      if (alreadyAsked === 'true') {
+        return false;
+      }
+    } catch (error) {
+      console.warn('[Battery] falha ao ler flag de isenção', error);
+    }
+  }
+  try {
+    await AsyncStorage.setItem(BATTERY_EXEMPTION_ASKED_KEY, 'true');
+  } catch (error) {
+    console.warn('[Battery] falha ao gravar flag de isenção', error);
+  }
+  requestBatteryOptimizationExemption();
+  return isIgnoringBatteryOptimizations();
+}
 
 export async function hasNotificationPermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
@@ -145,7 +196,11 @@ export async function startIndexingForeground(): Promise<void> {
   await ensureIndexingChannel();
   // Wake lock de 10 min, renovado a cada 5 min se a indexação ainda estiver ativa.
   // Sem isso, a CPU suspende (mWakefulness=Dozing) e os timers JS congelam.
-  WakeLock.acquire(10 * 60 * 1000);
+  const acquired = WakeLock.acquire(10 * 60 * 1000);
+  const batteryExempt = isIgnoringBatteryOptimizations();
+  console.warn(
+    `[WakeLock] startIndexingForeground acquired=${acquired} batteryExempt=${batteryExempt}`,
+  );
   try {
     await notifee.displayNotification({
       id: INDEXING_NOTIFICATION_ID,
