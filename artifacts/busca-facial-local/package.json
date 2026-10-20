@@ -87,6 +87,7 @@
     "react-native-mediapipe": "0.6.0",
     "react-native-nitro-modules": "0.37.1",
     "react-native-vision-camera": "4.7.3",
-    "react-native-worklets-core": "1.6.3"
+    "react-native-worklets-core": "1.6.3",
+    "wake-lock": "file:./modules/wake-lock"
   }
 }
