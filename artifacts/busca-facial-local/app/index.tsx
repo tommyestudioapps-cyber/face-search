@@ -1379,6 +1379,18 @@ export default function HomeScreen() {
           }
         }
       }
+      if (
+        reconciledState &&
+        reconciledState.status === 'error' &&
+        consent === 'accepted' &&
+        galleryPermissionGranted
+      ) {
+        reconciledState = {
+          ...reconciledState,
+          status: 'paused',
+          lastError: null,
+        };
+      }
       if (cancelled) return;
 
       console.warn(
@@ -1552,10 +1564,41 @@ export default function HomeScreen() {
           try {
             const module = await import('@/services/faceSearch');
             latestState = await module.getBackgroundIndexState();
+            try {
+              const checkpointMod = await import(
+                '@/services/backgroundIndexing/checkpoint'
+              );
+              const checkpoint = await checkpointMod.loadBackgroundIndexCursor();
+              if (
+                latestState &&
+                checkpoint &&
+                typeof checkpoint.processedAssets === 'number' &&
+                checkpoint.processedAssets > latestState.processedAssets
+              ) {
+                latestState = {
+                  ...latestState,
+                  processedAssets: checkpoint.processedAssets,
+                };
+              }
+            } catch {
+              // ignore checkpoint read error
+            }
+            if (
+              latestState &&
+              latestState.status === 'error' &&
+              backgroundIndexConsent === 'accepted' &&
+              fullPermissionOk
+            ) {
+              latestState = {
+                ...latestState,
+                status: 'paused',
+                lastError: null,
+              };
+            }
             console.warn(
               `[A14Diag] AppState readState status=${latestState?.status} processed=${latestState?.processedAssets} total=${latestState?.totalAssets}`,
             );
-            if (mountedRef.current) {
+            if (mountedRef.current && latestState) {
               setBackgroundIndexState(latestState);
             }
           } catch (error) {
@@ -2125,11 +2168,14 @@ export default function HomeScreen() {
             indexingState={
               !indexHydrated
                 ? 'loading'
-                : backgroundIndexState.status === 'running' ||
-                    backgroundIndexState.status === 'paused'
-                  ? 'indexing'
-                  : backgroundIndexState.status === 'completed'
-                    ? 'completed'
+                : backgroundIndexState.status === 'completed'
+                  ? 'completed'
+                  : backgroundIndexState.status === 'running' ||
+                      backgroundIndexState.status === 'paused' ||
+                      (backgroundIndexConsent === 'accepted' &&
+                        hasGalleryPhotoAccess &&
+                        backgroundIndexState.status !== 'cancelled')
+                    ? 'indexing'
                     : 'off'
             }
             indexingCount={backgroundIndexState.processedAssets}

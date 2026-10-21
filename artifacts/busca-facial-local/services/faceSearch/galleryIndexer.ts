@@ -718,6 +718,7 @@ async function runGalleryIndex(
         emitProgress({ currentAssetId: asset.id });
 
         let assetTimeoutId: ReturnType<typeof setTimeout> | null = null;
+        let assetTimedOut = false;
         const assetPromise = indexAsset(
           asset,
           indexedById.get(asset.id),
@@ -728,12 +729,24 @@ async function runGalleryIndex(
           matchContext,
         );
         const assetTimeoutPromise = new Promise<AssetIndexResult>((resolve) => {
-          assetTimeoutId = setTimeout(() => {
-            console.warn(
-              `[Index:agg] asset=${asset.id} skip: timeout individual (${ASSET_INDEX_TIMEOUT_MS}ms)`,
-            );
-            resolve({ indexed: false, skipped: true, faceCount: 0 });
-          }, ASSET_INDEX_TIMEOUT_MS);
+          const stepMs = 1_000;
+          const maxSteps = Math.max(1, Math.ceil(ASSET_INDEX_TIMEOUT_MS / stepMs));
+          let elapsedSteps = 0;
+          const tick = () => {
+            assetTimeoutId = setTimeout(() => {
+              elapsedSteps += 1;
+              if (elapsedSteps >= maxSteps) {
+                assetTimedOut = true;
+                console.warn(
+                  `[Index:agg] asset=${asset.id} skip: timeout individual (${ASSET_INDEX_TIMEOUT_MS}ms)`,
+                );
+                resolve({ indexed: false, skipped: true, faceCount: 0 });
+                return;
+              }
+              tick();
+            }, stepMs);
+          };
+          tick();
         });
         let result: AssetIndexResult;
         try {
@@ -743,7 +756,8 @@ async function runGalleryIndex(
             clearTimeout(assetTimeoutId);
           }
         }
-        if (generation !== null && !result.indexed) {
+        throwIfCancelled(cancellation);
+        if (generation !== null && !result.indexed && !assetTimedOut) {
           await faceSearchRepository.markAssetSeen(asset.id, generation, batch?.leaseOwner ?? manualOwner);
         }
         if (result.indexed) {

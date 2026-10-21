@@ -33,6 +33,7 @@ module.exports = function withNotifeeForegroundService(config) {
       existing.$['android:foregroundServiceType'] = 'dataSync';
       existing.$['tools:replace'] = 'android:foregroundServiceType';
       existing.$['android:exported'] = 'false';
+      existing.$['android:stopWithTask'] = 'false';
     } else {
       app.service.push({
         $: {
@@ -40,6 +41,7 @@ module.exports = function withNotifeeForegroundService(config) {
           'android:foregroundServiceType': 'dataSync',
           'tools:replace': 'android:foregroundServiceType',
           'android:exported': 'false',
+          'android:stopWithTask': 'false',
         },
       });
     }

@@ -665,8 +665,8 @@ export class FaceSearchRepository {
       const result = await transaction.runAsync(
         `UPDATE gallery_scan SET lease_until = ?
          WHERE id = 1 AND active = 1 AND generation = ?
-           AND lease_owner = ? AND lease_until >= ?`,
-        [now + SCAN_LEASE_MS, generation, owner, now],
+           AND lease_owner = ?`,
+        [now + SCAN_LEASE_MS, generation, owner],
       );
       renewed = result.changes === 1;
     });
@@ -729,8 +729,7 @@ export class FaceSearchRepository {
         'SELECT generation, lease_owner, lease_until FROM gallery_scan WHERE id = 1 AND active = 1',
       );
       if (active?.generation !== generation ||
-        active.lease_owner !== (owner ?? null) ||
-        (owner && (active.lease_until ?? 0) < Date.now())) {
+        active.lease_owner !== (owner ?? null)) {
         throw storageError('A geração da varredura foi interrompida.');
       }
       await transaction.runAsync(

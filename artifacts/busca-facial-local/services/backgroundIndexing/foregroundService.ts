@@ -237,6 +237,8 @@ export async function startIndexingForeground(): Promise<void> {
   }
 }
 
+let lastNotificationUpdateAt = 0;
+
 export async function updateIndexingProgress(
   processedAssets: number,
   totalAssets: number | null,
@@ -246,6 +248,15 @@ export async function updateIndexingProgress(
   // o anterior, então não há leak. Timeout de 10 min garante liberação
   // se o app crashar sem chamar stop.
   WakeLock.acquire(10 * 60 * 1000);
+  const now = Date.now();
+  const isComplete =
+    typeof totalAssets === 'number' &&
+    totalAssets > 0 &&
+    processedAssets >= totalAssets;
+  if (!isComplete && now - lastNotificationUpdateAt < 2_000) {
+    return;
+  }
+  lastNotificationUpdateAt = now;
   const hasTotal =
     typeof totalAssets === 'number' && totalAssets > 0;
   const safeMax = hasTotal ? totalAssets : 100;

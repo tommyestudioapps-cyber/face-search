@@ -168,7 +168,7 @@ async function runCoordinatedBackgroundIndexBatch(
     resume && typeof previousState.totalAssets === 'number'
       ? previousState.totalAssets
       : undefined;
-  if (!resume) {
+  if (!resume && typeof countGalleryAssets === 'function') {
     console.warn('[Batch] contando fotos reais antes de indexar gen=' + generation);
     try {
       assumedTotal = await countGalleryAssets(options.albumId ?? null);
@@ -203,6 +203,7 @@ async function runCoordinatedBackgroundIndexBatch(
 
   const cancellation = createBatchCancellation();
   let leaseHealthy = true;
+  let abortedByTimeout = false;
   const heartbeat = setInterval(() => {
     void faceSearchRepository.renewScan(generation, leaseOwner)
       .then((renewed) => { if (!renewed) leaseHealthy = false; })
@@ -212,12 +213,14 @@ async function runCoordinatedBackgroundIndexBatch(
       });
   }, 15_000);
   options.registerAbortHandler?.(() => {
+    abortedByTimeout = true;
     clearInterval(heartbeat);
     leaseHealthy = false;
     cancellation.cancel('lease');
     if (typeof forceResetActiveIndexing === 'function') {
       forceResetActiveIndexing();
     }
+    void faceSearchRepository.releaseScan(generation, leaseOwner).catch(() => {});
   });
   try {
     const result = await indexGallery({
@@ -364,6 +367,42 @@ async function runCoordinatedBackgroundIndexBatch(
         result.status === 'completed' ? finalProcessed : result.totalAssets,
     };
   } catch (error) {
+    const isLeaseInterruption =
+      abortedByTimeout ||
+      (cancellation.isCancelled() && cancellation.getReason() === 'lease') ||
+      (error instanceof Error &&
+        error.message.includes('A geração da varredura foi interrompida.'));
+    if (isLeaseInterruption) {
+      const partialCumulative = startOffset + currentBatchProcessedRef.current;
+      const totalForCap = latestTotalRef.current ?? assumedTotal ?? null;
+      const cappedPartial =
+        totalForCap !== null
+          ? Math.min(partialCumulative, totalForCap)
+          : partialCumulative;
+      console.warn(
+        '[Batch] interrupção de lease/timeout capturada; preservando estado como paused processed=' +
+          cappedPartial,
+      );
+      try {
+        await persistBackgroundState({
+          status: 'paused',
+          scope: 'gallery',
+          processedAssets: cappedPartial,
+          totalAssets: totalForCap,
+          lastError: null,
+        });
+      } catch (persistError) {
+        console.warn(
+          '[BackgroundIndex] Não foi possível persistir pausa após interrupção.',
+          persistError,
+        );
+      }
+      return {
+        status: 'paused',
+        cumulativeProcessed: cappedPartial,
+        cumulativeTotal: totalForCap,
+      };
+    }
     // Other errors can retry the saved page; an invalid cursor must restart
     // the generation from the beginning on the next run.
     if (error instanceof FaceRecognitionError && error.code === 'invalid-cursor') {

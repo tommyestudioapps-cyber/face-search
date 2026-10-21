@@ -17,6 +17,7 @@ export interface ForegroundIndexingHandle {
   cancel: () => void;
   isRunning: () => boolean;
   updateCallbacks: (options: ForegroundIndexingOptions) => void;
+  wakeUp?: () => void;
 }
 
 export interface ForegroundIndexingOptions {
@@ -41,11 +42,13 @@ export function getActiveForegroundIndexing(): ForegroundIndexingHandle | null {
 async function waitOrCancel(
   ms: number,
   isCancelled: () => boolean,
+  shouldWakeUp?: () => boolean,
 ): Promise<boolean> {
   const step = 500;
   const iterations = Math.ceil(ms / step);
   for (let i = 0; i < iterations; i += 1) {
     if (isCancelled()) return true;
+    if (shouldWakeUp?.()) return false;
     await new Promise<void>((resolve) => setTimeout(resolve, step));
   }
   return isCancelled();
@@ -73,6 +76,7 @@ export function startForegroundIndexing(
     // fica presa no snapshot do SQLite enquanto a notificação continua
     // avançando.
     activeHandle.updateCallbacks(options);
+    activeHandle.wakeUp?.();
     return activeHandle;
   }
 
@@ -80,10 +84,17 @@ export function startForegroundIndexing(
   const timeBudgetMs = options.timeBudgetMs ?? DEFAULT_TIME_BUDGET_MS;
 
   let cancelled = false;
+  let wakeUpRequested = false;
   // Refs mutáveis para os callbacks — permitem substituição em runtime
   // quando a tela é remontada sem matar o handle.
   let currentOnPartialProgress = options.onPartialProgress;
   let currentOnFinalOutcome = options.onFinalOutcome;
+
+  const consumeWakeUp = (): boolean => {
+    if (!wakeUpRequested) return false;
+    wakeUpRequested = false;
+    return true;
+  };
 
   const promise = (async () => {
     if (__DEV__) {
@@ -116,8 +127,13 @@ export function startForegroundIndexing(
         let outcome: BackgroundIndexBatchOutcome | null = null;
         let batchTimeoutId: ReturnType<typeof setTimeout> | null = null;
         let batchTimedOut = false;
-        let abortHungBatch: (() => void) | null = null;
+        let abortHungBatch = null as (() => void) | null;
+        let inactiveSteps = 0;
         const BATCH_HARD_TIMEOUT_MS = 5 * 60 * 1000;
+        const BATCH_TIMEOUT_STEP_MS = 1_000;
+        const maxInactiveSteps = Math.ceil(
+          BATCH_HARD_TIMEOUT_MS / BATCH_TIMEOUT_STEP_MS,
+        );
         const batchPromise = runBackgroundIndexBatch({
           maxAssets,
           timeBudgetMs,
@@ -126,15 +142,25 @@ export function startForegroundIndexing(
             abortHungBatch = abort;
           },
           onPartialProgress: (processedAssets, totalAssets) => {
+            inactiveSteps = 0;
+            consecutiveBatchErrors = 0;
             currentOnPartialProgress?.(processedAssets, totalAssets);
             void updateIndexingProgress(processedAssets, totalAssets);
           },
         });
         const timeoutPromise = new Promise<never>((_, reject) => {
-          batchTimeoutId = setTimeout(() => {
-            batchTimedOut = true;
-            reject(new Error('batch hard timeout'));
-          }, BATCH_HARD_TIMEOUT_MS);
+          const tick = () => {
+            batchTimeoutId = setTimeout(() => {
+              inactiveSteps += 1;
+              if (inactiveSteps >= maxInactiveSteps) {
+                batchTimedOut = true;
+                reject(new Error('batch hard timeout'));
+                return;
+              }
+              tick();
+            }, BATCH_TIMEOUT_STEP_MS);
+          };
+          tick();
         });
         try {
           outcome = await Promise.race([batchPromise, timeoutPromise]);
@@ -147,18 +173,22 @@ export function startForegroundIndexing(
             indexCoordinator.forceRelease();
           }
           // Escape hatch: se algo está persistentemente errado, não gira
-          // para sempre. 5 erros consecutivos = 5 * 70s ≈ 6 minutos.
+          // para sempre.
           if (consecutiveBatchErrors >= 5) {
             console.warn(
               `[ForegroundIndex] abortando após ${consecutiveBatchErrors} erros consecutivos`,
             );
             break;
           }
-          // Em background, o watchdog (B3) não pode reiniciar. O while precisa
-          // sobreviver ao timeout e continuar. 70s > SCAN_LEASE_MS (60s) com
-          // margem, para o próximo claimScan ter sucesso mesmo se o lease
-          // foi renovado segundos antes.
-          const wasCancelled = await waitOrCancel(70_000, () => cancelled);
+          // O abortHungBatch já libera a lease do SQLite imediatamente;
+          // se foi apenas um timeout por suspensão, aguarda 3s (ou acorda
+          // imediatamente se o app voltar ao foreground).
+          const retryDelayMs = batchTimedOut ? 3_000 : 15_000;
+          const wasCancelled = await waitOrCancel(
+            retryDelayMs,
+            () => cancelled,
+            consumeWakeUp,
+          );
           if (wasCancelled) break;
           continue;
         } finally {
@@ -186,7 +216,11 @@ export function startForegroundIndexing(
         }
 
         if (!outcome) {
-          const wasCancelled = await waitOrCancel(30_000, () => cancelled);
+          const wasCancelled = await waitOrCancel(
+            10_000,
+            () => cancelled,
+            consumeWakeUp,
+          );
           if (wasCancelled) break;
           continue;
         }
@@ -269,6 +303,9 @@ export function startForegroundIndexing(
       if (nextOptions.onFinalOutcome !== undefined) {
         currentOnFinalOutcome = nextOptions.onFinalOutcome;
       }
+    },
+    wakeUp: () => {
+      wakeUpRequested = true;
     },
   };
 

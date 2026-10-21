@@ -70,16 +70,38 @@ function withTimeout<T>(
   onTimeout: () => FaceCaptureError,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(onTimeout());
-    }, timeoutMs);
+    const stepMs = Math.min(1_000, Math.max(100, timeoutMs));
+    const maxSteps = Math.max(1, Math.ceil(timeoutMs / stepMs));
+    let elapsedSteps = 0;
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNextTick = () => {
+      timer = setTimeout(() => {
+        if (settled) return;
+        elapsedSteps += 1;
+        if (elapsedSteps >= maxSteps) {
+          settled = true;
+          reject(onTimeout());
+          return;
+        }
+        scheduleNextTick();
+      }, stepMs);
+    };
+
+    scheduleNextTick();
+
     promise.then(
       (value) => {
-        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        if (timer !== null) clearTimeout(timer);
         resolve(value);
       },
       (error) => {
-        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        if (timer !== null) clearTimeout(timer);
         reject(error);
       },
     );
