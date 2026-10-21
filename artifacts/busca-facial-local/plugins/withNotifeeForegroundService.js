@@ -31,7 +31,7 @@ module.exports = function withNotifeeForegroundService(config) {
     if (existing) {
       // Forçar substituição do atributo no merge
       existing.$['android:foregroundServiceType'] = 'dataSync';
-      existing.$['tools:replace'] = 'android:foregroundServiceType';
+      existing.$['tools:replace'] = 'android:foregroundServiceType,android:stopWithTask';
       existing.$['android:exported'] = 'false';
       existing.$['android:stopWithTask'] = 'false';
     } else {
@@ -39,7 +39,7 @@ module.exports = function withNotifeeForegroundService(config) {
         $: {
           'android:name': SERVICE_NAME,
           'android:foregroundServiceType': 'dataSync',
-          'tools:replace': 'android:foregroundServiceType',
+          'tools:replace': 'android:foregroundServiceType,android:stopWithTask',
           'android:exported': 'false',
           'android:stopWithTask': 'false',
         },

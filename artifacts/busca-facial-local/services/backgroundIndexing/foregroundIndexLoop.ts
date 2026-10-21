@@ -85,6 +85,10 @@ export function startForegroundIndexing(
 
   let cancelled = false;
   let wakeUpRequested = false;
+  let latestProgress: {
+    processedAssets: number;
+    totalAssets: number | null;
+  } | null = null;
   // Refs mutáveis para os callbacks — permitem substituição em runtime
   // quando a tela é remontada sem matar o handle.
   let currentOnPartialProgress = options.onPartialProgress;
@@ -144,6 +148,7 @@ export function startForegroundIndexing(
           onPartialProgress: (processedAssets, totalAssets) => {
             inactiveSteps = 0;
             consecutiveBatchErrors = 0;
+            latestProgress = { processedAssets, totalAssets };
             currentOnPartialProgress?.(processedAssets, totalAssets);
             void updateIndexingProgress(processedAssets, totalAssets);
           },
@@ -299,6 +304,12 @@ export function startForegroundIndexing(
     updateCallbacks: (nextOptions) => {
       if (nextOptions.onPartialProgress !== undefined) {
         currentOnPartialProgress = nextOptions.onPartialProgress;
+        if (latestProgress) {
+          nextOptions.onPartialProgress(
+            latestProgress.processedAssets,
+            latestProgress.totalAssets,
+          );
+        }
       }
       if (nextOptions.onFinalOutcome !== undefined) {
         currentOnFinalOutcome = nextOptions.onFinalOutcome;

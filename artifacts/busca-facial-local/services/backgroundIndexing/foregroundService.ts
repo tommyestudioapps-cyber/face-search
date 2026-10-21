@@ -47,14 +47,7 @@ export async function ensureBatteryOptimizationExemptionAsked(
     return true;
   }
   if (!force) {
-    try {
-      const alreadyAsked = await AsyncStorage.getItem(BATTERY_EXEMPTION_ASKED_KEY);
-      if (alreadyAsked === 'true') {
-        return false;
-      }
-    } catch (error) {
-      console.warn('[Battery] falha ao ler flag de isenção', error);
-    }
+    return false;
   }
   try {
     await AsyncStorage.setItem(BATTERY_EXEMPTION_ASKED_KEY, 'true');

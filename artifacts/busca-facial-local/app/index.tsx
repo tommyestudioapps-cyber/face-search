@@ -1507,12 +1507,7 @@ export default function HomeScreen() {
     if (backgroundIndexState.status === 'cancelled') return;
     let cancelled = false;
     void (async () => {
-      const mod = await import(
-        '@/services/backgroundIndexing/foregroundIndexLoop'
-      );
       if (cancelled) return;
-      const active = mod.getActiveForegroundIndexing();
-      if (active && active.isRunning()) return;
       void startForegroundIndexingIfNeeded();
     })();
     return () => {
@@ -1700,11 +1695,9 @@ export default function HomeScreen() {
             console.warn('[Watchdog] falha ao reler estado', error);
             return;
           }
-          const active = foregroundIndexLoop.getActiveForegroundIndexing();
-          if (active && active.isRunning()) return;
           if (__DEV__) {
             console.log(
-              `[Watchdog] loop não está rodando (state.status=${backgroundIndexState.status}); reiniciando`,
+              `[Watchdog] loop status=${backgroundIndexState.status}`,
             );
           }
           await startForegroundIndexingIfNeeded();

@@ -1,8 +1,8 @@
 package expo.modules.wakelock
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
@@ -237,7 +237,6 @@ class WakeLockModule : Module() {
       powerManager.isIgnoringBatteryOptimizations(context.packageName)
     }
 
-    @SuppressLint("BatteryLife")
     Function("requestIgnoreBatteryOptimizations") {
       val context = appContext.reactContext ?: return@Function false
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
@@ -248,19 +247,15 @@ class WakeLockModule : Module() {
         return@Function true
       }
       return@Function try {
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-          data = Uri.parse("package:${context.packageName}")
+        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
           addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        val targetContext = appContext.currentActivity ?: context
-        if (appContext.currentActivity != null) {
-          intent.flags = intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK.inv()
-        }
-        targetContext.startActivity(intent)
+        context.startActivity(intent)
         true
       } catch (_: Throwable) {
         try {
-          val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+          val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:${context.packageName}")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
           }
           context.startActivity(fallback)
@@ -290,6 +285,42 @@ class WakeLockModule : Module() {
         } catch (_: Throwable) {
           false
         }
+      }
+    }
+
+    Function("hasFullGalleryPermission") {
+      val context = appContext.reactContext ?: return@Function false
+      val appCtx = context.applicationContext
+      return@Function if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        appCtx.checkSelfPermission(
+          android.Manifest.permission.READ_MEDIA_IMAGES
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+      } else {
+        appCtx.checkSelfPermission(
+          android.Manifest.permission.READ_EXTERNAL_STORAGE
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+      }
+    }
+
+    Function("hasAnyGalleryPermission") {
+      val context = appContext.reactContext ?: return@Function false
+      val appCtx = context.applicationContext
+      return@Function if (Build.VERSION.SDK_INT >= 34) {
+        val full = appCtx.checkSelfPermission(
+          android.Manifest.permission.READ_MEDIA_IMAGES
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val partial = appCtx.checkSelfPermission(
+          "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        full || partial
+      } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        appCtx.checkSelfPermission(
+          android.Manifest.permission.READ_MEDIA_IMAGES
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+      } else {
+        appCtx.checkSelfPermission(
+          android.Manifest.permission.READ_EXTERNAL_STORAGE
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
       }
     }
   }

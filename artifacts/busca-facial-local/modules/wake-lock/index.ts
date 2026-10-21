@@ -7,6 +7,8 @@ interface WakeLockNativeModule {
   isIgnoringBatteryOptimizations?(): boolean;
   requestIgnoreBatteryOptimizations?(): boolean;
   openBatteryOptimizationSettings?(): boolean;
+  hasFullGalleryPermission?(): boolean;
+  hasAnyGalleryPermission?(): boolean;
 }
 
 let nativeModule: WakeLockNativeModule | null = null;
@@ -91,6 +93,30 @@ export const WakeLock = {
     } catch (error) {
       console.warn('[WakeLock] openBatteryOptimizationSettings falhou', error);
       return false;
+    }
+  },
+  hasFullGalleryPermission(): boolean | null {
+    const m = getNativeModule();
+    if (!m || typeof m.hasFullGalleryPermission !== 'function') {
+      return null;
+    }
+    try {
+      return Boolean(m.hasFullGalleryPermission());
+    } catch (error) {
+      console.warn('[WakeLock] hasFullGalleryPermission falhou', error);
+      return null;
+    }
+  },
+  hasAnyGalleryPermission(): boolean | null {
+    const m = getNativeModule();
+    if (!m || typeof m.hasAnyGalleryPermission !== 'function') {
+      return null;
+    }
+    try {
+      return Boolean(m.hasAnyGalleryPermission());
+    } catch (error) {
+      console.warn('[WakeLock] hasAnyGalleryPermission falhou', error);
+      return null;
     }
   },
   isAvailable(): boolean {
