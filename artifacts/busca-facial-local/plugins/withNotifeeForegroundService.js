@@ -1,5 +1,6 @@
 const {
   withAndroidManifest,
+  withMainActivity,
   AndroidConfig,
 } = require('expo/config-plugins');
 
@@ -7,7 +8,7 @@ const SERVICE_NAME = 'app.notifee.core.ForegroundService';
 const TOOLS_NS = 'http://schemas.android.com/tools';
 
 module.exports = function withNotifeeForegroundService(config) {
-  return withAndroidManifest(config, async (config) => {
+  config = withAndroidManifest(config, async (config) => {
     const manifest = config.modResults;
     const manifestRoot = manifest.manifest;
 
@@ -48,4 +49,24 @@ module.exports = function withNotifeeForegroundService(config) {
 
     return config;
   });
+
+  config = withMainActivity(config, async (config) => {
+    let contents = config.modResults.contents;
+    const replacement = `fabricEnabled
+          ) {
+              override fun onDestroy() {
+                  if (expo.modules.wakelock.WakeLockModule.isKeepAliveActive()) {
+                      android.util.Log.w("MainActivity", "[KeepAlive] Preservando runtime JS durante onDestroy")
+                      return
+                  }
+                  super.onDestroy()
+              }
+          }`;
+
+    contents = contents.replace(/fabricEnabled\s*\)\s*\{\s*\}/, replacement);
+    config.modResults.contents = contents;
+    return config;
+  });
+
+  return config;
 };

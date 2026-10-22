@@ -18,12 +18,18 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 
 class WakeLockModule : Module() {
+  companion object {
+    @Volatile
+    @JvmStatic
+    var keepAliveActive: Boolean = false
+
+    @JvmStatic
+    fun isKeepAliveActive(): Boolean = keepAliveActive
+  }
+
   private val lock = Any()
   private var wakeLock: PowerManager.WakeLock? = null
   private var keepAliveThread: Thread? = null
-
-  @Volatile
-  private var keepAliveActive: Boolean = false
 
   @Volatile
   private var expireAtElapsedRealtime: Long = 0L
