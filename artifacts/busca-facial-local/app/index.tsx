@@ -53,6 +53,7 @@ import {
 import {
   ensureBatteryOptimizationExemptionAsked,
   ensureNotificationPermissionAsked,
+  restoreIndexingNotification,
 } from '@/services/backgroundIndexing/foregroundService';
 import {
   hasFullGalleryPhotoPermission,
@@ -1230,6 +1231,10 @@ export default function HomeScreen() {
   const startForegroundIndexingIfNeeded = useCallback(
     async (trigger: 'auto' | 'explicit' = 'auto'): Promise<void> => {
       if (Platform.OS === 'web') return;
+
+      if (AppState.currentState === 'active') {
+        restoreIndexingNotification();
+      }
 
       const foregroundIndexLoop = await import(
         '@/services/backgroundIndexing/foregroundIndexLoop'

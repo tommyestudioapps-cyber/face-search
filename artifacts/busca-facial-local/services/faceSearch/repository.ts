@@ -656,6 +656,22 @@ export class FaceSearchRepository {
     });
   }
 
+  async forceClaimScan(generation: number, owner: string): Promise<boolean> {
+    return this.enqueueWrite(async () => {
+      const database = await this.getDatabase();
+      let claimed = false;
+      await database.withExclusiveTransactionAsync(async (transaction) => {
+        const result = await transaction.runAsync(
+          `UPDATE gallery_scan SET lease_owner = ?, lease_until = ?
+           WHERE id = 1 AND active = 1 AND generation = ?`,
+          [owner, Date.now() + SCAN_LEASE_MS, generation],
+        );
+        claimed = result.changes === 1;
+      });
+      return claimed;
+    });
+  }
+
   async renewScan(generation: number, owner: string): Promise<boolean> {
     return this.enqueueWrite(async () => {
     const database = await this.getDatabase();

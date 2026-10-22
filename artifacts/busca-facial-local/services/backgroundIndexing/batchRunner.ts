@@ -151,11 +151,16 @@ async function runCoordinatedBackgroundIndexBatch(
   const generation = resume ? resume.generation : await faceSearchRepository.beginScan(leaseOwner);
   const after = resume?.cursor;
   if (resume && !(await faceSearchRepository.claimScan(generation, leaseOwner))) {
-    return {
-      status: 'blocked',
-      cumulativeProcessed: previousProcessed,
-      cumulativeTotal: previousState.totalAssets,
-    }; // Another runtime owns this execution; it will keep the checkpoint.
+    console.warn(
+      `[batchRunner] Lease zumbi da geração ${generation} retido após encerramento do processo. Reivindicando geração do checkpoint...`,
+    );
+    if (!(await faceSearchRepository.forceClaimScan(generation, leaseOwner))) {
+      return {
+        status: 'blocked',
+        cumulativeProcessed: previousProcessed,
+        cumulativeTotal: previousState.totalAssets,
+      };
+    }
   }
 
   let assumedTotal: number | undefined =
@@ -194,6 +199,13 @@ async function runCoordinatedBackgroundIndexBatch(
         lastCompletedAt: null,
         lastError: null,
       });
+
+  if (onPartialProgress && (latestTotalRef.current !== null || startOffset > 0)) {
+    const initialTotal = latestTotalRef.current;
+    const initialCapped =
+      initialTotal !== null ? Math.min(startOffset, initialTotal) : startOffset;
+    onPartialProgress(initialCapped, initialTotal);
+  }
 
   const cancellation = createBatchCancellation();
   let leaseHealthy = true;

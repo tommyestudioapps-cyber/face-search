@@ -128,20 +128,30 @@ let pauseHandler: (() => void) | null = null;
 let isNotificationDismissedByUser = false;
 let lastProcessedAssets = 0;
 let lastTotalAssets: number | null = null;
-let lastWaitingReason: string | undefined = undefined;
+let lastNotificationUpdateAt = 0;
 
-export function resetNotificationDismissState(): void {
+export function restoreIndexingNotification(): void {
+  if (Platform.OS !== 'android') return;
+  if (!isNotificationDismissedByUser) return;
+  console.warn('[ForegroundService] App aberto pelo usuário; restaurando exibição da notificação.');
   isNotificationDismissedByUser = false;
+  lastNotificationUpdateAt = 0;
+  void (async () => {
+    try {
+      const { getActiveForegroundIndexing } = await import('./foregroundIndexLoop');
+      if (getActiveForegroundIndexing()?.isRunning()) {
+        await updateIndexingProgress(lastProcessedAssets, lastTotalAssets);
+      }
+    } catch (err) {
+      console.warn('[ForegroundService] Falha ao restaurar notificação:', err);
+    }
+  })();
 }
 
 if (Platform.OS === 'android') {
   AppState.addEventListener('change', (nextAppState) => {
-    if (nextAppState === 'active' && isNotificationDismissedByUser) {
-      console.warn('[ForegroundService] App reaberto pelo usuário; restaurando exibição da notificação.');
-      isNotificationDismissedByUser = false;
-      if (lastProcessedAssets > 0) {
-        void updateIndexingProgress(lastProcessedAssets, lastTotalAssets, lastWaitingReason);
-      }
+    if (nextAppState === 'active') {
+      restoreIndexingNotification();
     }
   });
 }
@@ -274,6 +284,7 @@ export async function ensureIndexingChannel(): Promise<string | null> {
 export async function startIndexingForeground(): Promise<void> {
   if (Platform.OS !== 'android') return;
   isNotificationDismissedByUser = false;
+  lastNotificationUpdateAt = 0;
   await ensureIndexingChannel();
   // Wake lock de 10 min, renovado a cada 5 min se a indexação ainda estiver ativa.
   // Sem isso, a CPU suspende (mWakefulness=Dozing) e os timers JS congelam.
@@ -318,17 +329,13 @@ export async function startIndexingForeground(): Promise<void> {
   }
 }
 
-let lastNotificationUpdateAt = 0;
-
 export async function updateIndexingProgress(
   processedAssets: number,
   totalAssets: number | null,
-  waitingReason?: string,
 ): Promise<void> {
   if (Platform.OS !== 'android') return;
   lastProcessedAssets = processedAssets;
   lastTotalAssets = totalAssets;
-  lastWaitingReason = waitingReason;
 
   // Renova o wake lock a cada update (~2s por batch). O acquire substitui
   // o anterior, então não há leak. Timeout de 10 min garante liberação
@@ -346,7 +353,7 @@ export async function updateIndexingProgress(
     typeof totalAssets === 'number' &&
     totalAssets > 0 &&
     processedAssets >= totalAssets;
-  if (!isComplete && !waitingReason && now - lastNotificationUpdateAt < 2_000) {
+  if (!isComplete && now - lastNotificationUpdateAt < 2_000) {
     return;
   }
   lastNotificationUpdateAt = now;
@@ -355,14 +362,9 @@ export async function updateIndexingProgress(
     ? Math.min(100, Math.max(0, Math.floor((processedAssets / totalAssets) * 100)))
     : 0;
 
-  let body: string;
-  if (waitingReason) {
-    body = `Progresso: ${percent}% · ${waitingReason}`;
-  } else if (hasTotal) {
-    body = `Progresso: ${percent}% concluído (${processedAssets}/${totalAssets})`;
-  } else {
-    body = `Progresso: ${processedAssets} fotos analisadas`;
-  }
+  const body = hasTotal
+    ? `Progresso: ${percent}% concluído (${processedAssets}/${totalAssets})`
+    : `Progresso: ${processedAssets} fotos analisadas`;
 
   await notifee.displayNotification({
     id: INDEXING_NOTIFICATION_ID,
@@ -394,9 +396,9 @@ export async function updateIndexingProgress(
 export async function stopIndexingForeground(): Promise<void> {
   if (Platform.OS !== 'android') return;
   isNotificationDismissedByUser = false;
+  lastNotificationUpdateAt = 0;
   lastProcessedAssets = 0;
   lastTotalAssets = null;
-  lastWaitingReason = undefined;
   WakeLock.release();
   console.warn('[A12Diag] stopIndexingForeground iniciando');
   try {
