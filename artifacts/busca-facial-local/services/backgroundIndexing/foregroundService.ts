@@ -126,12 +126,16 @@ export async function ensureNotificationPermissionAsked(): Promise<{
 
 let pauseHandler: (() => void) | null = null;
 
-notifee.registerForegroundService(() => {
-  return new Promise<void>(() => {
-    // Promise intencionalmente pendente para manter o serviço vivo
-    // enquanto o loop JS estiver rodando. O serviço é interrompido
-    // via notifee.stopForegroundService() em stopIndexingForeground().
-  });
+notifee.registerForegroundService(async () => {
+  console.warn('[ForegroundService] Headless task executor acionado pelo Notifee!');
+  try {
+    const { runForegroundIndexLoopInternal } = await import('./foregroundIndexLoop');
+    await runForegroundIndexLoopInternal();
+  } catch (error) {
+    console.warn('[ForegroundService] Erro no loop da headless task:', error);
+  } finally {
+    console.warn('[ForegroundService] Headless task executor finalizado.');
+  }
 });
 
 export function registerPauseHandler(handler: () => void): () => void {
