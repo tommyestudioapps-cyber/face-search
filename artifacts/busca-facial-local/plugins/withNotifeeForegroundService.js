@@ -1,6 +1,7 @@
 const {
   withAndroidManifest,
   withMainActivity,
+  withMainApplication,
   AndroidConfig,
 } = require('expo/config-plugins');
 
@@ -65,6 +66,27 @@ module.exports = function withNotifeeForegroundService(config) {
 
     contents = contents.replace(/fabricEnabled\s*\)\s*\{\s*\}/, replacement);
     config.modResults.contents = contents;
+    return config;
+  });
+
+  config = withMainApplication(config, async (config) => {
+    let contents = config.modResults.contents;
+    const target = 'ApplicationLifecycleDispatcher.onApplicationCreate(this)';
+    const replacement = `ApplicationLifecycleDispatcher.onApplicationCreate(this)
+    try {
+      android.util.Log.i("MainApplication", "[KeepAlive] Pre-inicializando reactHost para ForegroundService")
+      reactHost.start()
+    } catch (e: Throwable) {
+      android.util.Log.w("MainApplication", "[KeepAlive] Falha ao iniciar reactHost, tentando fallback createReactContextInBackground", e)
+      try {
+        reactNativeHost.reactInstanceManager.createReactContextInBackground()
+      } catch (_: Throwable) {}
+    }`;
+
+    if (!contents.includes('[KeepAlive] Pre-inicializando reactHost')) {
+      contents = contents.replace(target, replacement);
+      config.modResults.contents = contents;
+    }
     return config;
   });
 
