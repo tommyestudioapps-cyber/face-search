@@ -9,6 +9,7 @@ interface WakeLockNativeModule {
   openBatteryOptimizationSettings?(): boolean;
   hasFullGalleryPermission?(): boolean;
   hasAnyGalleryPermission?(): boolean;
+  addListener?(eventName: string, listener: (event: { action: string }) => void): { remove: () => void };
 }
 
 let nativeModule: WakeLockNativeModule | null = null;
@@ -116,6 +117,18 @@ export const WakeLock = {
       return Boolean(m.hasAnyGalleryPermission());
     } catch (error) {
       console.warn('[WakeLock] hasAnyGalleryPermission falhou', error);
+      return null;
+    }
+  },
+  addDeviceWakeListener(listener: (event: { action: string }) => void): { remove: () => void } | null {
+    const m = getNativeModule();
+    if (!m || typeof m.addListener !== 'function') {
+      return null;
+    }
+    try {
+      return m.addListener('onDeviceWake', listener);
+    } catch (error) {
+      console.warn('[WakeLock] addDeviceWakeListener falhou', error);
       return null;
     }
   },

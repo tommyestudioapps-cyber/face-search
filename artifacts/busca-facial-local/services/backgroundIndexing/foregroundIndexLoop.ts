@@ -229,8 +229,13 @@ export function startForegroundIndexing(
           console.warn(
             `[ForegroundIndex] Batch retornou ${outcome.status}; aguardando liberação...`,
           );
+          void updateIndexingProgress(
+            outcome.cumulativeProcessed,
+            outcome.cumulativeTotal,
+            'Retomará ao usar o aparelho',
+          );
           const wasCancelled = await waitOrCancel(
-            3_000,
+            5_000,
             () => cancelled,
             consumeWakeUp,
           );

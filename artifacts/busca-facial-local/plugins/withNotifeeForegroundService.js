@@ -48,6 +48,29 @@ module.exports = function withNotifeeForegroundService(config) {
       });
     }
 
+    // 3. Adicionar DeviceWakeReceiver para USER_PRESENT e ACTION_POWER_CONNECTED
+    if (!app.receiver) app.receiver = [];
+    const RECEIVER_NAME = 'expo.modules.wakelock.DeviceWakeReceiver';
+    const existingReceiver = app.receiver.find(
+      (r) => r.$?.['android:name'] === RECEIVER_NAME,
+    );
+    if (!existingReceiver) {
+      app.receiver.push({
+        $: {
+          'android:name': RECEIVER_NAME,
+          'android:exported': 'true',
+        },
+        'intent-filter': [
+          {
+            action: [
+              { $: { 'android:name': 'android.intent.action.USER_PRESENT' } },
+              { $: { 'android:name': 'android.intent.action.ACTION_POWER_CONNECTED' } },
+            ],
+          },
+        ],
+      });
+    }
+
     return config;
   });
 

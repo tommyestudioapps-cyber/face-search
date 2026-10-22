@@ -169,6 +169,26 @@ void (async () => {
   }
 })();
 
+// Registra ouvinte nativo para desbloqueio da tela (USER_PRESENT) e carregador (POWER_CONNECTED)
+if (typeof WakeLock.addDeviceWakeListener === 'function') {
+  WakeLock.addDeviceWakeListener((event) => {
+    console.warn('[ForegroundService] Evento de desbloqueio/carregador nativo recebido:', event.action);
+    void (async () => {
+      try {
+        const { getActiveForegroundIndexing, startForegroundIndexing } = await import('./foregroundIndexLoop');
+        const active = getActiveForegroundIndexing();
+        if (active && active.isRunning()) {
+          active.wakeUp?.();
+        } else {
+          startForegroundIndexing();
+        }
+      } catch (err) {
+        console.warn('[ForegroundService] Erro ao retomar indexação via wake listener:', err);
+      }
+    })();
+  });
+}
+
 export function registerPauseHandler(handler: () => void): () => void {
   pauseHandler = handler;
   return () => {
@@ -232,8 +252,8 @@ export async function startIndexingForeground(): Promise<void> {
   try {
     await notifee.displayNotification({
       id: INDEXING_NOTIFICATION_ID,
-      title: 'Preparando índice local',
-      body: 'Search Face está analisando suas fotos em segundo plano.',
+      title: 'Preparando busca por rostos',
+      body: 'Iniciando análise da galeria...',
       android: {
         channelId: INDEXING_CHANNEL_ID,
         smallIcon: 'ic_notification',
@@ -270,6 +290,7 @@ let lastNotificationUpdateAt = 0;
 export async function updateIndexingProgress(
   processedAssets: number,
   totalAssets: number | null,
+  waitingReason?: string,
 ): Promise<void> {
   if (Platform.OS !== 'android') return;
   // Renova o wake lock a cada update (~2s por batch). O acquire substitui
@@ -281,22 +302,27 @@ export async function updateIndexingProgress(
     typeof totalAssets === 'number' &&
     totalAssets > 0 &&
     processedAssets >= totalAssets;
-  if (!isComplete && now - lastNotificationUpdateAt < 2_000) {
+  if (!isComplete && !waitingReason && now - lastNotificationUpdateAt < 2_000) {
     return;
   }
   lastNotificationUpdateAt = now;
-  const hasTotal =
-    typeof totalAssets === 'number' && totalAssets > 0;
-  const safeMax = hasTotal ? totalAssets : 100;
-  const safeCurrent = hasTotal
-    ? Math.min(processedAssets, safeMax)
+  const hasTotal = typeof totalAssets === 'number' && totalAssets > 0;
+  const percent = hasTotal
+    ? Math.min(100, Math.max(0, Math.floor((processedAssets / totalAssets) * 100)))
     : 0;
-  const body = hasTotal
-    ? `Analisando ${processedAssets} de ${totalAssets} fotos…`
-    : `Analisando ${processedAssets} fotos…`;
+
+  let body: string;
+  if (waitingReason) {
+    body = `Progresso: ${percent}% · ${waitingReason}`;
+  } else if (hasTotal) {
+    body = `Progresso: ${percent}% concluído (${processedAssets}/${totalAssets})`;
+  } else {
+    body = `Progresso: ${processedAssets} fotos analisadas`;
+  }
+
   await notifee.displayNotification({
     id: INDEXING_NOTIFICATION_ID,
-    title: 'Preparando índice local',
+    title: 'Preparando busca por rostos',
     body,
     android: {
       channelId: INDEXING_CHANNEL_ID,
@@ -306,8 +332,8 @@ export async function updateIndexingProgress(
       ongoing: true,
       onlyAlertOnce: true,
       progress: {
-        max: safeMax,
-        current: safeCurrent,
+        max: 100,
+        current: percent,
         indeterminate: !hasTotal,
       },
       pressAction: { id: 'default' },

@@ -1,5 +1,6 @@
 package expo.modules.wakelock
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -17,6 +18,16 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 
+class DeviceWakeReceiver : BroadcastReceiver() {
+  override fun onReceive(context: Context, intent: Intent?) {
+    val action = intent?.action ?: return
+    android.util.Log.i("DeviceWakeReceiver", "[DeviceWake] Evento do sistema recebido: $action")
+    if (action == Intent.ACTION_USER_PRESENT || action == Intent.ACTION_POWER_CONNECTED) {
+      WakeLockModule.onDeviceWakeEvent(context, action)
+    }
+  }
+}
+
 class WakeLockModule : Module() {
   companion object {
     @Volatile
@@ -25,6 +36,44 @@ class WakeLockModule : Module() {
 
     @JvmStatic
     fun isKeepAliveActive(): Boolean = keepAliveActive
+
+    @Volatile
+    @JvmStatic
+    var instance: WakeLockModule? = null
+
+    @JvmStatic
+    fun onDeviceWakeEvent(context: Context, action: String) {
+      try {
+        val appCtx = context.applicationContext
+        val hasPerm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          appCtx.checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+        } else {
+          appCtx.checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        }
+        if (!hasPerm) {
+          android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Ignorado: sem permissao de galeria")
+          return
+        }
+
+        android.util.Log.i("DeviceWakeReceiver", "[DeviceWake] Permissao confirmada. Acordando CPU e notificando JS...")
+
+        // 1. Garante PARTIAL_WAKE_LOCK de 60s para manter a CPU acordada enquanto o lote roda
+        val powerManager = appCtx.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val wl = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "busca-facial-local:device-wake")
+        wl.acquire(60_000L)
+
+        // 2. Notifica a instancia JS se estiver ativa
+        instance?.let { mod ->
+          try {
+            mod.sendEvent("onDeviceWake", mapOf("action" to action))
+          } catch (t: Throwable) {
+            android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Falha ao enviar evento para JS", t)
+          }
+        }
+      } catch (t: Throwable) {
+        android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Erro ao tratar evento de wake", t)
+      }
+    }
   }
 
   private val lock = Any()
@@ -196,6 +245,18 @@ class WakeLockModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("WakeLock")
+
+    Events("onDeviceWake")
+
+    OnCreate {
+      instance = this
+    }
+
+    OnDestroy {
+      if (instance == this) {
+        instance = null
+      }
+    }
 
     Function("acquire") { timeoutMs: Double ->
       val context = appContext.reactContext ?: return@Function false
