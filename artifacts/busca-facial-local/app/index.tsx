@@ -370,6 +370,7 @@ function Header({
   onNext,
   title,
   subtitle,
+  subtitleIcon,
   centeredTitle = false,
 }: {
   onSettings?: () => void;
@@ -377,6 +378,7 @@ function Header({
   onNext?: () => void;
   title: string;
   subtitle?: string;
+  subtitleIcon?: React.ReactNode;
   centeredTitle?: boolean;
 }) {
   const colors = useColors();
@@ -413,7 +415,10 @@ function Header({
       <View style={[styles.headerTitleWrap, centeredTitle ? styles.centeredHeaderTitleWrap : null]}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>{title}</Text>
         {subtitle ? (
-          <Text style={[styles.headerSubtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
+          <View style={styles.headerSubtitleRow}>
+            {subtitleIcon}
+            <Text style={[styles.headerSubtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
+          </View>
         ) : null}
       </View>
       {onNext ? (
@@ -974,7 +979,12 @@ function Results({
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <Header title="Resultados" subtitle={`${results.length} correspondências encontradas`} onBack={onNewSearch} />
+      <Header
+        title="Resultados"
+        subtitle={`${results.length} correspondências encontradas`}
+        subtitleIcon={hasResults ? <Feather name="check-circle" size={13} color="#34D399" /> : null}
+        onBack={onNewSearch}
+      />
       <FlatList
         key={`results-${numColumns}`}
         data={results}
@@ -987,30 +997,6 @@ function Results({
           { width: contentWidth, alignSelf: 'center', paddingBottom: insets.bottom + 28 },
         ]}
         columnWrapperStyle={styles.resultsRow}
-        ListHeaderComponent={
-          <View style={[styles.resultSummary, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.summaryIcon}>
-              <Feather
-                name={hasResults ? 'check-circle' : 'clock'}
-                size={20}
-                color={hasResults ? '#34D399' : colors.primary}
-              />
-            </View>
-            <View style={styles.summaryCopy}>
-              <Text style={[styles.summaryTitle, { color: colors.foreground }]}>
-                {hasResults ? 'Busca concluída' : 'Captura pronta'}
-              </Text>
-              <Text style={[styles.summaryBody, { color: colors.mutedForeground }]}>
-                {hasResults
-                  ? 'Todas as correspondências foram encontradas no seu dispositivo.'
-                  : 'Nenhuma foto do índice atingiu o limiar mínimo de similaridade.'}
-              </Text>
-            </View>
-            {hasResults ? (
-             <Text style={[styles.summaryTime, { color: colors.mutedForeground }]}>Local</Text>
-            ) : null}
-          </View>
-        }
         renderItem={({ item }) => (
           <Pressable
             onPress={() => onOpenPhoto(item.uri)}
@@ -2292,7 +2278,8 @@ const styles = StyleSheet.create({
   headerTitleWrap: { flex: 1 },
   centeredHeaderTitleWrap: { alignItems: 'center' },
   headerTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
-  headerSubtitle: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
+  headerSubtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
+  headerSubtitle: { fontSize: 11, fontFamily: 'Inter_400Regular' },
   headerAction: { width: HEADER_ACTION_SIZE, height: HEADER_ACTION_SIZE, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   headerActionPlaceholder: { width: HEADER_ACTION_SIZE },
   homeContent: { paddingTop: 11 },

@@ -101,15 +101,17 @@ export async function indexGallery(
 export async function searchFace(
   alignedFace: AlignedFace,
   onProgress?: (event: SearchProgressEvent) => void,
+  allowedAssetIds?: ReadonlySet<string>,
 ): Promise<FaceSearchSummary> {
-  return searchAlignedFace(alignedFace, onProgress);
+  return searchAlignedFace(alignedFace, onProgress, 1, 1, undefined, allowedAssetIds);
 }
 
 export async function searchMultiFace(
   alignedFaces: AlignedFace[],
   onProgress?: (event: SearchProgressEvent) => void,
+  allowedAssetIds?: ReadonlySet<string>,
 ): Promise<FaceSearchSummary> {
-  return searchMultiAlignedFaces(alignedFaces, onProgress);
+  return searchMultiAlignedFaces(alignedFaces, onProgress, allowedAssetIds);
 }
 
 export async function readIndexedPhotos(): Promise<IndexedPhoto[]> {

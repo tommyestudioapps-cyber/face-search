@@ -30,6 +30,7 @@ export async function searchAlignedFace(
   phase: number = 1,
   phaseTotal: number = 1,
   progressMatchPhotoIds?: ReadonlySet<string>,
+  allowedAssetIds?: ReadonlySet<string>,
 ): Promise<FaceSearchSummary> {
   return indexCoordinator.run('search', () =>
     runSearchAlignedFace(
@@ -38,6 +39,7 @@ export async function searchAlignedFace(
       phase,
       phaseTotal,
       progressMatchPhotoIds,
+      allowedAssetIds,
     ),
   );
 }
@@ -45,6 +47,7 @@ export async function searchAlignedFace(
 export async function searchMultiAlignedFaces(
   alignedFaces: AlignedFace[],
   onProgress?: (event: SearchProgressEvent) => void,
+  allowedAssetIds?: ReadonlySet<string>,
 ): Promise<FaceSearchSummary> {
   if (alignedFaces.length === 0) {
     throw new FaceRecognitionError(
@@ -59,7 +62,7 @@ export async function searchMultiAlignedFaces(
     );
   }
   if (alignedFaces.length === 1) {
-    return searchAlignedFace(alignedFaces[0]!, onProgress, 1, 1);
+    return searchAlignedFace(alignedFaces[0]!, onProgress, 1, 1, undefined, allowedAssetIds);
   }
 
   const phaseTotal = 2;
@@ -68,6 +71,8 @@ export async function searchMultiAlignedFaces(
     onProgress,
     1,
     phaseTotal,
+    undefined,
+    allowedAssetIds,
   );
   const progressMatchPhotoIds = new Set(
     summaryA.results.map((result) => result.assetId),
@@ -78,6 +83,7 @@ export async function searchMultiAlignedFaces(
     2,
     phaseTotal,
     progressMatchPhotoIds,
+    allowedAssetIds,
   );
   const resultsA = new Map(
     summaryA.results.map((result) => [result.assetId, result] as const),
@@ -124,6 +130,7 @@ async function runSearchAlignedFace(
   phase: number = 1,
   phaseTotal: number = 1,
   progressMatchPhotoIds?: ReadonlySet<string>,
+  allowedAssetIds?: ReadonlySet<string>,
 ): Promise<FaceSearchSummary> {
   if (Platform.OS === 'web') {
     throw new FaceRecognitionError(
@@ -154,11 +161,17 @@ async function runSearchAlignedFace(
     await faceSearchRepository.invalidateIfModelChanged(queryEmbedding.model);
 
     const modelStorageVersion = getModelStorageVersion(queryEmbedding.model);
-    const candidates = await faceSearchRepository.getIndexedEmbeddings(
+    const allCandidates = await faceSearchRepository.getIndexedEmbeddings(
       modelStorageVersion,
     );
-    const indexedPhotos = await faceSearchRepository.getIndexedPhotos();
-    console.warn(`[Search:diag] candidates=${candidates.length}`);
+    const candidates = allowedAssetIds
+      ? allCandidates.filter((item) => allowedAssetIds.has(item.photo.assetId))
+      : allCandidates;
+    const allIndexedPhotos = await faceSearchRepository.getIndexedPhotos();
+    const indexedPhotos = allowedAssetIds
+      ? allIndexedPhotos.filter((photo) => allowedAssetIds.has(photo.assetId))
+      : allIndexedPhotos;
+    console.warn(`[Search:diag] candidates=${candidates.length} (total=${allCandidates.length})`);
     if (candidates.length > 0) {
       let candidateSq = 0;
       for (const v of candidates[0].face.embedding.values) candidateSq += v * v;

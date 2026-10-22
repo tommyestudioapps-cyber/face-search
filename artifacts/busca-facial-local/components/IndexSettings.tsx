@@ -16,11 +16,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import {
-  isIgnoringBatteryOptimizations,
-  openBatteryOptimizationSettings,
-  requestBatteryOptimizationExemption,
-} from '@/services/backgroundIndexing/foregroundService';
 import type {
   BackgroundIndexState,
   FaceIndexProgress,
@@ -33,7 +28,6 @@ import type {
 import {
   clearIndexWithFeedback,
   createIndexClearAlertOptions,
-  getOemBatteryGuidance,
   INDEX_CLEAR_ALERT_MESSAGE,
   INDEX_CLEAR_ERROR_MESSAGE,
   INDEX_CLEAR_ALERT_TITLE,
@@ -75,21 +69,6 @@ export function IndexSettings({
   const insets = useSafeAreaInsets();
   const [isClearing, setIsClearing] = useState(false);
   const [clearError, setClearError] = useState<string | null>(null);
-  const [batteryExempt, setBatteryExempt] = useState<boolean>(() =>
-    Platform.OS === 'android' ? isIgnoringBatteryOptimizations() : true,
-  );
-
-  const oemGuidance = useMemo(() => {
-    const constants = (Platform as {
-      constants?: { Manufacturer?: string; Brand?: string };
-    }).constants;
-    return getOemBatteryGuidance(constants?.Manufacturer, constants?.Brand);
-  }, []);
-
-  const refreshBatteryStatus = useCallback(() => {
-    if (Platform.OS !== 'android') return;
-    setBatteryExempt(isIgnoringBatteryOptimizations());
-  }, []);
   const clearBlocked = isClearing || isOperationActive || clearState !== 'idle';
   const isWaitingForOperation =
     (isOperationActive && operation !== 'clearing') || clearState === 'waiting';
@@ -157,37 +136,8 @@ export function IndexSettings({
   useEffect(() => {
     if (visible) {
       setClearError(null);
-      refreshBatteryStatus();
     }
-  }, [visible, refreshBatteryStatus]);
-
-  useEffect(() => {
-    if (!visible || Platform.OS !== 'android') return undefined;
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        refreshBatteryStatus();
-      }
-    });
-    return () => subscription.remove();
-  }, [visible, refreshBatteryStatus]);
-
-  const handleBatteryExemptionPress = () => {
-    const opened = requestBatteryOptimizationExemption();
-    if (!opened) {
-      const settingsOpened = openBatteryOptimizationSettings();
-      if (!settingsOpened) {
-        void Linking.openSettings();
-      }
-    }
-    setTimeout(refreshBatteryStatus, 800);
-  };
-
-  const handleOpenAppSettingsPress = () => {
-    const opened = openBatteryOptimizationSettings();
-    if (!opened) {
-      void Linking.openSettings();
-    }
-  };
+  }, [visible]);
 
   const clearIndex = () => {
     if (isClearing) {
@@ -210,6 +160,23 @@ export function IndexSettings({
         });
       }),
     );
+  };
+
+  const handleSendFeedback = () => {
+    const url = 'mailto:suporte@buscafacial.local?subject=Feedback%20Busca%20Facial%20Local';
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Suporte', 'Envie seu feedback para suporte@buscafacial.local');
+    });
+  };
+
+  const handleRateApp = () => {
+    const url =
+      Platform.OS === 'android'
+        ? 'market://details?id=com.buscafacial.local'
+        : 'https://play.google.com/store/apps/details?id=com.buscafacial.local';
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Avaliação', 'Obrigado pelo seu apoio ao Busca Facial Local!');
+    });
   };
 
   return (
@@ -237,7 +204,7 @@ export function IndexSettings({
               </View>
               <View style={styles.titleCopy}>
                 <Text style={[styles.title, { color: colors.foreground }]}>
-                  Configurações do índice
+                  Configurações
                 </Text>
               </View>
             </View>
@@ -430,99 +397,6 @@ export function IndexSettings({
               </View>
             </View>
 
-            {Platform.OS === 'android' ? (
-              <View
-                style={[
-                  styles.batteryCard,
-                  {
-                    backgroundColor: colors.background,
-                    borderColor: batteryExempt ? colors.border : '#F59E0B',
-                  },
-                ]}
-              >
-                <View style={styles.batteryHeader}>
-                  <View
-                    style={[
-                      styles.batteryIconWrap,
-                      {
-                        backgroundColor: batteryExempt ? '#123429' : '#3B2811',
-                      },
-                    ]}
-                  >
-                    <Feather
-                      name={batteryExempt ? 'check-circle' : 'battery-charging'}
-                      size={16}
-                      color={batteryExempt ? '#34D399' : '#FBBF24'}
-                    />
-                  </View>
-                  <View style={styles.batteryHeaderCopy}>
-                    <Text style={[styles.batteryTitle, { color: colors.foreground }]}>
-                      {batteryExempt
-                        ? 'Execução em 2º plano liberada'
-                        : 'Economia de bateria limitando o 2º plano'}
-                    </Text>
-                    <Text style={[styles.batterySubtitle, { color: colors.mutedForeground }]}>
-                      {`Perfil detectado: ${oemGuidance.oemLabel}`}
-                    </Text>
-                  </View>
-                </View>
-
-                <Text style={[styles.batteryBody, { color: colors.mutedForeground }]}>
-                  {batteryExempt
-                    ? 'A isenção padrão do Android está ativa. Se a análise pausar com a tela apagada no seu aparelho, confira também as opções do fabricante:'
-                    : 'Com a otimização de bateria ativa, o sistema suspende o processador quando a tela apaga e pausa a preparação do índice:'}
-                </Text>
-
-                <View style={styles.batterySteps}>
-                  {oemGuidance.steps.map((step, index) => (
-                    <Text
-                      key={step}
-                      style={[styles.batteryStepText, { color: colors.mutedForeground }]}
-                    >
-                      {`${index + 1}. ${step}`}
-                    </Text>
-                  ))}
-                </View>
-
-                <View style={styles.batteryActions}>
-                  {!batteryExempt ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Liberar execução em segundo plano"
-                      onPress={handleBatteryExemptionPress}
-                      style={({ pressed }) => [
-                        styles.primaryActionButton,
-                        { backgroundColor: '#F59E0B' },
-                        pressed ? styles.pressed : null,
-                      ]}
-                      testID="battery-exemption-request"
-                    >
-                      <Feather name="zap" size={15} color="#080B14" />
-                      <Text style={[styles.primaryActionText, { color: '#080B14' }]}>
-                        Liberar execução em 2º plano
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Abrir configurações de bateria"
-                    onPress={handleOpenAppSettingsPress}
-                    style={({ pressed }) => [
-                      styles.secondaryActionButton,
-                      { borderColor: colors.border },
-                      pressed ? styles.pressed : null,
-                    ]}
-                    testID="battery-settings-open"
-                  >
-                    <Feather name="settings" size={15} color={colors.foreground} />
-                    <Text style={[styles.secondaryActionText, { color: colors.foreground }]}>
-                      Configurações de bateria
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-
             <View style={[styles.infoCard, { backgroundColor: colors.background }]}>
               <Feather name="shield" size={17} color="#34D399" />
               <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
@@ -552,6 +426,112 @@ export function IndexSettings({
                     : 'Limpar índice local'}
               </Text>
             </Pressable>
+
+            {/* Seção Privacidade & Proteção de Dados */}
+            <View style={[styles.sectionDivider, { backgroundColor: colors.border }]} />
+            <Text style={[styles.sectionHeading, { color: colors.foreground }]}>
+              Privacidade & Segurança
+            </Text>
+            <View style={[styles.privacyCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <View style={[styles.privacyIconWrap, { backgroundColor: '#064E3B' }]}>
+                <Feather name="shield" size={17} color="#34D399" />
+              </View>
+              <View style={styles.privacyCopy}>
+                <Text style={[styles.privacyTitle, { color: colors.foreground }]}>
+                  Processamento 100% Local
+                </Text>
+                <Text style={[styles.privacyBody, { color: colors.mutedForeground }]}>
+                  Seus dados biométricos e fotos nunca saem do seu aparelho. Toda a inferência de IA ocorre exclusivamente no hardware do celular, sem envio a servidores externos ou nuvem.
+                </Text>
+              </View>
+            </View>
+
+            {/* Seção Sobre & Suporte */}
+            <View style={[styles.sectionDivider, { backgroundColor: colors.border }]} />
+            <Text style={[styles.sectionHeading, { color: colors.foreground }]}>
+              Sobre & Suporte
+            </Text>
+
+            <View style={styles.menuList}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Enviar feedback"
+                onPress={handleSendFeedback}
+                style={({ pressed }) => [
+                  styles.menuItem,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                  pressed ? styles.pressed : null,
+                ]}
+              >
+                <View style={[styles.menuItemIconWrap, { backgroundColor: colors.card }]}>
+                  <Feather name="message-square" size={16} color={colors.primary} />
+                </View>
+                <View style={styles.menuItemCopy}>
+                  <Text style={[styles.menuItemTitle, { color: colors.foreground }]}>
+                    Enviar Feedback
+                  </Text>
+                  <Text style={[styles.menuItemSubtitle, { color: colors.mutedForeground }]}>
+                    Compartilhe ideias ou relate um problema
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Avaliar aplicativo"
+                onPress={handleRateApp}
+                style={({ pressed }) => [
+                  styles.menuItem,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                  pressed ? styles.pressed : null,
+                ]}
+              >
+                <View style={[styles.menuItemIconWrap, { backgroundColor: colors.card }]}>
+                  <Feather name="star" size={16} color="#FBBF24" />
+                </View>
+                <View style={styles.menuItemCopy}>
+                  <Text style={[styles.menuItemTitle, { color: colors.foreground }]}>
+                    Avaliar o Aplicativo
+                  </Text>
+                  <Text style={[styles.menuItemSubtitle, { color: colors.mutedForeground }]}>
+                    Ajude outros usuários na Google Play
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              </Pressable>
+
+              <View style={[styles.menuItem, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <View style={[styles.menuItemIconWrap, { backgroundColor: colors.card }]}>
+                  <Feather name="cpu" size={16} color="#6EE7B7" />
+                </View>
+                <View style={styles.menuItemCopy}>
+                  <Text style={[styles.menuItemTitle, { color: colors.foreground }]}>
+                    Créditos & Modelos de IA
+                  </Text>
+                  <Text style={[styles.menuItemSubtitle, { color: colors.mutedForeground }]}>
+                    MobileFaceNet + MediaPipe (On-Device Inference)
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.menuItem, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <View style={[styles.menuItemIconWrap, { backgroundColor: colors.card }]}>
+                  <Feather name="info" size={16} color={colors.mutedForeground} />
+                </View>
+                <View style={styles.menuItemCopy}>
+                  <Text style={[styles.menuItemTitle, { color: colors.foreground }]}>
+                    Versão do Aplicativo
+                  </Text>
+                  <Text style={[styles.menuItemSubtitle, { color: colors.mutedForeground }]}>
+                    v1.0.0 (Release Build)
+                  </Text>
+                </View>
+                <View style={[styles.versionBadge, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.versionBadgeText, { color: colors.primary }]}>OFICIAL</Text>
+                </View>
+              </View>
+            </View>
           </ScrollView>
         </View>
       </View>
@@ -766,55 +746,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 9,
   },
-  batteryCard: {
-    borderWidth: 1,
-    borderRadius: 17,
-    marginTop: 10,
-    padding: 12,
-    gap: 8,
-  },
-  batteryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  batteryIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  batteryHeaderCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  batteryTitle: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 12,
-  },
-  batterySubtitle: {
-    fontFamily: 'Inter_500Medium',
-    fontSize: 10,
-  },
-  batteryBody: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 10,
-    lineHeight: 14,
-  },
-  batterySteps: {
-    gap: 4,
-  },
-  batteryStepText: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 10,
-    lineHeight: 14,
-  },
-  batteryActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
   clearButton: {
     minHeight: 50,
     borderWidth: 1,
@@ -829,6 +760,86 @@ const styles = StyleSheet.create({
     color: '#FB7185',
     fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
+  },
+  sectionDivider: {
+    height: 1,
+    marginTop: 22,
+    marginBottom: 16,
+    opacity: 0.6,
+  },
+  sectionHeading: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
+    letterSpacing: 0.2,
+    marginBottom: 10,
+  },
+  privacyCard: {
+    borderWidth: 1,
+    borderRadius: 17,
+    padding: 13,
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  privacyIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  privacyCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  privacyTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+  },
+  privacyBody: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  menuList: {
+    gap: 8,
+  },
+  menuItem: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  menuItemIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuItemCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  menuItemTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+  },
+  menuItemSubtitle: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 10,
+  },
+  versionBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  versionBadgeText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 9,
+    letterSpacing: 0.5,
   },
   disabled: {
     opacity: 0.45,

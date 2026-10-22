@@ -66,6 +66,7 @@ export interface UseFaceSearchResult {
   clearIndex: () => Promise<void>;
   search: (
     faces: AlignedFace | AlignedFace[] | null,
+    albumId?: string | null,
   ) => Promise<FaceSearchSummary | null>;
   indexAndSearch: (
     faces: AlignedFace | AlignedFace[] | null,
@@ -427,6 +428,7 @@ export function useFaceSearch(): UseFaceSearchResult {
   const search = useCallback(
     async (
       faces: AlignedFace | AlignedFace[] | null,
+      albumId?: string | null,
     ): Promise<FaceSearchSummary | null> => {
       if (searchPromiseRef.current) {
         return searchPromiseRef.current;
@@ -466,6 +468,11 @@ export function useFaceSearch(): UseFaceSearchResult {
         }
 
         const faceSearchModule = await getFaceSearchModule();
+        let allowedAssetIds: Set<string> | undefined;
+        if (albumId) {
+          const { getAlbumAssetIds } = await import('@/services/faceSearch/galleryIndexer');
+          allowedAssetIds = await getAlbumAssetIds(albumId);
+        }
         const handleProgress = (event: SearchProgressEvent) => {
           if (mountedRef.current) {
             setSearchProgress(event);
@@ -474,8 +481,8 @@ export function useFaceSearch(): UseFaceSearchResult {
         const searchStartedAt = Date.now();
         const MIN_SEARCH_DURATION_MS = 800;
         const runSearch = validFaces.length === 1
-          ? faceSearchModule.searchFace(validFaces[0]!, handleProgress)
-          : faceSearchModule.searchMultiFace(validFaces, handleProgress);
+          ? faceSearchModule.searchFace(validFaces[0]!, handleProgress, allowedAssetIds)
+          : faceSearchModule.searchMultiFace(validFaces, handleProgress, allowedAssetIds);
         const nextSummary = await runSearch.then(async (summary) => {
           const pending = MIN_SEARCH_DURATION_MS - (Date.now() - searchStartedAt);
           if (pending > 0) {
@@ -602,8 +609,8 @@ export function useFaceSearch(): UseFaceSearchResult {
           console.log('[Search] falha ao sincronizar processedAssets', syncError);
         }
       }
-      // Agora roda a busca final para ordenar e montar o resultado completo.
-      return search(faces);
+      // Agora roda a busca final para ordenar e montar o resultado completo filtrando pelo álbum se especificado.
+      return search(faces, albumId);
     },
     [ensureInitialized, getFaceSearchModule, search, startIndexing],
   );

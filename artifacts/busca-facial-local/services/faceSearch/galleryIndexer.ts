@@ -71,6 +71,32 @@ export async function countGalleryAssets(
   return total;
 }
 
+export async function getAlbumAssetIds(
+  albumId: string,
+): Promise<Set<string>> {
+  const assetIds = new Set<string>();
+  let cursor: string | undefined;
+  let hasNextPage = true;
+  while (hasNextPage) {
+    const page = await MediaLibrary.getAssetsAsync({
+      first: 500,
+      after: cursor,
+      mediaType: MediaLibrary.MediaType.photo,
+      sortBy: [MediaLibrary.SortBy.modificationTime],
+      album: albumId,
+    });
+    for (const asset of page.assets) {
+      assetIds.add(asset.id);
+    }
+    if (page.assets.length === 0) break;
+    const previousCursor = cursor;
+    cursor = page.endCursor;
+    hasNextPage = page.hasNextPage;
+    if (hasNextPage && (!cursor || cursor === previousCursor)) break;
+  }
+  return assetIds;
+}
+
 export interface GalleryIndexBatch {
   after?: string;
   generation: number;

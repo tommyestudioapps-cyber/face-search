@@ -6,7 +6,7 @@ import notifee, {
 } from '@notifee/react-native';
 import { WakeLock } from '../../modules/wake-lock';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 
 export const INDEXING_CHANNEL_ID = 'search-face-indexing';
 export const INDEXING_NOTIFICATION_ID = 'search-face-indexing-foreground';
@@ -125,6 +125,26 @@ export async function ensureNotificationPermissionAsked(): Promise<{
 }
 
 let pauseHandler: (() => void) | null = null;
+let isNotificationDismissedByUser = false;
+let lastProcessedAssets = 0;
+let lastTotalAssets: number | null = null;
+let lastWaitingReason: string | undefined = undefined;
+
+export function resetNotificationDismissState(): void {
+  isNotificationDismissedByUser = false;
+}
+
+if (Platform.OS === 'android') {
+  AppState.addEventListener('change', (nextAppState) => {
+    if (nextAppState === 'active' && isNotificationDismissedByUser) {
+      console.warn('[ForegroundService] App reaberto pelo usuário; restaurando exibição da notificação.');
+      isNotificationDismissedByUser = false;
+      if (lastProcessedAssets > 0) {
+        void updateIndexingProgress(lastProcessedAssets, lastTotalAssets, lastWaitingReason);
+      }
+    }
+  });
+}
 
 notifee.registerForegroundService(async () => {
   console.warn('[ForegroundService] Headless task executor acionado pelo Notifee!');
@@ -217,6 +237,12 @@ notifee.onForegroundEvent(({ type, detail }) => {
     detail.pressAction?.id === INDEXING_PAUSE_ACTION
   ) {
     handlePauseAction();
+  } else if (
+    type === EventType.DISMISSED &&
+    detail.notification?.id === INDEXING_NOTIFICATION_ID
+  ) {
+    console.warn('[ForegroundService] Notificação dispensada pelo usuário (foreground). Silenciando barra.');
+    isNotificationDismissedByUser = true;
   }
 });
 
@@ -226,6 +252,12 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
     detail.pressAction?.id === INDEXING_PAUSE_ACTION
   ) {
     handlePauseAction();
+  } else if (
+    type === EventType.DISMISSED &&
+    detail.notification?.id === INDEXING_NOTIFICATION_ID
+  ) {
+    console.warn('[ForegroundService] Notificação dispensada pelo usuário (background). Silenciando barra.');
+    isNotificationDismissedByUser = true;
   }
 });
 
@@ -241,6 +273,7 @@ export async function ensureIndexingChannel(): Promise<string | null> {
 
 export async function startIndexingForeground(): Promise<void> {
   if (Platform.OS !== 'android') return;
+  isNotificationDismissedByUser = false;
   await ensureIndexingChannel();
   // Wake lock de 10 min, renovado a cada 5 min se a indexação ainda estiver ativa.
   // Sem isso, a CPU suspende (mWakefulness=Dozing) e os timers JS congelam.
@@ -293,10 +326,21 @@ export async function updateIndexingProgress(
   waitingReason?: string,
 ): Promise<void> {
   if (Platform.OS !== 'android') return;
+  lastProcessedAssets = processedAssets;
+  lastTotalAssets = totalAssets;
+  lastWaitingReason = waitingReason;
+
   // Renova o wake lock a cada update (~2s por batch). O acquire substitui
   // o anterior, então não há leak. Timeout de 10 min garante liberação
   // se o app crashar sem chamar stop.
   WakeLock.acquire(10 * 60 * 1000);
+
+  // Se o usuário dispensou a notificação da barra via swipe, respeitamos o silêncio visual
+  // mantendo o processamento em segundo plano sem recriar o card na barra.
+  if (isNotificationDismissedByUser) {
+    return;
+  }
+
   const now = Date.now();
   const isComplete =
     typeof totalAssets === 'number' &&
@@ -349,6 +393,10 @@ export async function updateIndexingProgress(
 
 export async function stopIndexingForeground(): Promise<void> {
   if (Platform.OS !== 'android') return;
+  isNotificationDismissedByUser = false;
+  lastProcessedAssets = 0;
+  lastTotalAssets = null;
+  lastWaitingReason = undefined;
   WakeLock.release();
   console.warn('[A12Diag] stopIndexingForeground iniciando');
   try {

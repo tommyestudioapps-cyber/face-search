@@ -1,4 +1,5 @@
 import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -69,8 +70,29 @@ export function PhotoViewer({ uri, visible, onClose }: PhotoViewerProps) {
         );
         return;
       }
-      await Sharing.shareAsync(uri);
-    } catch {
+
+      let shareableUri = uri;
+      // No Android 11+ (Scoped Storage), arquivos em storage/emulated ou content://
+      // precisam ser copiados para o cache do app para o FileProvider do Android
+      // conseguir compartilhar via Sharesheet nativo sem violação de permissão.
+      try {
+        const isPng = uri.toLowerCase().endsWith('.png');
+        const extension = isPng ? 'png' : 'jpg';
+        const sourceFile = new File(uri);
+        const cacheFile = new File(Paths.cache, `shared_photo_${Date.now()}.${extension}`);
+        sourceFile.copy(cacheFile);
+        shareableUri = cacheFile.uri;
+      } catch (copyErr) {
+        console.warn('[Share] Cópia para cache falhou, usando URI original:', copyErr);
+      }
+
+      await Sharing.shareAsync(shareableUri, {
+        mimeType: shareableUri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+        dialogTitle: 'Compartilhar foto',
+        UTI: 'public.jpeg',
+      });
+    } catch (err) {
+      console.warn('[Share] Erro ao abrir sharesheet:', err);
       Alert.alert(
         'Não foi possível compartilhar',
         'Tente compartilhar esta foto novamente.',
