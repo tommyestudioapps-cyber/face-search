@@ -249,11 +249,11 @@ class WakeLockModule : Module() {
     Events("onDeviceWake")
 
     OnCreate {
-      instance = this
+      instance = this@WakeLockModule
     }
 
     OnDestroy {
-      if (instance == this) {
+      if (instance === this@WakeLockModule) {
         instance = null
       }
     }

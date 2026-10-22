@@ -96,8 +96,11 @@ jobs:
           release_block = needle + "        release {\n            storeFile file('release.keystore')\n            storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')\n            keyAlias System.getenv('ANDROID_KEY_ALIAS')\n            keyPassword System.getenv('ANDROID_KEY_PASSWORD')\n        }\n"
           s = s.replace(needle, release_block, 1)
 
-          marker = "release {"
-          idx = s.find(marker)
+          bt_marker = "buildTypes {"
+          bt_idx = s.find(bt_marker)
+          if bt_idx == -1:
+              raise SystemExit('ERRO: bloco buildTypes nao encontrado')
+          idx = s.find("release {", bt_idx)
           if idx == -1:
               raise SystemExit('ERRO: bloco release buildType nao encontrado')
           sig_idx = s.find('signingConfig signingConfigs.debug', idx)
