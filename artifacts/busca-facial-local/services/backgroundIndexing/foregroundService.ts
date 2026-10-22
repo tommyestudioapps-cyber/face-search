@@ -138,6 +138,37 @@ notifee.registerForegroundService(async () => {
   }
 });
 
+// Auto-retomada em segundo plano quando o motor JS é inicializado
+// (cobre ressurreição do processo pelo Android/ColorOS sem Activity montada).
+void (async () => {
+  try {
+    const { getBackgroundIndexConsent } = await import('./consent');
+    const consent = await getBackgroundIndexConsent();
+    if (consent !== 'accepted') return;
+
+    const { getBackgroundIndexState } = await import('../faceSearch');
+    const state = await getBackgroundIndexState();
+    if (
+      state.status === 'completed' ||
+      state.status === 'cancelled' ||
+      state.status === 'paused'
+    ) {
+      return;
+    }
+
+    const { WakeLock } = await import('../../modules/wake-lock');
+    if (!WakeLock.hasAnyGalleryPermission()) return;
+
+    console.warn(
+      `[ForegroundService] Auto-retomando indexação no boot do JS (status=${state.status}, fotos=${state.processedAssets}/${state.totalAssets ?? '?'})...`,
+    );
+    const { startForegroundIndexing } = await import('./foregroundIndexLoop');
+    startForegroundIndexing();
+  } catch (err) {
+    console.warn('[ForegroundService] Falha na auto-retomada no boot do JS:', err);
+  }
+})();
+
 export function registerPauseHandler(handler: () => void): () => void {
   pauseHandler = handler;
   return () => {
