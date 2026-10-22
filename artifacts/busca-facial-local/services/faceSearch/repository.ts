@@ -521,6 +521,7 @@ export class FaceSearchRepository {
   async updateBackgroundIndexState(
     patch: BackgroundIndexStatePatch,
   ): Promise<BackgroundIndexState> {
+    return this.enqueueWrite(async () => {
     const database = await this.getDatabase();
     try {
       let nextState: BackgroundIndexState = DEFAULT_BACKGROUND_INDEX_STATE;
@@ -589,6 +590,7 @@ export class FaceSearchRepository {
       if (cause instanceof FaceRecognitionError) throw cause;
       throw storageError('Não foi possível salvar o estado da indexação.', cause);
     }
+    });
   }
 
   async beginScan(owner?: string): Promise<number> {

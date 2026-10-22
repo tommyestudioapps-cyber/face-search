@@ -886,34 +886,213 @@ function SelectPhoto({
   );
 }
 
-function OrbitingSilhouette({ color }: { color: string }) {
-  const rotation = useSharedValue(0);
+function BiometricTargetCorners({ size, color }: { size: number; color: string }) {
+  const cornerLength = Math.max(8, Math.round(size * 0.16));
+  const stroke = 2;
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+      <View
+        style={{
+          position: 'absolute',
+          top: -2,
+          left: -2,
+          width: cornerLength,
+          height: cornerLength,
+          borderTopWidth: stroke,
+          borderLeftWidth: stroke,
+          borderColor: color,
+          borderTopLeftRadius: 6,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          top: -2,
+          right: -2,
+          width: cornerLength,
+          height: cornerLength,
+          borderTopWidth: stroke,
+          borderRightWidth: stroke,
+          borderColor: color,
+          borderTopRightRadius: 6,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          bottom: -2,
+          left: -2,
+          width: cornerLength,
+          height: cornerLength,
+          borderBottomWidth: stroke,
+          borderLeftWidth: stroke,
+          borderColor: color,
+          borderBottomLeftRadius: 6,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          bottom: -2,
+          right: -2,
+          width: cornerLength,
+          height: cornerLength,
+          borderBottomWidth: stroke,
+          borderRightWidth: stroke,
+          borderColor: color,
+          borderBottomRightRadius: 6,
+        }}
+      />
+    </View>
+  );
+}
+
+function BiometricScanVisual({
+  alignedFaces,
+  primaryColor,
+  accentColor,
+}: {
+  alignedFaces: AlignedFace[];
+  primaryColor: string;
+  accentColor: string;
+}) {
+  const isDual = alignedFaces.length >= 2;
+  const radarScale = useSharedValue(1);
+  const radarOpacity = useSharedValue(0.7);
+  const scanPosition = useSharedValue(0);
 
   useEffect(() => {
-    rotation.value = withRepeat(
-      withTiming(360, { duration: 3600, easing: Easing.linear }),
+    radarScale.value = withRepeat(
+      withTiming(1.35, { duration: 2200, easing: Easing.out(Easing.ease) }),
       -1,
       false,
     );
-    return () => cancelAnimation(rotation);
-  }, [rotation]);
+    radarOpacity.value = withRepeat(
+      withTiming(0, { duration: 2200, easing: Easing.out(Easing.ease) }),
+      -1,
+      false,
+    );
+    scanPosition.value = withRepeat(
+      withTiming(1, { duration: 1700, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+    return () => {
+      cancelAnimation(radarScale);
+      cancelAnimation(radarOpacity);
+      cancelAnimation(scanPosition);
+    };
+  }, [radarScale, radarOpacity, scanPosition]);
 
-  const orbitStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
-  }));
-  const uprightStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${-rotation.value}deg` }],
+  const radarStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: radarScale.value }],
+    opacity: radarOpacity.value,
   }));
 
+  const frameHeight = isDual ? 82 : 96;
+  const beamYRange = frameHeight * 0.72;
+
+  const beamStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateY: (scanPosition.value - 0.5) * beamYRange * 2,
+      },
+    ],
+  }));
+
+  if (isDual) {
+    const face1 = alignedFaces[0];
+    const face2 = alignedFaces[1];
+    return (
+      <View style={styles.biometricContainerDual}>
+        {/* Radar elíptico conjunto */}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.biometricRadarDual,
+            { borderColor: primaryColor },
+            radarStyle,
+          ]}
+        />
+
+        {/* Rosto 1 */}
+        <View style={[styles.biometricFrameDual, { borderColor: accentColor }]}>
+          {face1?.uri ? (
+            <Image source={{ uri: face1.uri }} style={styles.biometricImageDual} />
+          ) : (
+            <Feather name="user" size={28} color={primaryColor} />
+          )}
+          <BiometricTargetCorners size={78} color={primaryColor} />
+        </View>
+
+        {/* Elo de conexão central */}
+        <View style={[styles.biometricLinkBadge, { borderColor: primaryColor }]}>
+          <Feather name="link-2" size={13} color={primaryColor} />
+        </View>
+
+        {/* Rosto 2 */}
+        <View style={[styles.biometricFrameDual, { borderColor: accentColor }]}>
+          {face2?.uri ? (
+            <Image source={{ uri: face2.uri }} style={styles.biometricImageDual} />
+          ) : (
+            <Feather name="user" size={28} color={primaryColor} />
+          )}
+          <BiometricTargetCorners size={78} color={primaryColor} />
+        </View>
+
+        {/* Feixe laser horizontal sincronizado atravessando ambos os rostos */}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.biometricBeamDual, beamStyle]}
+        >
+          <LinearGradient
+            colors={['transparent', primaryColor, 'transparent']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.biometricBeamGradient}
+          />
+        </Animated.View>
+      </View>
+    );
+  }
+
+  // Rosto único
+  const singleFace = alignedFaces[0];
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={[styles.analysisOrbit, orbitStyle]}
-    >
-      <Animated.View style={[styles.analysisOrbitingPerson, uprightStyle]}>
-        <FontAwesome name="user" size={19} color={color} />
+    <View style={styles.biometricContainerSingle}>
+      {/* Radar circular concêntrico */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.biometricRadarSingle,
+          { borderColor: primaryColor },
+          radarStyle,
+        ]}
+      />
+
+      {/* Moldura circular com o rosto */}
+      <View style={[styles.biometricFrameSingle, { borderColor: accentColor }]}>
+        {singleFace?.uri ? (
+          <Image source={{ uri: singleFace.uri }} style={styles.biometricImageSingle} />
+        ) : (
+          <Feather name="user" size={36} color={primaryColor} />
+        )}
+        <BiometricTargetCorners size={96} color={primaryColor} />
+      </View>
+
+      {/* Feixe laser vertical sobre o rosto */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.biometricBeamSingle, beamStyle]}
+      >
+        <LinearGradient
+          colors={['transparent', primaryColor, 'transparent']}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.biometricBeamGradient}
+        />
       </Animated.View>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -926,6 +1105,7 @@ function Analyzing({
   searchProgress,
   onCancel,
   onDismiss,
+  alignedFaces,
 }: {
   progress: FaceIndexProgress;
   status: FaceSearchStatus;
@@ -935,18 +1115,26 @@ function Analyzing({
   searchProgress: SearchProgressEvent | null;
   onCancel: () => void;
   onDismiss: () => void;
+  alignedFaces: AlignedFace[];
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const isDual = alignedFaces.length >= 2;
+
   return (
     <View style={[styles.screen, styles.centeredScreen, { backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
-      <View style={styles.analysisVisual}>
-        <View style={[styles.analysisRing, { borderColor: colors.accent }]} />
-        <OrbitingSilhouette color={colors.primary} />
-      </View>
-      <Text style={[styles.analysisTitle, { color: colors.foreground }]}>Analisando sua galeria</Text>
+      <BiometricScanVisual
+        alignedFaces={alignedFaces}
+        primaryColor={colors.primary}
+        accentColor={colors.accent}
+      />
+      <Text style={[styles.analysisTitle, { color: colors.foreground }]}>
+        {isDual ? 'Buscando rostos em conjunto' : 'Analisando sua galeria'}
+      </Text>
       <Text style={[styles.analysisBody, { color: colors.mutedForeground }]}>
-        Comparando vetores localmente.{'\n'}Suas fotos continuam no seu dispositivo.
+        {isDual
+          ? 'Identificando fotos com ambos os rostos.\nSuas fotos continuam no seu dispositivo.'
+          : 'Comparando vetores localmente.\nSuas fotos continuam no seu dispositivo.'}
       </Text>
       <View style={styles.analysisProgressCard}>
         <FaceSearchProgress
@@ -1632,6 +1820,10 @@ export default function HomeScreen() {
           // NÃO tentar iniciar FGS de background (Android 12+).
           // Isso já causou code:DENIED e processos mortos em CEM.
           if (AppState.currentState !== 'active') return;
+          // Não competir por recursos nem pelo SQLite durante busca manual ativa
+          if (screen === 'analyzing' || faceSearchOperationActive) {
+            return;
+          }
             console.warn(
               `[A14Diag] Watchdog tick status=${backgroundIndexState.status} consent=${backgroundIndexConsent}`,
             );
@@ -2111,6 +2303,7 @@ export default function HomeScreen() {
             searchProgress={faceSearchSearchProgress}
             onCancel={cancelIndexing}
             onDismiss={dismissSearchProgress}
+            alignedFaces={collectAlignedFaces()}
           />
         );
       case 'results':
@@ -2401,10 +2594,90 @@ const styles = StyleSheet.create({
   localNotice: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 7, marginTop: 15 },
   localNoticeText: { fontFamily: 'Inter_400Regular', fontSize: 11 },
   centeredScreen: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  analysisVisual: { width: 147, height: 147, alignItems: 'center', justifyContent: 'center', marginBottom: 31 },
-  analysisRing: { ...StyleSheet.absoluteFillObject, borderWidth: 1, borderRadius: 74 },
-  analysisOrbit: { ...StyleSheet.absoluteFillObject, alignItems: 'center' },
-  analysisOrbitingPerson: { width: 24, height: 24, marginTop: 15, alignItems: 'center', justifyContent: 'center' },
+  biometricContainerSingle: {
+    width: 130,
+    height: 130,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 26,
+  },
+  biometricRadarSingle: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 1.5,
+  },
+  biometricFrameSingle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#070D14',
+  },
+  biometricImageSingle: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  biometricBeamSingle: {
+    position: 'absolute',
+    width: 96,
+    height: 3,
+  },
+  biometricContainerDual: {
+    minWidth: 200,
+    height: 130,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 26,
+  },
+  biometricRadarDual: {
+    position: 'absolute',
+    width: 196,
+    height: 104,
+    borderRadius: 52,
+    borderWidth: 1.5,
+  },
+  biometricFrameDual: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#070D14',
+  },
+  biometricImageDual: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  biometricLinkBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    backgroundColor: '#06130E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 8,
+    zIndex: 2,
+  },
+  biometricBeamDual: {
+    position: 'absolute',
+    width: 184,
+    height: 3,
+  },
+  biometricBeamGradient: {
+    flex: 1,
+    height: '100%',
+  },
   analysisTitle: { fontFamily: 'Inter_700Bold', fontSize: 23, letterSpacing: -0.5 },
   analysisBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 11 },
   analysisProgressCard: { width: '100%', marginTop: 25 },
