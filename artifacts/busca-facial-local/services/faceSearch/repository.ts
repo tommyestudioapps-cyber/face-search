@@ -703,6 +703,17 @@ export class FaceSearchRepository {
     });
   }
 
+  async forceAbortActiveScan(): Promise<void> {
+    return this.enqueueWrite(async () => {
+      const database = await this.getDatabase();
+      await database.withExclusiveTransactionAsync(async (transaction) => {
+        await transaction.runAsync(
+          'UPDATE gallery_scan SET active = 0, lease_owner = NULL, lease_until = NULL WHERE id = 1',
+        );
+      });
+    });
+  }
+
   async abortScan(generation: number, owner?: string): Promise<void> {
     return this.enqueueWrite(async () => {
     const database = await this.getDatabase();

@@ -226,8 +226,16 @@ export function startForegroundIndexing(
         }
 
         if (outcome.status === 'waiting' || outcome.status === 'blocked') {
-          finalOutcome = outcome;
-          break;
+          console.warn(
+            `[ForegroundIndex] Batch retornou ${outcome.status}; aguardando liberação...`,
+          );
+          const wasCancelled = await waitOrCancel(
+            3_000,
+            () => cancelled,
+            consumeWakeUp,
+          );
+          if (wasCancelled) break;
+          continue;
         }
 
         // Só atualiza a notificação enquanto o loop ainda está ativo.

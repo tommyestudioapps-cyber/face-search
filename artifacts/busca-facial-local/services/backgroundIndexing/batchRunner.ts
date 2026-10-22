@@ -125,16 +125,10 @@ async function runCoordinatedBackgroundIndexBatch(
   }
   if (!checkpoint && activeGeneration !== null) {
     if (!(await faceSearchRepository.abortScanIfUnleased(activeGeneration))) {
-      await persistBackgroundState({
-        status: 'waiting',
-        scope: 'gallery',
-        lastError: null,
-      });
-      return {
-        status: 'blocked',
-        cumulativeProcessed: previousProcessed,
-        cumulativeTotal: previousState.totalAssets,
-      };
+      console.warn(
+        `[batchRunner] Lease zumbi da geração ${activeGeneration} retido após encerramento do processo. Forçando liberação...`,
+      );
+      await faceSearchRepository.forceAbortActiveScan();
     }
   }
   const leaseOwner = `${Date.now()}-${Math.random()}`;
