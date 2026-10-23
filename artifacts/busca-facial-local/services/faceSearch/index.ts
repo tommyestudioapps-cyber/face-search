@@ -102,16 +102,18 @@ export async function searchFace(
   alignedFace: AlignedFace,
   onProgress?: (event: SearchProgressEvent) => void,
   allowedAssetIds?: ReadonlySet<string>,
+  threshold?: number,
 ): Promise<FaceSearchSummary> {
-  return searchAlignedFace(alignedFace, onProgress, 1, 1, undefined, allowedAssetIds);
+  return searchAlignedFace(alignedFace, onProgress, 1, 1, undefined, allowedAssetIds, threshold);
 }
 
 export async function searchMultiFace(
   alignedFaces: AlignedFace[],
   onProgress?: (event: SearchProgressEvent) => void,
   allowedAssetIds?: ReadonlySet<string>,
+  threshold?: number,
 ): Promise<FaceSearchSummary> {
-  return searchMultiAlignedFaces(alignedFaces, onProgress, allowedAssetIds);
+  return searchMultiAlignedFaces(alignedFaces, onProgress, allowedAssetIds, threshold);
 }
 
 export async function readIndexedPhotos(): Promise<IndexedPhoto[]> {

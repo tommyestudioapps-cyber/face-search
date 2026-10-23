@@ -67,10 +67,12 @@ export interface UseFaceSearchResult {
   search: (
     faces: AlignedFace | AlignedFace[] | null,
     albumId?: string | null,
+    threshold?: number,
   ) => Promise<FaceSearchSummary | null>;
   indexAndSearch: (
     faces: AlignedFace | AlignedFace[] | null,
     albumId?: string | null,
+    threshold?: number,
   ) => Promise<FaceSearchSummary | null>;
 }
 
@@ -429,6 +431,7 @@ export function useFaceSearch(): UseFaceSearchResult {
     async (
       faces: AlignedFace | AlignedFace[] | null,
       albumId?: string | null,
+      threshold?: number,
     ): Promise<FaceSearchSummary | null> => {
       if (searchPromiseRef.current) {
         return searchPromiseRef.current;
@@ -481,8 +484,8 @@ export function useFaceSearch(): UseFaceSearchResult {
         const searchStartedAt = Date.now();
         const MIN_SEARCH_DURATION_MS = 800;
         const runSearch = validFaces.length === 1
-          ? faceSearchModule.searchFace(validFaces[0]!, handleProgress, allowedAssetIds)
-          : faceSearchModule.searchMultiFace(validFaces, handleProgress, allowedAssetIds);
+          ? faceSearchModule.searchFace(validFaces[0]!, handleProgress, allowedAssetIds, threshold)
+          : faceSearchModule.searchMultiFace(validFaces, handleProgress, allowedAssetIds, threshold);
         const nextSummary = await runSearch.then(async (summary) => {
           const pending = MIN_SEARCH_DURATION_MS - (Date.now() - searchStartedAt);
           if (pending > 0) {
@@ -528,10 +531,11 @@ export function useFaceSearch(): UseFaceSearchResult {
     async (
       faces: AlignedFace | AlignedFace[] | null,
       albumId?: string | null,
+      threshold?: number,
     ): Promise<FaceSearchSummary | null> => {
       // Executa diretamente a busca nos embeddings já persistidos no catálogo local (SQLite),
       // utilizando 100% o banco de dados sem re-escanear arquivos nem disputar concorrência.
-      return search(faces, albumId);
+      return search(faces, albumId, threshold);
     },
     [search],
   );

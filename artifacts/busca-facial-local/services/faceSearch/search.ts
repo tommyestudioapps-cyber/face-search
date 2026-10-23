@@ -20,6 +20,7 @@ import {
   cosineSimilarity,
   groupBestResults,
   type SearchProgressEvent,
+  type SimilarityThresholds,
 } from './searchMath';
 import { indexCoordinator } from '../backgroundIndexing/indexCoordinator';
 import { getRecognitionModelIdentity } from './modelIdentity';
@@ -31,6 +32,7 @@ export async function searchAlignedFace(
   phaseTotal: number = 1,
   progressMatchPhotoIds?: ReadonlySet<string>,
   allowedAssetIds?: ReadonlySet<string>,
+  threshold?: number,
 ): Promise<FaceSearchSummary> {
   return indexCoordinator.run('search', () =>
     runSearchAlignedFace(
@@ -40,6 +42,7 @@ export async function searchAlignedFace(
       phaseTotal,
       progressMatchPhotoIds,
       allowedAssetIds,
+      threshold,
     ),
   );
 }
@@ -48,6 +51,7 @@ export async function searchMultiAlignedFaces(
   alignedFaces: AlignedFace[],
   onProgress?: (event: SearchProgressEvent) => void,
   allowedAssetIds?: ReadonlySet<string>,
+  threshold?: number,
 ): Promise<FaceSearchSummary> {
   if (alignedFaces.length === 0) {
     throw new FaceRecognitionError(
@@ -62,7 +66,7 @@ export async function searchMultiAlignedFaces(
     );
   }
   if (alignedFaces.length === 1) {
-    return searchAlignedFace(alignedFaces[0]!, onProgress, 1, 1, undefined, allowedAssetIds);
+    return searchAlignedFace(alignedFaces[0]!, onProgress, 1, 1, undefined, allowedAssetIds, threshold);
   }
 
   const phaseTotal = 2;
@@ -73,6 +77,7 @@ export async function searchMultiAlignedFaces(
     phaseTotal,
     undefined,
     allowedAssetIds,
+    threshold,
   );
   const progressMatchPhotoIds = new Set(
     summaryA.results.map((result) => result.assetId),
@@ -84,6 +89,7 @@ export async function searchMultiAlignedFaces(
     phaseTotal,
     progressMatchPhotoIds,
     allowedAssetIds,
+    threshold,
   );
   const resultsA = new Map(
     summaryA.results.map((result) => [result.assetId, result] as const),
@@ -131,6 +137,7 @@ async function runSearchAlignedFace(
   phaseTotal: number = 1,
   progressMatchPhotoIds?: ReadonlySet<string>,
   allowedAssetIds?: ReadonlySet<string>,
+  threshold?: number,
 ): Promise<FaceSearchSummary> {
   if (Platform.OS === 'web') {
     throw new FaceRecognitionError(
@@ -179,13 +186,17 @@ async function runSearchAlignedFace(
         `[Search:diag] candidate[0] norm=${Math.sqrt(candidateSq).toFixed(3)} first=${candidates[0].face.embedding.values[0].toFixed(4)}`,
       );
     }
+    const effectiveThresholds: SimilarityThresholds = threshold != null
+      ? { approved: faceSearch.similarityThresholds.approved, review: threshold, rejected: threshold }
+      : faceSearch.similarityThresholds;
+
     console.warn(
-      `[Search:diag] thresholds review=${faceSearch.similarityThresholds.review} approved=${faceSearch.similarityThresholds.approved} candidates=${candidates.length}`,
+      `[Search:diag] thresholds review=${effectiveThresholds.review} approved=${effectiveThresholds.approved} candidates=${candidates.length}`,
     );
     const results = await groupBestResults(
       candidates,
       queryEmbedding.values,
-      faceSearch.similarityThresholds,
+      effectiveThresholds,
       faceSearch.maxResults,
       (scores) => {
         const rankedAssetIds = new Set(scores.map((score) => score.assetId));

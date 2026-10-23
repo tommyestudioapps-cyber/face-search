@@ -81,6 +81,12 @@ import type {
 } from '@/services/faceCapture';
 import '@/services/backgroundIndexing/foregroundService';
 
+import {
+  DEFAULT_PRECISION_LEVEL,
+  PRECISION_STORAGE_KEY,
+  precisionLevelToThreshold,
+} from '@/constants/precision';
+
 type AppScreen = 'onboarding' | 'home' | 'select' | 'analyzing' | 'results' | 'indexed';
 
 const ALBUM_STORAGE_KEY = 'visage.index.album';
@@ -1354,6 +1360,7 @@ export default function HomeScreen() {
   const [selectedAlbumTitle, setSelectedAlbumTitle] =
     useState<string>('Todo o dispositivo');
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
+  const [precisionLevel, setPrecisionLevel] = useState<number>(DEFAULT_PRECISION_LEVEL);
   const [rewardCountdown, setRewardCountdown] = useState(3);
   const [matchesReturnScreen, setMatchesReturnScreen] = useState<AppScreen | null>(null);
   const [showOnboardingPermissions, setShowOnboardingPermissions] = useState(false);
@@ -1611,9 +1618,21 @@ export default function HomeScreen() {
         // ignore parse error
       }
     });
+    void AsyncStorage.getItem(PRECISION_STORAGE_KEY).then((value) => {
+      if (!value) return;
+      const parsed = parseInt(value, 10);
+      if (!isNaN(parsed)) {
+        setPrecisionLevel(parsed);
+      }
+    }).catch(() => undefined);
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  const handlePrecisionChange = useCallback((level: number) => {
+    setPrecisionLevel(level);
+    void AsyncStorage.setItem(PRECISION_STORAGE_KEY, String(level)).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -2262,6 +2281,7 @@ export default function HomeScreen() {
       const searchSummary = await indexAndSearch(
         alignedFaces,
         selectedAlbumId,
+        precisionLevelToThreshold(precisionLevel),
       );
       if (searchSummary) {
         setScreen('results');
@@ -2476,6 +2496,8 @@ export default function HomeScreen() {
         hasGalleryPhotoPermission={hasGalleryPhotoAccess}
         isBackgroundIndexUpdating={isUpdatingBackgroundIndex}
         onBackgroundIndexToggle={toggleBackgroundIndex}
+        precisionLevel={precisionLevel}
+        onPrecisionLevelChange={handlePrecisionChange}
       />
       <AlbumPicker
         visible={showAlbumPicker}

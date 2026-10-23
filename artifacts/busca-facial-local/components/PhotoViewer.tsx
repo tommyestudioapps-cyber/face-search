@@ -85,6 +85,13 @@ const ZoomableImage = React.memo(function ZoomableImage({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponderCapture: (evt) => {
+          // Intercepta imediatamente se houver 2 dedos, impedindo que a FlatList roube o gesto
+          return evt.nativeEvent.touches.length >= 2;
+        },
+        onMoveShouldSetPanResponderCapture: (evt) => {
+          return evt.nativeEvent.touches.length >= 2;
+        },
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (evt, gestureState) => {
           if (evt.nativeEvent.touches.length >= 2) return true;
@@ -95,6 +102,7 @@ const ZoomableImage = React.memo(function ZoomableImage({
         },
         onPanResponderGrant: (evt) => {
           if (evt.nativeEvent.touches.length >= 2) {
+            onZoomChange(true);
             const [t0, t1] = evt.nativeEvent.touches;
             initialDist.current = Math.hypot(t0.pageX - t1.pageX, t0.pageY - t1.pageY);
             baseScale.current = scaleRef.current;

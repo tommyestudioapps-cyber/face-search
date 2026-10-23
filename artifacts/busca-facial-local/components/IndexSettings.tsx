@@ -33,6 +33,7 @@ import {
   INDEX_CLEAR_ALERT_TITLE,
   INDEX_SETTINGS_TEST_IDS,
 } from './indexSettingsFlow';
+import { PrecisionSlider } from './PrecisionSlider';
 
 interface IndexSettingsProps {
   visible: boolean;
@@ -48,6 +49,8 @@ interface IndexSettingsProps {
   hasGalleryPhotoPermission: boolean;
   isBackgroundIndexUpdating: boolean;
   onBackgroundIndexToggle: (enabled: boolean) => void | Promise<void>;
+  precisionLevel: number;
+  onPrecisionLevelChange: (level: number) => void;
 }
 
 export function IndexSettings({
@@ -64,6 +67,8 @@ export function IndexSettings({
   hasGalleryPhotoPermission,
   isBackgroundIndexUpdating,
   onBackgroundIndexToggle,
+  precisionLevel,
+  onPrecisionLevelChange,
 }: IndexSettingsProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -224,6 +229,11 @@ export function IndexSettings({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
+            <PrecisionSlider
+              value={precisionLevel}
+              onChange={onPrecisionLevelChange}
+            />
+
             {isWaitingForOperation ? (
               <View
                 style={[
