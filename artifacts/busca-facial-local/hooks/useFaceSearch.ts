@@ -529,90 +529,11 @@ export function useFaceSearch(): UseFaceSearchResult {
       faces: AlignedFace | AlignedFace[] | null,
       albumId?: string | null,
     ): Promise<FaceSearchSummary | null> => {
-      if (mountedRef.current) {
-        setResults([]);
-        setLiveMatches(0);
-      }
-      const faceArray: AlignedFace[] = Array.isArray(faces)
-        ? faces
-        : faces ? [faces] : [];
-      const validFaces = faceArray.filter((face) => face && face.standardized);
-      if (validFaces.length === 0) {
-        const nextError = new FaceRecognitionError(
-          'invalid-input',
-          'Selecione e aprove um rosto antes de iniciar a busca.',
-        );
-        if (mountedRef.current) {
-          setError(nextError);
-          setStatus('error');
-        }
-        return null;
-      }
-      await ensureInitialized();
-      const faceSearchModule = await getFaceSearchModule();
-      const queryEmbeddings: Float32Array[] = [];
-      for (const face of validFaces) {
-        const embedding = await faceSearchModule.computeQueryEmbedding(face);
-        queryEmbeddings.push(embedding.values);
-      }
-      if (__DEV__) {
-        console.log(
-          `[Search] query embeddings prontos; indexando com ${queryEmbeddings.length} alvo(s)`,
-        );
-      }
-      const handleMatch = (assetId: string, similarity: number) => {
-        if (mountedRef.current) {
-          setLiveMatches((current) => current + 1);
-        }
-        if (__DEV__) {
-          console.log(
-            `[Search:liveMatch] assetId=${assetId} similarity=${similarity.toFixed(4)}`,
-          );
-        }
-      };
-      const indexResult = await startIndexing(
-        albumId,
-        queryEmbeddings,
-        handleMatch,
-      );
-      if (
-        !indexResult ||
-        (indexResult.status !== 'completed' &&
-          indexResult.status !== 'paused')
-      ) {
-        return null;
-      }
-      if (__DEV__) {
-        console.log(
-          `[Search] indexação terminou status=${indexResult.status} matches=${indexResult.matches.length}`,
-        );
-      }
-      try {
-        const statsAfter = await faceSearchModule.getStoredIndexStats();
-        const bgState = await faceSearchModule.getBackgroundIndexState();
-        if (statsAfter.indexedPhotos > bgState.processedAssets) {
-          await faceSearchModule.updateBackgroundIndexState({
-            processedAssets: statsAfter.indexedPhotos,
-            lastCompletedAt: Date.now(),
-          });
-          if (__DEV__) {
-            console.log(
-              `[Search] processedAssets sincronizado: ${bgState.processedAssets} → ${statsAfter.indexedPhotos}`,
-            );
-          }
-          if (mountedRef.current) {
-            setBackgroundSyncToken((n) => n + 1);
-          }
-        }
-      } catch (syncError) {
-        if (__DEV__) {
-          console.log('[Search] falha ao sincronizar processedAssets', syncError);
-        }
-      }
-      // Agora roda a busca final para ordenar e montar o resultado completo filtrando pelo álbum se especificado.
+      // Executa diretamente a busca nos embeddings já persistidos no catálogo local (SQLite),
+      // utilizando 100% o banco de dados sem re-escanear arquivos nem disputar concorrência.
       return search(faces, albumId);
     },
-    [ensureInitialized, getFaceSearchModule, search, startIndexing],
+    [search],
   );
 
   useEffect(() => {

@@ -398,6 +398,16 @@ async function indexAsset(
       console.warn(
         `[Index:agg] asset=${asset.id} skip: file.exists=false (inacessível)`,
       );
+      if (generation !== null && generation !== undefined) {
+        try {
+          await faceSearchRepository.saveIndexedPhoto(
+            createIndexedPhoto(asset, 0),
+            [],
+            generation,
+            leaseOwner,
+          );
+        } catch {}
+      }
       return { indexed: false, skipped: true, faceCount: 0 };
     }
   } catch (checkError) {
@@ -405,6 +415,16 @@ async function indexAsset(
       `[Index:agg] asset=${asset.id} skip: file check falhou`,
       checkError,
     );
+    if (generation !== null && generation !== undefined) {
+      try {
+        await faceSearchRepository.saveIndexedPhoto(
+          createIndexedPhoto(asset, 0),
+          [],
+          generation,
+          leaseOwner,
+        );
+      } catch {}
+    }
     return { indexed: false, skipped: true, faceCount: 0 };
   }
 
@@ -427,6 +447,16 @@ async function indexAsset(
         session = null;
       } else if (isSkippableAssetError(error)) {
         logSkippedIndexError(asset.id, 'none', error);
+        if (generation !== null && generation !== undefined) {
+          try {
+            await faceSearchRepository.saveIndexedPhoto(
+              createIndexedPhoto(asset, 0),
+              [],
+              generation,
+              leaseOwner,
+            );
+          } catch {}
+        }
         return { indexed: false, skipped: true, faceCount: 0 };
       } else {
         throw error;

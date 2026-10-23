@@ -110,9 +110,11 @@ async function runCoordinatedBackgroundIndexBatch(
   }
   const checkpoint = await loadBackgroundIndexCursor();
   const resume = checkpoint?.generation === activeGeneration ? checkpoint : undefined;
+  const storedStats = await faceSearchRepository.getStoredIndexStats();
+  const effectiveBaseProcessed = Math.max(previousProcessed, storedStats.indexedPhotos);
   const startOffset = resume
-    ? Math.max(previousProcessed, resume.processedAssets ?? 0)
-    : 0;
+    ? Math.max(effectiveBaseProcessed, resume.processedAssets ?? 0)
+    : effectiveBaseProcessed;
   const currentBatchProcessedRef = { current: 0 };
   if (checkpoint && !resume) {
     if (activeGeneration !== null) {
@@ -139,14 +141,26 @@ async function runCoordinatedBackgroundIndexBatch(
     previousState.status === 'completed' &&
     activeGeneration === null
   ) {
+    let currentCount: number | undefined;
+    if (typeof countGalleryAssets === 'function') {
+      try {
+        currentCount = await countGalleryAssets(options.albumId ?? null);
+      } catch {}
+    }
+    const previousTotal = previousState.totalAssets ?? previousState.processedAssets ?? 0;
+    if (currentCount !== undefined && currentCount <= previousTotal) {
+      console.warn(
+        '[Batch] pulando reindexação automática (estado já completed e galeria inalterada)',
+      );
+      return {
+        status: 'completed',
+        cumulativeProcessed: previousState.processedAssets,
+        cumulativeTotal: previousState.totalAssets,
+      };
+    }
     console.warn(
-      '[Batch] pulando reindexação automática (estado já completed)',
+      `[Batch] novas fotos detectadas (${previousTotal} → ${currentCount}); iniciando atualização incremental`,
     );
-    return {
-      status: 'completed',
-      cumulativeProcessed: previousState.processedAssets,
-      cumulativeTotal: previousState.totalAssets,
-    };
   }
   const generation = resume ? resume.generation : await faceSearchRepository.beginScan(leaseOwner);
   const after = resume?.cursor;
@@ -192,8 +206,8 @@ async function runCoordinatedBackgroundIndexBatch(
     : {
         status: 'running',
         scope: 'gallery',
-        processedAssets: 0,
-        totalAssets: assumedTotal ?? null,
+        processedAssets: effectiveBaseProcessed,
+        totalAssets: assumedTotal ?? previousState.totalAssets ?? null,
         lastAssetId: null,
         lastStartedAt: Date.now(),
         lastCompletedAt: null,

@@ -78,9 +78,11 @@ export function HomeIndexingIndicator({
         ? LABEL_MUTED
         : LABEL_MUTED;
   const countLabel =
-    totalAssets === null
-      ? processedAssets.toLocaleString('pt-BR')
-      : `${processedAssets.toLocaleString('pt-BR')} de ${totalAssets.toLocaleString('pt-BR')} fotos`;
+    state === 'completed'
+      ? `${(totalAssets ?? processedAssets).toLocaleString('pt-BR')} fotos`
+      : totalAssets === null
+        ? processedAssets.toLocaleString('pt-BR')
+        : `${processedAssets.toLocaleString('pt-BR')} de ${totalAssets.toLocaleString('pt-BR')} fotos`;
 
   return (
     <View

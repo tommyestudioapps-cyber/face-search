@@ -1159,7 +1159,7 @@ function Results({
 }: {
   results: FaceSearchResult[];
   onNewSearch: () => void;
-  onOpenPhoto: (uri: string) => void;
+  onOpenPhoto: (uri: string, index: number) => void;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -1186,9 +1186,9 @@ function Results({
           { width: contentWidth, alignSelf: 'center', paddingBottom: insets.bottom + 28 },
         ]}
         columnWrapperStyle={styles.resultsRow}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <Pressable
-            onPress={() => onOpenPhoto(item.uri)}
+            onPress={() => onOpenPhoto(item.uri, index)}
             accessibilityRole="button"
             accessibilityLabel={`Abrir ${item.filename ?? 'foto'}`}
             style={({ pressed }) => [
@@ -1345,7 +1345,8 @@ function getFolderNameFromUri(uri: string): string {
 export default function HomeScreen() {
   const [screen, setScreen] = useState<AppScreen>('onboarding');
   const [indexedFilter, setIndexedFilter] = useState<'all' | 'withFaces'>('all');
-  const [viewerUri, setViewerUri] = useState<string | null>(null);
+  const [viewerPhotos, setViewerPhotos] = useState<string[]>([]);
+  const [viewerIndex, setViewerIndex] = useState<number>(0);
   const [showReward, setShowReward] = useState(false);
   const [showIndexSettings, setShowIndexSettings] = useState(false);
   const [showOffline, setShowOffline] = useState(false);
@@ -1792,7 +1793,40 @@ export default function HomeScreen() {
           if (!permissionConfirmed) return;
           if (!fullPermissionOk) return;
           if (backgroundIndexConsent !== 'accepted') return;
-          if (latestState?.status === 'completed') return;
+          if (latestState?.status === 'completed') {
+            try {
+              const { countGalleryAssets } = await import(
+                '@/services/faceSearch/galleryIndexer'
+              );
+              const currentTotal = await countGalleryAssets(null);
+              const knownTotal =
+                latestState.totalAssets ?? latestState.processedAssets ?? 0;
+              if (currentTotal > knownTotal) {
+                console.warn(
+                  `[SyncIncremental] Fotos novas na galeria detectadas no boot: ${knownTotal} → ${currentTotal} (+${currentTotal - knownTotal})`,
+                );
+                const updatedState: BackgroundIndexState = {
+                  ...latestState,
+                  status: 'running',
+                  totalAssets: currentTotal,
+                };
+                if (mountedRef.current) {
+                  setBackgroundIndexState(updatedState);
+                }
+                const faceSearchRepo = await import(
+                  '@/services/faceSearch/repository'
+                );
+                await faceSearchRepo.faceSearchRepository.updateBackgroundIndexState({
+                  status: 'running',
+                  totalAssets: currentTotal,
+                });
+                void startForegroundIndexingIfNeeded('auto');
+              }
+            } catch (checkErr) {
+              console.warn('[SyncIncremental] erro checando total da galeria', checkErr);
+            }
+            return;
+          }
           if (latestState?.status === 'cancelled') return;
           console.warn('[A14Diag] AppState iniciando loop');
           void startForegroundIndexingIfNeeded();
@@ -2217,6 +2251,13 @@ export default function HomeScreen() {
     setShowReward(false);
     setMatchesReturnScreen(screen);
     setScreen('analyzing');
+    // Pausa a indexação de segundo plano durante a busca manual para prioridade total na CPU e no SQLite
+    try {
+      const foregroundIndexLoop = await import(
+        '@/services/backgroundIndexing/foregroundIndexLoop'
+      );
+      foregroundIndexLoop.getActiveForegroundIndexing()?.cancel();
+    } catch {}
     try {
       const searchSummary = await indexAndSearch(
         alignedFaces,
@@ -2311,7 +2352,10 @@ export default function HomeScreen() {
           <Results
             results={results}
             onNewSearch={matchesReturnScreen ? returnFromMatches : goHome}
-            onOpenPhoto={(uri) => setViewerUri(uri)}
+            onOpenPhoto={(uri, index) => {
+              setViewerPhotos(results.map((r) => r.uri));
+              setViewerIndex(index);
+            }}
           />
         );
       case 'indexed': {
@@ -2387,7 +2431,8 @@ export default function HomeScreen() {
     openMatches,
     selectedAlbumTitle,
     setShowAlbumPicker,
-    setViewerUri,
+    setViewerPhotos,
+    setViewerIndex,
     handleSelectAlbum,
     cancelIndexing,
     results,
@@ -2439,9 +2484,10 @@ export default function HomeScreen() {
         onClose={() => setShowAlbumPicker(false)}
       />
       <PhotoViewer
-        visible={viewerUri !== null}
-        uri={viewerUri}
-        onClose={() => setViewerUri(null)}
+        visible={viewerPhotos.length > 0}
+        photos={viewerPhotos}
+        initialIndex={viewerIndex}
+        onClose={() => setViewerPhotos([])}
       />
     </>
   );
