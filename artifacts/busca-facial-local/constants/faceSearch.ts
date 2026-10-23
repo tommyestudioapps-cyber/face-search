@@ -17,8 +17,8 @@ export const faceSearch = {
   },
   similarityThresholds: {
     approved: 0.65,
-    review: 0.42,
-    rejected: 0.42,
+    review: 0.56,
+    rejected: 0.56,
   },
   maxResults: null,
 } as const;
