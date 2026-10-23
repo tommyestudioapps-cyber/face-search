@@ -88,18 +88,18 @@ export function IndexSettings({
         : 'Aguarde a operação terminar.';
   const backgroundIndexStatus = backgroundIndexState.status;
   const backgroundIndexTitle = !backgroundIndexEnabled
-    ? 'Índice pausado'
+    ? 'Catálogo pausado'
     : backgroundIndexStatus === 'completed'
-      ? 'Índice local preparado'
+      ? 'Catálogo local preparado'
       : backgroundIndexStatus === 'running'
-        ? 'Preparando índice'
+        ? 'Catálogo local'
         : backgroundIndexStatus === 'paused'
-          ? 'Preparando índice (em etapas)'
+          ? 'Catálogo local (em etapas)'
           : backgroundIndexStatus === 'waiting'
             ? 'Aguardando o sistema'
             : backgroundIndexStatus === 'error'
               ? 'Falha na última tentativa'
-              : 'Índice ativo';
+              : 'Catálogo ativo';
   const backgroundIndexBody = !backgroundIndexEnabled
     ? hasGalleryPhotoPermission
       ? 'Ative para autorizar a preparação automática.'
@@ -107,7 +107,7 @@ export function IndexSettings({
     : backgroundIndexStatus === 'completed'
       ? 'A preparação automática está atualizada.'
       : backgroundIndexStatus === 'running'
-        ? 'O índice está sendo preparado enquanto o aplicativo está disponível.'
+        ? 'O catálogo está sendo preparado enquanto o aplicativo está disponível.'
         : backgroundIndexStatus === 'paused'
           ? 'A preparação continua sozinha. Toque em "Preparar novamente" para seguir agora.'
       : backgroundIndexStatus === 'error'
@@ -281,7 +281,7 @@ export function IndexSettings({
               </View>
               <View style={styles.backgroundIndexControl}>
                 <Text style={[styles.backgroundIndexControlLabel, { color: colors.mutedForeground }]}>
-                  {backgroundIndexEnabled ? 'Parar índice' : 'Ativar índice'}
+                  {backgroundIndexEnabled ? 'Parar catálogo' : 'Ativar catálogo'}
                 </Text>
                 <Switch
                   accessibilityLabel="Permitir preparação automática"
@@ -308,7 +308,7 @@ export function IndexSettings({
                 <View style={styles.backgroundIndexDetailsHeading}>
                   <Feather name="database" size={16} color={colors.primary} />
                   <Text style={[styles.backgroundIndexDetailsTitle, { color: colors.foreground }]}>
-                    Estado do índice local
+                    Estado do catálogo local
                   </Text>
                 </View>
                 {backgroundIndexStatus === 'running' ? (
@@ -400,7 +400,7 @@ export function IndexSettings({
             <View style={[styles.infoCard, { backgroundColor: colors.background }]}>
               <Feather name="shield" size={17} color="#34D399" />
               <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-                Limpar o índice remove somente os dados processados. As fotos da
+                Limpar o catálogo remove somente os dados processados. As fotos da
                 galeria permanecem intactas.
               </Text>
             </View>
@@ -420,10 +420,10 @@ export function IndexSettings({
               <Feather name="trash-2" size={17} color="#FB7185" />
               <Text style={styles.clearButtonText}>
                 {isClearing
-                  ? 'Limpando índice…'
+                  ? 'Limpando catálogo…'
                   : isWaitingForOperation
                     ? 'Aguardando operação…'
-                    : 'Limpar índice local'}
+                    : 'Limpar catálogo local'}
               </Text>
             </Pressable>
 

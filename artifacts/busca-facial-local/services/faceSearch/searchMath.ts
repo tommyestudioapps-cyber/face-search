@@ -126,8 +126,8 @@ export async function groupBestResults(
   candidates: SearchMathCandidate[],
   queryEmbedding: Float32Array,
   thresholds: SimilarityThresholds,
-  maxResults: number,
-  onDiagnostic: ((scores: PhotoSimilarityScore[]) => void) | undefined,
+  maxResults?: number | null,
+  onDiagnostic?: ((scores: PhotoSimilarityScore[]) => void) | undefined,
   onProgress?: (event: SearchProgressEvent) => void,
   phase: number = 1,
   phaseTotal: number = 1,
@@ -215,5 +215,7 @@ export async function groupBestResults(
   console.warn(`[Search:top] total=${allSorted.length} top20=${allSorted.slice(0, 20).map(r => r.similarity.toFixed(3)).join(',')}`);
   console.warn(`[Search:top] above070=${allSorted.filter(r => r.similarity >= 0.7).length} above060=${allSorted.filter(r => r.similarity >= 0.6).length} above050=${allSorted.filter(r => r.similarity >= 0.5).length} above040=${allSorted.filter(r => r.similarity >= 0.4).length} above030=${allSorted.filter(r => r.similarity >= 0.3).length}`);
 
-  return allSorted.slice(0, maxResults);
+  return typeof maxResults === 'number' && maxResults > 0
+    ? allSorted.slice(0, maxResults)
+    : allSorted;
 }

@@ -64,12 +64,12 @@ export function HomeIndexingIndicator({
 
   const label =
     state === 'indexing'
-      ? 'Indexação em andamento:'
+      ? 'Criando catálogo local:'
       : state === 'completed'
-        ? 'Indexação concluída:'
+        ? 'Catálogo concluído:'
         : state === 'loading'
-          ? 'Verificando índice…'
-          : 'Indexação desligada';
+          ? 'Verificando catálogo…'
+          : 'Catálogo desligado';
 
   const labelColor =
     state === 'completed'

@@ -321,18 +321,40 @@ export function OnboardingPermissions({
               </View>
               <Text style={[styles.title, { color: colors.foreground }]}>
                 {isConsentStep
-                  ? 'Preparar índice local?'
+                  ? 'Ativar catálogo local?'
                   : isDeniedStep
                     ? 'Acesso não concedido'
                     : 'Permitir acesso às fotos'}
               </Text>
-              <Text style={[styles.body, { color: colors.mutedForeground }]}>
-                {isConsentStep
-                  ? 'O índice organiza os dados dos rostos da sua galeria para acelerar as próximas buscas. A preparação acontece em segundo plano e suas fotos não saem deste aparelho.'
-                  : isDeniedStep
-                    ? `Sem esse acesso, o índice local não pode ser preparado. ${getPermissionSettingsCopy()}`
-                    : `Para encontrar rostos e preparar o índice local, o app precisa ler as fotos da sua galeria. ${getPermissionSettingsCopy()}`}
-              </Text>
+              {isConsentStep ? (
+                <>
+                  <Text style={[styles.consentSubtitle, { color: colors.mutedForeground }]}>
+                    A preparação do catálogo é essencial para suas buscas
+                  </Text>
+                  <View style={styles.consentList}>
+                    <View style={styles.consentItem}>
+                      <Feather name="shield" size={15} color="#34D399" style={styles.consentIcon} />
+                      <Text style={[styles.consentItemText, { color: colors.foreground }]}>
+                        <Text style={styles.consentItemBold}>100% Privado: </Text>
+                        <Text style={{ color: colors.mutedForeground }}>Nenhuma foto sai do seu celular.</Text>
+                      </Text>
+                    </View>
+                    <View style={styles.consentItem}>
+                      <Feather name="cpu" size={15} color="#34D399" style={styles.consentIcon} />
+                      <Text style={[styles.consentItemText, { color: colors.foreground }]}>
+                        <Text style={styles.consentItemBold}>Sem esforço: </Text>
+                        <Text style={{ color: colors.mutedForeground }}>O catálogo roda em segundo plano apenas enquanto o aparelho estiver em uso.</Text>
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <Text style={[styles.body, { color: colors.mutedForeground }]}>
+                  {isDeniedStep
+                    ? `Sem esse acesso, o catálogo local não pode ser preparado. ${getPermissionSettingsCopy()}`
+                    : `Para encontrar rostos e preparar o catálogo local, o app precisa ler as fotos da sua galeria. ${getPermissionSettingsCopy()}`}
+                </Text>
+              )}
 
               {error ? (
                 <Text style={[styles.error, { color: colors.destructive }]}>
@@ -376,7 +398,7 @@ export function OnboardingPermissions({
                     testID="onboarding-index-accept"
                   >
                     <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
-                      Preparar índice
+                      Criar catálogo local
                     </Text>
                   </Pressable>
                 </View>
@@ -483,6 +505,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     marginTop: 10,
+  },
+  consentSubtitle: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
+    marginBottom: 14,
+  },
+  consentList: {
+    gap: 10,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  consentItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  consentIcon: {
+    marginTop: 2,
+  },
+  consentItemText: {
+    flex: 1,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  consentItemBold: {
+    fontFamily: 'Inter_700Bold',
   },
   actions: {
     flexDirection: 'row',

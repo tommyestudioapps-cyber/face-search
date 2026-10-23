@@ -12,10 +12,10 @@ export interface IndexClearAlertOption {
   onPress?: () => void;
 }
 
-export const INDEX_CLEAR_ALERT_TITLE = 'Limpar índice local?';
+export const INDEX_CLEAR_ALERT_TITLE = 'Limpar catálogo local?';
 export const INDEX_CLEAR_ALERT_MESSAGE =
-  'Isso apagará as fotos e rostos processados do índice deste aparelho. As fotos originais da sua galeria não serão apagadas.';
-export const INDEX_CLEAR_ERROR_MESSAGE = 'Não foi possível limpar o índice local.';
+  'Isso apagará as fotos e rostos processados do catálogo deste aparelho. As fotos originais da sua galeria não serão apagadas.';
+export const INDEX_CLEAR_ERROR_MESSAGE = 'Não foi possível limpar o catálogo local.';
 
 export interface IndexClearFeedbackCallbacks {
   onStart: () => void;

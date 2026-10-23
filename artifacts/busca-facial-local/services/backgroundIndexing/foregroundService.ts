@@ -296,7 +296,7 @@ export async function startIndexingForeground(): Promise<void> {
   try {
     await notifee.displayNotification({
       id: INDEXING_NOTIFICATION_ID,
-      title: 'Preparando busca por rostos',
+      title: 'Criando catálogo local',
       body: 'Iniciando análise da galeria...',
       android: {
         channelId: INDEXING_CHANNEL_ID,
@@ -368,7 +368,7 @@ export async function updateIndexingProgress(
 
   await notifee.displayNotification({
     id: INDEXING_NOTIFICATION_ID,
-    title: 'Preparando busca por rostos',
+    title: 'Criando catálogo local',
     body,
     android: {
       channelId: INDEXING_CHANNEL_ID,
