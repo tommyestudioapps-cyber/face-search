@@ -33,7 +33,7 @@ import {
   INDEX_CLEAR_ALERT_TITLE,
   INDEX_SETTINGS_TEST_IDS,
 } from './indexSettingsFlow';
-import { PrecisionSlider } from './PrecisionSlider';
+import { PrecisionModal } from './PrecisionModal';
 
 interface IndexSettingsProps {
   visible: boolean;
@@ -72,6 +72,7 @@ export function IndexSettings({
 }: IndexSettingsProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const [showPrecisionModal, setShowPrecisionModal] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [clearError, setClearError] = useState<string | null>(null);
   const clearBlocked = isClearing || isOperationActive || clearState !== 'idle';
@@ -229,10 +230,20 @@ export function IndexSettings({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            <PrecisionSlider
-              value={precisionLevel}
-              onChange={onPrecisionLevelChange}
-            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Ajustar precisão de reconhecimento"
+              onPress={() => setShowPrecisionModal(true)}
+              style={({ pressed }) => [
+                styles.precisionButton,
+                pressed ? styles.pressed : null,
+              ]}
+            >
+              <Feather name="target" size={17} color="#FFFFFF" />
+              <Text style={styles.precisionButtonText}>
+                Precisão de reconhecimento
+              </Text>
+            </Pressable>
 
             {isWaitingForOperation ? (
               <View
@@ -545,6 +556,12 @@ export function IndexSettings({
           </ScrollView>
         </View>
       </View>
+      <PrecisionModal
+        visible={showPrecisionModal}
+        value={precisionLevel}
+        onChange={onPrecisionLevelChange}
+        onClose={() => setShowPrecisionModal(false)}
+      />
     </Modal>
   );
 }
@@ -755,6 +772,24 @@ const styles = StyleSheet.create({
   backgroundIndexControlLabel: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 9,
+  },
+  precisionButton: {
+    minHeight: 50,
+    borderWidth: 1,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#000000',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    marginTop: 14,
+    paddingHorizontal: 16,
+  },
+  precisionButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
   },
   clearButton: {
     minHeight: 50,
