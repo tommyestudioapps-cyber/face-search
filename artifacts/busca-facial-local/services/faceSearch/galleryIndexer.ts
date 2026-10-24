@@ -733,7 +733,7 @@ async function runGalleryIndex(
       let page: MediaLibrary.PagedInfo<MediaLibrary.Asset>;
       try {
         page = await MediaLibrary.getAssetsAsync({
-          first: batch ? 1 : faceSearch.indexing.batchSize,
+          first: batch ? 50 : faceSearch.indexing.batchSize,
           after: cursor,
           mediaType: MediaLibrary.MediaType.photo,
           sortBy: [MediaLibrary.SortBy.modificationTime],
@@ -764,6 +764,19 @@ async function runGalleryIndex(
         }
         break;
       }
+
+      const seenUnchangedAssetIds: string[] = [];
+      const flushSeenAssets = async () => {
+        if (seenUnchangedAssetIds.length > 0 && generation !== null) {
+          const idsToFlush = [...seenUnchangedAssetIds];
+          seenUnchangedAssetIds.length = 0;
+          await faceSearchRepository.markAssetsSeen(
+            idsToFlush,
+            generation,
+            batch?.leaseOwner ?? manualOwner,
+          );
+        }
+      };
 
       for (const asset of page.assets) {
         throwIfCancelled(cancellation);
@@ -814,7 +827,10 @@ async function runGalleryIndex(
         }
         throwIfCancelled(cancellation);
         if (generation !== null && !result.indexed && !assetTimedOut) {
-          await faceSearchRepository.markAssetSeen(asset.id, generation, batch?.leaseOwner ?? manualOwner);
+          seenUnchangedAssetIds.push(asset.id);
+          if (seenUnchangedAssetIds.length >= 50) {
+            await flushSeenAssets();
+          }
         }
         if (result.indexed) {
           indexedPhotoCount += 1;
@@ -846,6 +862,8 @@ async function runGalleryIndex(
 
         await yieldToEventLoop();
       }
+
+      await flushSeenAssets();
 
       const previousCursor = cursor;
       cursor = page.endCursor;

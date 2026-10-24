@@ -750,26 +750,38 @@ export class FaceSearchRepository {
     });
   }
 
-  async markAssetSeen(assetId: string, generation: number, owner?: string): Promise<void> {
+  async markAssetsSeen(assetIds: string[], generation: number, owner?: string): Promise<void> {
+    if (!assetIds || assetIds.length === 0) return;
     return this.enqueueWrite(async () => {
-    const database = await this.getDatabase();
-    await database.withExclusiveTransactionAsync(async (transaction) => {
-      const active = await transaction.getFirstAsync<{ generation: number; lease_owner: string | null; lease_until: number | null }>(
-        'SELECT generation, lease_owner, lease_until FROM gallery_scan WHERE id = 1 AND active = 1',
-      );
-      if (active?.generation !== generation ||
-        active.lease_owner !== (owner ?? null)) {
-        throw storageError('A geração da varredura foi interrompida.');
-      }
-      await transaction.runAsync(
-        'UPDATE indexed_photos SET last_seen_generation = ? WHERE id_media_library = ?',
-        [generation, assetId],
-      );
-      if (owner) {
-        await transaction.runAsync('UPDATE gallery_scan SET lease_until = ? WHERE id = 1', [Date.now() + SCAN_LEASE_MS]);
-      }
+      const database = await this.getDatabase();
+      await database.withExclusiveTransactionAsync(async (transaction) => {
+        const active = await transaction.getFirstAsync<{ generation: number; lease_owner: string | null; lease_until: number | null }>(
+          'SELECT generation, lease_owner, lease_until FROM gallery_scan WHERE id = 1 AND active = 1',
+        );
+        if (active?.generation !== generation ||
+          active.lease_owner !== (owner ?? null)) {
+          throw storageError('A geração da varredura foi interrompida.');
+        }
+
+        const CHUNK_SIZE = 100;
+        for (let i = 0; i < assetIds.length; i += CHUNK_SIZE) {
+          const chunk = assetIds.slice(i, i + CHUNK_SIZE);
+          const placeholders = chunk.map(() => '?').join(',');
+          await transaction.runAsync(
+            `UPDATE indexed_photos SET last_seen_generation = ? WHERE id_media_library IN (${placeholders})`,
+            [generation, ...chunk],
+          );
+        }
+
+        if (owner) {
+          await transaction.runAsync('UPDATE gallery_scan SET lease_until = ? WHERE id = 1', [Date.now() + SCAN_LEASE_MS]);
+        }
+      });
     });
-    });
+  }
+
+  async markAssetSeen(assetId: string, generation: number, owner?: string): Promise<void> {
+    return this.markAssetsSeen([assetId], generation, owner);
   }
 
   async completeScan(generation: number, owner?: string): Promise<number> {
