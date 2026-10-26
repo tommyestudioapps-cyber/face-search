@@ -7,7 +7,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   AppState,
-  BackHandler,
   FlatList,
   Image,
   Linking,
@@ -2287,27 +2286,7 @@ export default function HomeScreen() {
     }
   };
 
-  const openSearch = async () => {
-    try {
-      const selection = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.9,
-      });
-      if (!selection.canceled && selection.assets[0]?.uri) {
-        const uri = selection.assets[0].uri;
-        setScreen('select');
-        void analyzeFace(uri, activeSlot);
-      }
-    } catch (error) {
-      console.error('[Gallery] não foi possível abrir a galeria', error);
-      Alert.alert(
-        'Não foi possível abrir a galeria',
-        'Confira a permissão de acesso às fotos e tente novamente.',
-      );
-    }
-  };
+  const openSearch = () => setScreen('select');
 
   const handleSelectAlbum = (album: AlbumOption) => {
     setSelectedAlbumId(album.id);
@@ -2427,40 +2406,9 @@ export default function HomeScreen() {
     setScreen('home');
   };
 
-  const leaveSelection = useCallback(async () => {
-    if (selectedImage) {
-      try {
-        const selection = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.9,
-        });
-        if (!selection.canceled && selection.assets[0]?.uri) {
-          const uri = selection.assets[0].uri;
-          void analyzeFace(uri, activeSlot);
-          return;
-        }
-      } catch (error) {
-        console.error('[Gallery] erro ao reabrir galeria após voltar', error);
-      }
-      // Se o usuário cancelou a galeria (desistiu de escolher outra foto), volta para a Home
-      clearSlot(activeSlot);
-      setScreen('home');
-      return;
-    }
+  const leaveSelection = () => {
     setScreen('home');
-  }, [selectedImage, activeSlot, clearSlot, analyzeFace]);
-
-  useEffect(() => {
-    if (screen !== 'select' || !selectedImage) return undefined;
-    const onHardwareBack = () => {
-      void leaveSelection();
-      return true;
-    };
-    const sub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
-    return () => sub.remove();
-  }, [screen, selectedImage, leaveSelection]);
+  };
 
   const dismissSearchProgress = () => {
     cancelIndexing();
