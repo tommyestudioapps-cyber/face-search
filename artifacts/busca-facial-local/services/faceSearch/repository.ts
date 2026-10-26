@@ -1028,6 +1028,29 @@ export class FaceSearchRepository {
     return rows.map(mapIndexedPhotoRow);
   }
 
+  /** Consulta pontual de uma única foto indexada (usada na checagem rápida de mudança da galeria). */
+  async getIndexedPhotoById(assetId: string): Promise<IndexedPhoto | null> {
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<IndexedPhotoRow>(
+      `
+        SELECT
+          id_media_library,
+          uri_local,
+          file_name,
+          created_at,
+          updated_at,
+          dimensions,
+          indexing_status,
+          model_version
+        FROM indexed_photos
+        WHERE indexing_status = ? AND id_media_library = ?
+        LIMIT 1
+      `,
+      [INDEXED_STATUS, assetId],
+    );
+    return row ? mapIndexedPhotoRow(row) : null;
+  }
+
   async getIndexedPhotosWithFaceCounts(): Promise<IndexedPhoto[]> {
     const photos = await this.getIndexedPhotos();
     if (photos.length === 0) {

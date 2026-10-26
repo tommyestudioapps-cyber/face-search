@@ -1626,21 +1626,16 @@ export default function HomeScreen() {
               reconciledState.totalAssets ??
               reconciledState.processedAssets ??
               0;
-            if (typeof galleryIndexer.inspectGalleryDelta === 'function') {
-              const delta = await galleryIndexer.inspectGalleryDelta(null);
-              const hasChanges =
-                delta.totalAssets !== knownTotal ||
-                delta.newOrModifiedAssets > 0 ||
-                delta.deletedAssets > 0;
-              if (!cancelled && hasChanges) {
+            if (typeof galleryIndexer.quickCheckGalleryChanged === 'function') {
+              const quick = await galleryIndexer.quickCheckGalleryChanged(knownTotal, null);
+              if (!cancelled && quick.changed) {
                 console.warn(
-                  `[SyncIncremental] Mudança na galeria detectada no boot: ${knownTotal} → ${delta.totalAssets} (novas=${delta.newOrModifiedAssets}, apagadas=${delta.deletedAssets})`,
+                  `[SyncIncremental] Mudança na galeria detectada no boot: ${knownTotal} → ${quick.totalAssets} (motivo=${quick.reason})`,
                 );
                 const updatedState: BackgroundIndexState = {
                   ...reconciledState,
                   status: 'running',
-                  processedAssets: delta.unchangedAssets,
-                  totalAssets: delta.totalAssets,
+                  totalAssets: quick.totalAssets,
                 };
                 if (mountedRef.current) {
                   setBackgroundIndexState(updatedState);
@@ -1650,8 +1645,7 @@ export default function HomeScreen() {
                 );
                 await faceSearchRepo.faceSearchRepository.updateBackgroundIndexState({
                   status: 'running',
-                  processedAssets: delta.unchangedAssets,
-                  totalAssets: delta.totalAssets,
+                  totalAssets: quick.totalAssets,
                 });
                 void startForegroundIndexingIfNeeded('auto');
               }
@@ -1884,21 +1878,16 @@ export default function HomeScreen() {
               );
               const knownTotal =
                 latestState.totalAssets ?? latestState.processedAssets ?? 0;
-              if (typeof galleryIndexer.inspectGalleryDelta === 'function') {
-                const delta = await galleryIndexer.inspectGalleryDelta(null);
-                const hasChanges =
-                  delta.totalAssets !== knownTotal ||
-                  delta.newOrModifiedAssets > 0 ||
-                  delta.deletedAssets > 0;
-                if (hasChanges) {
+              if (typeof galleryIndexer.quickCheckGalleryChanged === 'function') {
+                const quick = await galleryIndexer.quickCheckGalleryChanged(knownTotal, null);
+                if (quick.changed) {
                   console.warn(
-                    `[SyncIncremental] Mudança na galeria detectada ao retomar: ${knownTotal} → ${delta.totalAssets} (novas=${delta.newOrModifiedAssets}, apagadas=${delta.deletedAssets})`,
+                    `[SyncIncremental] Mudança na galeria detectada ao retomar: ${knownTotal} → ${quick.totalAssets} (motivo=${quick.reason})`,
                   );
                   const updatedState: BackgroundIndexState = {
                     ...latestState,
                     status: 'running',
-                    processedAssets: delta.unchangedAssets,
-                    totalAssets: delta.totalAssets,
+                    totalAssets: quick.totalAssets,
                   };
                   if (mountedRef.current) {
                     setBackgroundIndexState(updatedState);
@@ -1908,8 +1897,7 @@ export default function HomeScreen() {
                   );
                   await faceSearchRepo.faceSearchRepository.updateBackgroundIndexState({
                     status: 'running',
-                    processedAssets: delta.unchangedAssets,
-                    totalAssets: delta.totalAssets,
+                    totalAssets: quick.totalAssets,
                   });
                   void startForegroundIndexingIfNeeded('auto');
                 }

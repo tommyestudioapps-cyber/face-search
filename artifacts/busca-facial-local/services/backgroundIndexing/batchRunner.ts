@@ -2,9 +2,9 @@ import {
   countGalleryAssets,
   forceResetActiveIndexing,
   indexGallery,
-  inspectGalleryDelta,
+  quickCheckGalleryChanged,
   type CancelReason,
-  type GalleryDeltaSummary,
+  type GalleryQuickCheck,
   type GalleryIndexCancellationContract,
 } from '@/services/faceSearch/galleryIndexer';
 import { FaceRecognitionError } from '@/services/faceSearch/types';
@@ -113,17 +113,7 @@ async function runCoordinatedBackgroundIndexBatch(
   const checkpoint = await loadBackgroundIndexCursor();
   const resume = checkpoint?.generation === activeGeneration ? checkpoint : undefined;
   const storedStats = await faceSearchRepository.getStoredIndexStats();
-  let galleryDelta: GalleryDeltaSummary | null = null;
-  if (!resume && typeof inspectGalleryDelta === 'function') {
-    try {
-      galleryDelta = await inspectGalleryDelta(options.albumId ?? null);
-    } catch {
-      galleryDelta = null;
-    }
-  }
-  const effectiveBaseProcessed = galleryDelta
-    ? galleryDelta.unchangedAssets
-    : Math.max(previousProcessed, storedStats.indexedPhotos);
+  const effectiveBaseProcessed = Math.max(previousProcessed, storedStats.indexedPhotos);
   const startOffset = resume
     ? Math.max(effectiveBaseProcessed, resume.processedAssets ?? 0)
     : effectiveBaseProcessed;
@@ -154,45 +144,25 @@ async function runCoordinatedBackgroundIndexBatch(
     activeGeneration === null
   ) {
     const previousTotal = previousState.totalAssets ?? previousState.processedAssets ?? 0;
-    if (galleryDelta) {
-      const galleryUnchanged =
-        galleryDelta.totalAssets === previousTotal &&
-        galleryDelta.newOrModifiedAssets === 0 &&
-        galleryDelta.deletedAssets === 0;
-      if (galleryUnchanged) {
-        console.warn(
-          '[Batch] pulando reindexação automática (estado já completed e galeria inalterada)',
-        );
-        return {
-          status: 'completed',
-          cumulativeProcessed: previousState.processedAssets,
-          cumulativeTotal: previousState.totalAssets,
-        };
-      }
-      console.warn(
-        `[Batch] mudança na galeria detectada (${previousTotal} → ${galleryDelta.totalAssets}, novas=${galleryDelta.newOrModifiedAssets}, apagadas=${galleryDelta.deletedAssets}); iniciando atualização incremental`,
-      );
-    } else {
-      let currentCount: number | undefined;
-      if (typeof countGalleryAssets === 'function') {
-        try {
-          currentCount = await countGalleryAssets(options.albumId ?? null);
-        } catch {}
-      }
-      if (currentCount !== undefined && currentCount <= previousTotal) {
-        console.warn(
-          '[Batch] pulando reindexação automática (estado já completed e galeria inalterada)',
-        );
-        return {
-          status: 'completed',
-          cumulativeProcessed: previousState.processedAssets,
-          cumulativeTotal: previousState.totalAssets,
-        };
-      }
-      console.warn(
-        `[Batch] novas fotos detectadas (${previousTotal} → ${currentCount}); iniciando atualização incremental`,
-      );
+    let quick: GalleryQuickCheck | null = null;
+    try {
+      quick = await quickCheckGalleryChanged(previousTotal, options.albumId ?? null);
+    } catch {
+      quick = null;
     }
+    if (quick && !quick.changed) {
+      console.warn(
+        '[Batch] pulando reindexação automática (estado já completed e galeria inalterada)',
+      );
+      return {
+        status: 'completed',
+        cumulativeProcessed: previousState.processedAssets,
+        cumulativeTotal: previousState.totalAssets,
+      };
+    }
+    console.warn(
+      `[Batch] mudança na galeria detectada (${previousTotal} → ${quick?.totalAssets ?? '?'}, motivo=${quick?.reason ?? 'falha-checagem'}); iniciando atualização incremental`,
+    );
   }
   const generation = resume ? resume.generation : await faceSearchRepository.beginScan(leaseOwner);
   const after = resume?.cursor;
@@ -212,10 +182,8 @@ async function runCoordinatedBackgroundIndexBatch(
   let assumedTotal: number | undefined =
     resume && typeof previousState.totalAssets === 'number'
       ? previousState.totalAssets
-      : galleryDelta
-        ? galleryDelta.totalAssets
-        : undefined;
-  if (!resume && assumedTotal === undefined && typeof countGalleryAssets === 'function') {
+      : undefined;
+  if (!resume && typeof countGalleryAssets === 'function') {
     console.warn('[Batch] contando fotos reais antes de indexar gen=' + generation);
     try {
       assumedTotal = await countGalleryAssets(options.albumId ?? null);
