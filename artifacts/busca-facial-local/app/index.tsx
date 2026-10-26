@@ -1610,54 +1610,6 @@ export default function HomeScreen() {
         console.warn('[A14Diag] boot setIndexHydrated=true');
         setIndexHydrated(true);
       }
-      if (
-        !cancelled &&
-        consent === 'accepted' &&
-        galleryPermissionGranted &&
-        reconciledState?.status === 'completed' &&
-        Platform.OS !== 'web'
-      ) {
-        void (async () => {
-          try {
-            const galleryIndexer = await import(
-              '@/services/faceSearch/galleryIndexer'
-            );
-            const knownTotal =
-              reconciledState.totalAssets ??
-              reconciledState.processedAssets ??
-              0;
-            if (typeof galleryIndexer.quickCheckGalleryChanged === 'function') {
-              const quick = await galleryIndexer.quickCheckGalleryChanged(knownTotal, null);
-              if (!cancelled && quick.changed) {
-                console.warn(
-                  `[SyncIncremental] Mudança na galeria detectada no boot: ${knownTotal} → ${quick.totalAssets} (motivo=${quick.reason})`,
-                );
-                const updatedState: BackgroundIndexState = {
-                  ...reconciledState,
-                  status: 'running',
-                  totalAssets: quick.totalAssets,
-                };
-                if (mountedRef.current) {
-                  setBackgroundIndexState(updatedState);
-                }
-                const faceSearchRepo = await import(
-                  '@/services/faceSearch/repository'
-                );
-                await faceSearchRepo.faceSearchRepository.updateBackgroundIndexState({
-                  status: 'running',
-                  totalAssets: quick.totalAssets,
-                });
-                void startForegroundIndexingIfNeeded('auto');
-              }
-            }
-          } catch (bootDeltaErr) {
-            console.warn(
-              '[SyncIncremental] erro checando delta da galeria no boot',
-              bootDeltaErr,
-            );
-          }
-        })();
-      }
     })().catch((error) => {
       console.error('[BackgroundIndex] não foi possível preparar a inicialização', error);
       if (!cancelled) {
