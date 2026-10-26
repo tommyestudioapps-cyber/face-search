@@ -1609,6 +1609,34 @@ export default function HomeScreen() {
       if (!cancelled) {
         console.warn('[A14Diag] boot setIndexHydrated=true');
         setIndexHydrated(true);
+        if (consent === 'accepted' && galleryPermissionGranted && Platform.OS !== 'web') {
+          setTimeout(() => {
+            if (cancelled) return;
+            void (async () => {
+              try {
+                const galleryIndexer = await import(
+                  '@/services/faceSearch/galleryIndexer'
+                );
+                const knownTotal =
+                  reconciledState?.totalAssets ??
+                  reconciledState?.processedAssets ??
+                  0;
+                const quick = await galleryIndexer.quickCheckGalleryChanged(
+                  knownTotal,
+                  null,
+                );
+                if (!cancelled && quick.changed) {
+                  console.warn(
+                    `[SyncIncremental] Mudança detectada: ${knownTotal} → ${quick.totalAssets} (${quick.reason})`,
+                  );
+                  void startForegroundIndexingIfNeeded('auto');
+                }
+              } catch (err) {
+                console.warn('[SyncIncremental] falha na checagem suave', err);
+              }
+            })();
+          }, 800);
+        }
       }
     })().catch((error) => {
       console.error('[BackgroundIndex] não foi possível preparar a inicialização', error);
