@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   AppState,
+  BackHandler,
   FlatList,
   Image,
   Linking,
@@ -2406,9 +2407,40 @@ export default function HomeScreen() {
     setScreen('home');
   };
 
-  const leaveSelection = () => {
+  const leaveSelection = useCallback(async () => {
+    if (selectedImage) {
+      clearSlot(activeSlot);
+      try {
+        const selection = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.9,
+        });
+        if (!selection.canceled && selection.assets[0]?.uri) {
+          const uri = selection.assets[0].uri;
+          void analyzeFace(uri, activeSlot);
+        } else {
+          setScreen('home');
+        }
+      } catch (error) {
+        console.error('[Gallery] erro ao reabrir galeria após voltar', error);
+        setScreen('home');
+      }
+      return;
+    }
     setScreen('home');
-  };
+  }, [selectedImage, activeSlot, clearSlot, analyzeFace]);
+
+  useEffect(() => {
+    if (screen !== 'select' || !selectedImage) return undefined;
+    const onHardwareBack = () => {
+      void leaveSelection();
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
+    return () => sub.remove();
+  }, [screen, selectedImage, leaveSelection]);
 
   const dismissSearchProgress = () => {
     cancelIndexing();
