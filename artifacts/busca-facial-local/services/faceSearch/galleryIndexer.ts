@@ -733,7 +733,7 @@ async function runGalleryIndex(
       let page: MediaLibrary.PagedInfo<MediaLibrary.Asset>;
       try {
         page = await MediaLibrary.getAssetsAsync({
-          first: batch ? 50 : faceSearch.indexing.batchSize,
+          first: batch ? 250 : faceSearch.indexing.batchSize,
           after: cursor,
           mediaType: MediaLibrary.MediaType.photo,
           sortBy: [MediaLibrary.SortBy.modificationTime],
@@ -780,6 +780,40 @@ async function runGalleryIndex(
 
       for (const asset of page.assets) {
         throwIfCancelled(cancellation);
+        const existingPhoto = indexedById.get(asset.id);
+
+        if (isUnchangedAsset(asset, existingPhoto)) {
+          if (matchContext && matchContext.queryEmbeddings.length > 0) {
+            const faceEmbeddings =
+              matchContext.storedEmbeddingsByAsset.get(asset.id) ?? [];
+            const similarity = computeAssetMatch(
+              faceEmbeddings,
+              matchContext.queryEmbeddings,
+              matchContext.threshold,
+            );
+            if (similarity !== null) {
+              matchContext.matches.push({ assetId: asset.id, similarity });
+              matchContext.onMatch?.(asset.id, similarity);
+            }
+          }
+          if (generation !== null) {
+            seenUnchangedAssetIds.push(asset.id);
+            if (seenUnchangedAssetIds.length >= 100) {
+              await flushSeenAssets();
+            }
+          }
+          progress = {
+            ...progress,
+            processedAssets: progress.processedAssets + 1,
+            indexedFaces: indexedFaceCount,
+            skippedAssets,
+            currentAssetId: null,
+          };
+          lastAssetId = asset.id;
+          options.onProgress?.(progress);
+          continue;
+        }
+
         if (batch && !(await batch.shouldContinue())) {
           cancellation.cancel();
           throwIfCancelled(cancellation);
@@ -790,7 +824,7 @@ async function runGalleryIndex(
         let assetTimedOut = false;
         const assetPromise = indexAsset(
           asset,
-          indexedById.get(asset.id),
+          existingPhoto,
           cancellation,
           batch?.shouldContinue,
           generation ?? undefined,
@@ -828,7 +862,7 @@ async function runGalleryIndex(
         throwIfCancelled(cancellation);
         if (generation !== null && !result.indexed && !assetTimedOut) {
           seenUnchangedAssetIds.push(asset.id);
-          if (seenUnchangedAssetIds.length >= 50) {
+          if (seenUnchangedAssetIds.length >= 100) {
             await flushSeenAssets();
           }
         }
@@ -864,6 +898,7 @@ async function runGalleryIndex(
       }
 
       await flushSeenAssets();
+      await yieldToEventLoop();
 
       const previousCursor = cursor;
       cursor = page.endCursor;

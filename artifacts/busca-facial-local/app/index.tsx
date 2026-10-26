@@ -1444,13 +1444,24 @@ export default function HomeScreen() {
           // SQLite pelo listener de AppState quando o app volta a 'active',
           // evitando o salto visual (ex: de 71 direto para 334).
           if (AppState.currentState !== 'active') return;
-          setBackgroundIndexState((current) => ({
-            ...current,
-            status: 'running',
-            processedAssets,
-            totalAssets: totalAssets ?? current.totalAssets,
-            lastError: null,
-          }));
+          setBackgroundIndexState((current) => {
+            const resolvedTotal = totalAssets ?? current.totalAssets;
+            const reachedTotalNow =
+              typeof resolvedTotal === 'number' &&
+              resolvedTotal > 0 &&
+              processedAssets >= resolvedTotal &&
+              current.processedAssets < resolvedTotal;
+            if (reachedTotalNow) {
+              void refreshIndexedPhotos();
+            }
+            return {
+              ...current,
+              status: 'running',
+              processedAssets,
+              totalAssets: resolvedTotal,
+              lastError: null,
+            };
+          });
         },
         onFinalOutcome: async (outcome) => {
           if (!mountedRef.current) return;
@@ -2409,7 +2420,12 @@ export default function HomeScreen() {
             indexingState={
               !indexHydrated
                 ? 'loading'
-                : backgroundIndexState.status === 'completed'
+                : backgroundIndexState.status === 'completed' ||
+                    (typeof backgroundIndexState.totalAssets === 'number' &&
+                      backgroundIndexState.totalAssets > 0 &&
+                      backgroundIndexState.processedAssets >=
+                        backgroundIndexState.totalAssets &&
+                      backgroundIndexState.status !== 'cancelled')
                   ? 'completed'
                   : backgroundIndexState.status === 'running' ||
                       backgroundIndexState.status === 'paused' ||

@@ -353,7 +353,7 @@ export async function updateIndexingProgress(
     typeof totalAssets === 'number' &&
     totalAssets > 0 &&
     processedAssets >= totalAssets;
-  if (!isComplete && now - lastNotificationUpdateAt < 2_000) {
+  if (isComplete || now - lastNotificationUpdateAt < 2_000) {
     return;
   }
   lastNotificationUpdateAt = now;
