@@ -1732,7 +1732,6 @@ export default function HomeScreen() {
         );
       }
       setActiveAlignedFace(session.alignedFace);
-      await rehydrateSession(session.alignedFace);
     })();
     return () => {
       cancelled = true;
