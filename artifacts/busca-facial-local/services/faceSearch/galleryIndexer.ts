@@ -89,25 +89,13 @@ export async function quickCheckGalleryChanged(
 export async function countGalleryAssets(
   albumId?: string | null,
 ): Promise<number> {
-  let cursor: string | undefined;
-  let total = 0;
-  let hasNextPage = true;
-  while (hasNextPage) {
-    const page = await MediaLibrary.getAssetsAsync({
-      first: 500,
-      after: cursor,
-      mediaType: MediaLibrary.MediaType.photo,
-      sortBy: [MediaLibrary.SortBy.modificationTime],
-      ...(albumId ? { album: albumId } : {}),
-    });
-    total += page.assets.length;
-    if (page.assets.length === 0) break;
-    const previousCursor = cursor;
-    cursor = page.endCursor;
-    hasNextPage = page.hasNextPage;
-    if (hasNextPage && (!cursor || cursor === previousCursor)) break;
-  }
-  return total;
+  const page = await MediaLibrary.getAssetsAsync({
+    first: 1,
+    mediaType: MediaLibrary.MediaType.photo,
+    sortBy: [MediaLibrary.SortBy.modificationTime],
+    ...(albumId ? { album: albumId } : {}),
+  });
+  return page.totalCount;
 }
 
 export async function getAlbumAssetIds(
@@ -850,6 +838,9 @@ async function runGalleryIndex(
           };
           lastAssetId = asset.id;
           options.onProgress?.(progress);
+          if (progress.processedAssets % 50 === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 16));
+          }
           continue;
         }
 
@@ -937,7 +928,7 @@ async function runGalleryIndex(
       }
 
       await flushSeenAssets();
-      await yieldToEventLoop();
+      await new Promise((resolve) => setTimeout(resolve, 32));
 
       const previousCursor = cursor;
       cursor = page.endCursor;
