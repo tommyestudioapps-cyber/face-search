@@ -2287,7 +2287,27 @@ export default function HomeScreen() {
     }
   };
 
-  const openSearch = () => setScreen('select');
+  const openSearch = async () => {
+    try {
+      const selection = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+      if (!selection.canceled && selection.assets[0]?.uri) {
+        const uri = selection.assets[0].uri;
+        setScreen('select');
+        void analyzeFace(uri, activeSlot);
+      }
+    } catch (error) {
+      console.error('[Gallery] não foi possível abrir a galeria', error);
+      Alert.alert(
+        'Não foi possível abrir a galeria',
+        'Confira a permissão de acesso às fotos e tente novamente.',
+      );
+    }
+  };
 
   const handleSelectAlbum = (album: AlbumOption) => {
     setSelectedAlbumId(album.id);
@@ -2409,7 +2429,6 @@ export default function HomeScreen() {
 
   const leaveSelection = useCallback(async () => {
     if (selectedImage) {
-      clearSlot(activeSlot);
       try {
         const selection = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
@@ -2420,13 +2439,14 @@ export default function HomeScreen() {
         if (!selection.canceled && selection.assets[0]?.uri) {
           const uri = selection.assets[0].uri;
           void analyzeFace(uri, activeSlot);
-        } else {
-          setScreen('home');
+          return;
         }
       } catch (error) {
         console.error('[Gallery] erro ao reabrir galeria após voltar', error);
-        setScreen('home');
       }
+      // Se o usuário cancelou a galeria (desistiu de escolher outra foto), volta para a Home
+      clearSlot(activeSlot);
+      setScreen('home');
       return;
     }
     setScreen('home');
