@@ -1610,6 +1610,60 @@ export default function HomeScreen() {
         console.warn('[A14Diag] boot setIndexHydrated=true');
         setIndexHydrated(true);
       }
+      if (
+        !cancelled &&
+        consent === 'accepted' &&
+        galleryPermissionGranted &&
+        reconciledState?.status === 'completed' &&
+        Platform.OS !== 'web'
+      ) {
+        void (async () => {
+          try {
+            const galleryIndexer = await import(
+              '@/services/faceSearch/galleryIndexer'
+            );
+            const knownTotal =
+              reconciledState.totalAssets ??
+              reconciledState.processedAssets ??
+              0;
+            if (typeof galleryIndexer.inspectGalleryDelta === 'function') {
+              const delta = await galleryIndexer.inspectGalleryDelta(null);
+              const hasChanges =
+                delta.totalAssets !== knownTotal ||
+                delta.newOrModifiedAssets > 0 ||
+                delta.deletedAssets > 0;
+              if (!cancelled && hasChanges) {
+                console.warn(
+                  `[SyncIncremental] Mudança na galeria detectada no boot: ${knownTotal} → ${delta.totalAssets} (novas=${delta.newOrModifiedAssets}, apagadas=${delta.deletedAssets})`,
+                );
+                const updatedState: BackgroundIndexState = {
+                  ...reconciledState,
+                  status: 'running',
+                  processedAssets: delta.unchangedAssets,
+                  totalAssets: delta.totalAssets,
+                };
+                if (mountedRef.current) {
+                  setBackgroundIndexState(updatedState);
+                }
+                const faceSearchRepo = await import(
+                  '@/services/faceSearch/repository'
+                );
+                await faceSearchRepo.faceSearchRepository.updateBackgroundIndexState({
+                  status: 'running',
+                  processedAssets: delta.unchangedAssets,
+                  totalAssets: delta.totalAssets,
+                });
+                void startForegroundIndexingIfNeeded('auto');
+              }
+            }
+          } catch (bootDeltaErr) {
+            console.warn(
+              '[SyncIncremental] erro checando delta da galeria no boot',
+              bootDeltaErr,
+            );
+          }
+        })();
+      }
     })().catch((error) => {
       console.error('[BackgroundIndex] não foi possível preparar a inicialização', error);
       if (!cancelled) {
@@ -1825,32 +1879,63 @@ export default function HomeScreen() {
           if (backgroundIndexConsent !== 'accepted') return;
           if (latestState?.status === 'completed') {
             try {
-              const { countGalleryAssets } = await import(
+              const galleryIndexer = await import(
                 '@/services/faceSearch/galleryIndexer'
               );
-              const currentTotal = await countGalleryAssets(null);
               const knownTotal =
                 latestState.totalAssets ?? latestState.processedAssets ?? 0;
-              if (currentTotal > knownTotal) {
-                console.warn(
-                  `[SyncIncremental] Fotos novas na galeria detectadas no boot: ${knownTotal} → ${currentTotal} (+${currentTotal - knownTotal})`,
-                );
-                const updatedState: BackgroundIndexState = {
-                  ...latestState,
-                  status: 'running',
-                  totalAssets: currentTotal,
-                };
-                if (mountedRef.current) {
-                  setBackgroundIndexState(updatedState);
+              if (typeof galleryIndexer.inspectGalleryDelta === 'function') {
+                const delta = await galleryIndexer.inspectGalleryDelta(null);
+                const hasChanges =
+                  delta.totalAssets !== knownTotal ||
+                  delta.newOrModifiedAssets > 0 ||
+                  delta.deletedAssets > 0;
+                if (hasChanges) {
+                  console.warn(
+                    `[SyncIncremental] Mudança na galeria detectada ao retomar: ${knownTotal} → ${delta.totalAssets} (novas=${delta.newOrModifiedAssets}, apagadas=${delta.deletedAssets})`,
+                  );
+                  const updatedState: BackgroundIndexState = {
+                    ...latestState,
+                    status: 'running',
+                    processedAssets: delta.unchangedAssets,
+                    totalAssets: delta.totalAssets,
+                  };
+                  if (mountedRef.current) {
+                    setBackgroundIndexState(updatedState);
+                  }
+                  const faceSearchRepo = await import(
+                    '@/services/faceSearch/repository'
+                  );
+                  await faceSearchRepo.faceSearchRepository.updateBackgroundIndexState({
+                    status: 'running',
+                    processedAssets: delta.unchangedAssets,
+                    totalAssets: delta.totalAssets,
+                  });
+                  void startForegroundIndexingIfNeeded('auto');
                 }
-                const faceSearchRepo = await import(
-                  '@/services/faceSearch/repository'
-                );
-                await faceSearchRepo.faceSearchRepository.updateBackgroundIndexState({
-                  status: 'running',
-                  totalAssets: currentTotal,
-                });
-                void startForegroundIndexingIfNeeded('auto');
+              } else {
+                const currentTotal = await galleryIndexer.countGalleryAssets(null);
+                if (currentTotal > knownTotal) {
+                  console.warn(
+                    `[SyncIncremental] Fotos novas na galeria detectadas no boot: ${knownTotal} → ${currentTotal} (+${currentTotal - knownTotal})`,
+                  );
+                  const updatedState: BackgroundIndexState = {
+                    ...latestState,
+                    status: 'running',
+                    totalAssets: currentTotal,
+                  };
+                  if (mountedRef.current) {
+                    setBackgroundIndexState(updatedState);
+                  }
+                  const faceSearchRepo = await import(
+                    '@/services/faceSearch/repository'
+                  );
+                  await faceSearchRepo.faceSearchRepository.updateBackgroundIndexState({
+                    status: 'running',
+                    totalAssets: currentTotal,
+                  });
+                  void startForegroundIndexingIfNeeded('auto');
+                }
               }
             } catch (checkErr) {
               console.warn('[SyncIncremental] erro checando total da galeria', checkErr);

@@ -2,7 +2,9 @@ import {
   countGalleryAssets,
   forceResetActiveIndexing,
   indexGallery,
+  inspectGalleryDelta,
   type CancelReason,
+  type GalleryDeltaSummary,
   type GalleryIndexCancellationContract,
 } from '@/services/faceSearch/galleryIndexer';
 import { FaceRecognitionError } from '@/services/faceSearch/types';
@@ -111,7 +113,17 @@ async function runCoordinatedBackgroundIndexBatch(
   const checkpoint = await loadBackgroundIndexCursor();
   const resume = checkpoint?.generation === activeGeneration ? checkpoint : undefined;
   const storedStats = await faceSearchRepository.getStoredIndexStats();
-  const effectiveBaseProcessed = Math.max(previousProcessed, storedStats.indexedPhotos);
+  let galleryDelta: GalleryDeltaSummary | null = null;
+  if (!resume && typeof inspectGalleryDelta === 'function') {
+    try {
+      galleryDelta = await inspectGalleryDelta(options.albumId ?? null);
+    } catch {
+      galleryDelta = null;
+    }
+  }
+  const effectiveBaseProcessed = galleryDelta
+    ? galleryDelta.unchangedAssets
+    : Math.max(previousProcessed, storedStats.indexedPhotos);
   const startOffset = resume
     ? Math.max(effectiveBaseProcessed, resume.processedAssets ?? 0)
     : effectiveBaseProcessed;
@@ -141,26 +153,46 @@ async function runCoordinatedBackgroundIndexBatch(
     previousState.status === 'completed' &&
     activeGeneration === null
   ) {
-    let currentCount: number | undefined;
-    if (typeof countGalleryAssets === 'function') {
-      try {
-        currentCount = await countGalleryAssets(options.albumId ?? null);
-      } catch {}
-    }
     const previousTotal = previousState.totalAssets ?? previousState.processedAssets ?? 0;
-    if (currentCount !== undefined && currentCount <= previousTotal) {
+    if (galleryDelta) {
+      const galleryUnchanged =
+        galleryDelta.totalAssets === previousTotal &&
+        galleryDelta.newOrModifiedAssets === 0 &&
+        galleryDelta.deletedAssets === 0;
+      if (galleryUnchanged) {
+        console.warn(
+          '[Batch] pulando reindexação automática (estado já completed e galeria inalterada)',
+        );
+        return {
+          status: 'completed',
+          cumulativeProcessed: previousState.processedAssets,
+          cumulativeTotal: previousState.totalAssets,
+        };
+      }
       console.warn(
-        '[Batch] pulando reindexação automática (estado já completed e galeria inalterada)',
+        `[Batch] mudança na galeria detectada (${previousTotal} → ${galleryDelta.totalAssets}, novas=${galleryDelta.newOrModifiedAssets}, apagadas=${galleryDelta.deletedAssets}); iniciando atualização incremental`,
       );
-      return {
-        status: 'completed',
-        cumulativeProcessed: previousState.processedAssets,
-        cumulativeTotal: previousState.totalAssets,
-      };
+    } else {
+      let currentCount: number | undefined;
+      if (typeof countGalleryAssets === 'function') {
+        try {
+          currentCount = await countGalleryAssets(options.albumId ?? null);
+        } catch {}
+      }
+      if (currentCount !== undefined && currentCount <= previousTotal) {
+        console.warn(
+          '[Batch] pulando reindexação automática (estado já completed e galeria inalterada)',
+        );
+        return {
+          status: 'completed',
+          cumulativeProcessed: previousState.processedAssets,
+          cumulativeTotal: previousState.totalAssets,
+        };
+      }
+      console.warn(
+        `[Batch] novas fotos detectadas (${previousTotal} → ${currentCount}); iniciando atualização incremental`,
+      );
     }
-    console.warn(
-      `[Batch] novas fotos detectadas (${previousTotal} → ${currentCount}); iniciando atualização incremental`,
-    );
   }
   const generation = resume ? resume.generation : await faceSearchRepository.beginScan(leaseOwner);
   const after = resume?.cursor;
@@ -180,8 +212,10 @@ async function runCoordinatedBackgroundIndexBatch(
   let assumedTotal: number | undefined =
     resume && typeof previousState.totalAssets === 'number'
       ? previousState.totalAssets
-      : undefined;
-  if (!resume && typeof countGalleryAssets === 'function') {
+      : galleryDelta
+        ? galleryDelta.totalAssets
+        : undefined;
+  if (!resume && assumedTotal === undefined && typeof countGalleryAssets === 'function') {
     console.warn('[Batch] contando fotos reais antes de indexar gen=' + generation);
     try {
       assumedTotal = await countGalleryAssets(options.albumId ?? null);
@@ -255,14 +289,15 @@ async function runCoordinatedBackgroundIndexBatch(
             latestTotalRef.current = progress.totalAssets;
           }
           if (!onPartialProgress) return;
-          const now = Date.now();
-          if (now - lastEmitAt < 500) return;
-          lastEmitAt = now;
           const cumulative = startOffset + progress.processedAssets;
           const total = latestTotalRef.current ?? assumedTotal ?? null;
           const capped = total !== null
             ? Math.min(cumulative, total)
             : cumulative;
+          const reachedTotal = total !== null && total > 0 && capped >= total;
+          const now = Date.now();
+          if (!reachedTotal && now - lastEmitAt < 500) return;
+          lastEmitAt = now;
           onPartialProgress(capped, total);
         };
       })(),

@@ -47,6 +47,57 @@ import { shouldPauseBatch } from '../backgroundIndexing/batchPolicy';
 import { indexCoordinator } from '../backgroundIndexing/indexCoordinator';
 import { clearBackgroundIndexCursor, loadBackgroundIndexCursor } from '../backgroundIndexing/checkpoint';
 
+export interface GalleryDeltaSummary {
+  totalAssets: number;
+  unchangedAssets: number;
+  newOrModifiedAssets: number;
+  deletedAssets: number;
+}
+
+export async function inspectGalleryDelta(
+  albumId?: string | null,
+): Promise<GalleryDeltaSummary> {
+  await faceSearchRepository.initialize();
+  const indexedPhotos = await faceSearchRepository.getIndexedPhotos();
+  const indexedById = new Map(
+    indexedPhotos.map((photo) => [photo.assetId, photo]),
+  );
+  let cursor: string | undefined;
+  let totalAssets = 0;
+  let unchangedAssets = 0;
+  let hasNextPage = true;
+  while (hasNextPage) {
+    const page = await MediaLibrary.getAssetsAsync({
+      first: 500,
+      after: cursor,
+      mediaType: MediaLibrary.MediaType.photo,
+      sortBy: [MediaLibrary.SortBy.modificationTime],
+      ...(albumId ? { album: albumId } : {}),
+    });
+    for (const asset of page.assets) {
+      totalAssets += 1;
+      if (isUnchangedAsset(asset, indexedById.get(asset.id))) {
+        unchangedAssets += 1;
+      }
+    }
+    if (page.assets.length === 0) break;
+    const previousCursor = cursor;
+    cursor = page.endCursor;
+    hasNextPage = page.hasNextPage;
+    if (hasNextPage && (!cursor || cursor === previousCursor)) break;
+  }
+  const newOrModifiedAssets = Math.max(0, totalAssets - unchangedAssets);
+  const deletedAssets = albumId
+    ? 0
+    : Math.max(0, indexedPhotos.length - unchangedAssets);
+  return {
+    totalAssets,
+    unchangedAssets,
+    newOrModifiedAssets,
+    deletedAssets,
+  };
+}
+
 export async function countGalleryAssets(
   albumId?: string | null,
 ): Promise<number> {
