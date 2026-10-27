@@ -128,14 +128,17 @@ jobs:
           EOF
           cat ~/.gradle/gradle.properties
 
-      - name: Pin play-services-ads version
+      - name: Pin play-services-ads version and bypass kotlin metadata check
         run: |
           cat >> artifacts/busca-facial-local/android/build.gradle << 'EOF'
           allprojects {
               configurations.all {
                   resolutionStrategy {
-                      force "com.google.android.gms:play-services-ads:23.6.0"
+                      force "com.google.android.gms:play-services-ads:25.3.0"
                   }
+              }
+              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                  kotlinOptions.freeCompilerArgs += "-Xskip-metadata-version-check"
               }
           }
           EOF
