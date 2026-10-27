@@ -111,6 +111,12 @@ jobs:
           p.write_text(s)
           print('build.gradle patched com sucesso')
           PYEOF
+          cat >> artifacts/busca-facial-local/android/app/proguard-rules.pro << 'EOF'
+          -keep class com.google.android.gms.ads.** { *; }
+          -dontwarn com.google.android.gms.ads.**
+          -keep class io.invertase.googlemobileads.** { *; }
+          -dontwarn io.invertase.googlemobileads.**
+          EOF
 
       - name: Show signing sections (debug)
         run: |

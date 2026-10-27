@@ -1,13 +1,26 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
-import { AD_CONFIG } from '../services/ads/adConfig';
+import {
+  AD_CONFIG,
+  isMobileAdsInitialized,
+  onMobileAdsInitialized,
+} from '../services/ads/adConfig';
 
 export function AdBanner() {
+  const [adsReady, setAdsReady] = useState(isMobileAdsInitialized());
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
 
-  if (Platform.OS === 'web' || hasError) {
+  useEffect(() => {
+    if (adsReady) return undefined;
+    const unsub = onMobileAdsInitialized(() => {
+      setAdsReady(true);
+    });
+    return unsub;
+  }, [adsReady]);
+
+  if (Platform.OS === 'web' || hasError || !adsReady) {
     return null;
   }
 
@@ -15,7 +28,7 @@ export function AdBanner() {
     <View style={[styles.bannerContainer, !isLoaded && styles.hidden]}>
       <BannerAd
         unitId={AD_CONFIG.bannerAdUnitId}
-        size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+        size={BannerAdSize.BANNER}
         requestOptions={{
           requestNonPersonalizedAdsOnly: true,
         }}
@@ -40,9 +53,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     overflow: 'hidden',
     paddingVertical: 2,
+    minHeight: 50,
   },
   hidden: {
     height: 0,
+    minHeight: 0,
     opacity: 0,
   },
 });

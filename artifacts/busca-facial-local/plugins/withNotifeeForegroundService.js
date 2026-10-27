@@ -71,6 +71,21 @@ module.exports = function withNotifeeForegroundService(config) {
       });
     }
 
+    // 4. Garantir meta-data do Google AdMob APPLICATION_ID
+    if (!app['meta-data']) app['meta-data'] = [];
+    const ADMOB_META_NAME = 'com.google.android.gms.ads.APPLICATION_ID';
+    const existingAdMobMeta = app['meta-data'].find(
+      (m) => m.$?.['android:name'] === ADMOB_META_NAME,
+    );
+    if (!existingAdMobMeta) {
+      app['meta-data'].push({
+        $: {
+          'android:name': ADMOB_META_NAME,
+          'android:value': 'ca-app-pub-3940256099942544~3347511713',
+        },
+      });
+    }
+
     return config;
   });
 
