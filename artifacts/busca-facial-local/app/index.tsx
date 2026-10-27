@@ -65,6 +65,10 @@ import {
   AlbumPicker,
   type AlbumOption,
 } from '@/components/AlbumPicker';
+import NetInfo from '@react-native-community/netinfo';
+import { initMobileAds } from '@/services/ads/adConfig';
+import { preloadRewardedAd, showRewardedAd } from '@/services/ads/rewardedAdService';
+import { AdBanner } from '@/components/AdBanner';
 import { useFaceSearch, type FaceSearchStatus } from '@/hooks/useFaceSearch';
 import type {
   BackgroundIndexState,
@@ -587,7 +591,6 @@ function Home({
 }
 
 function AdFooter() {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const bottomInset = Platform.OS === 'web' ? 34 : insets.bottom;
 
@@ -596,33 +599,11 @@ function AdFooter() {
       style={[
         styles.adFooter,
         {
-          backgroundColor: colors.background,
-          paddingBottom: bottomInset + 8,
+          paddingBottom: Math.max(bottomInset, 4),
         },
       ]}
     >
-      <View
-        style={[
-          styles.adSlot,
-          {
-            backgroundColor: colors.background,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <View style={styles.adSlotTop}>
-          <Feather name="layout" size={14} color={colors.mutedForeground} />
-          <Text style={[styles.adLabel, { color: colors.mutedForeground }]}>
-            ESPAÇO PARA ANÚNCIO
-          </Text>
-          <Text style={[styles.adLabel, { color: colors.mutedForeground }]}>
-            BANNER
-          </Text>
-        </View>
-        <Text style={[styles.adHint, { color: colors.mutedForeground }]}>
-          Seu apoio mantém a busca gratuita.
-        </Text>
-      </View>
+      <AdBanner />
     </View>
   );
 }
@@ -876,7 +857,7 @@ function SelectPhoto({
         />
 
         <PrimaryButton
-          label={alignedImageUri ? 'Buscar este rosto na galeria' : 'Aguardando rosto válido'}
+          label={alignedImageUri ? 'Ver anúncio e buscar na galeria' : 'Aguardando rosto válido'}
           icon="search"
           onPress={onSearch}
           disabled={!selectedImage || !alignedImageUri || captureProcessing}
@@ -1310,9 +1291,9 @@ function OfflineModal({
           <View style={[styles.rewardIcon, { backgroundColor: '#3A222D' }]}>
             <Feather name="wifi-off" size={21} color="#FB7185" />
           </View>
-          <Text style={[styles.rewardTitle, { color: colors.foreground }]}>Processamento 100% Local</Text>
+          <Text style={[styles.rewardTitle, { color: colors.foreground }]}>Conexão necessária</Text>
           <Text style={[styles.rewardBody, { color: colors.mutedForeground }]}>
-            O app funciona sem conexão. Fotos, embeddings e dados faciais permanecem protegidos neste dispositivo.
+            É necessária uma conexão com a internet para carregar o anúncio patrocinado e liberar a busca facial gratuita.
           </Text>
           <Pressable
             onPress={onClose}
@@ -1323,8 +1304,8 @@ function OfflineModal({
             ]}
             testID="offline-close"
           >
-            <Text style={styles.primaryButtonText}>Entendi</Text>
-            <Feather name="check" size={17} color={colors.primaryForeground} />
+            <Text style={styles.primaryButtonText}>Tentar novamente</Text>
+            <Feather name="refresh-cw" size={17} color={colors.primaryForeground} />
           </Pressable>
         </View>
       </View>
@@ -1717,6 +1698,14 @@ export default function HomeScreen() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      void initMobileAds().then(() => {
+        preloadRewardedAd();
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -2319,7 +2308,31 @@ export default function HomeScreen() {
     if (alignedFaces[0]) {
       setActiveAlignedFace(alignedFaces[0]);
     }
-    setShowReward(true);
+    if (Platform.OS === 'web') {
+      void startAnalysis();
+      return;
+    }
+    try {
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) {
+        setShowOffline(true);
+        return;
+      }
+    } catch {}
+
+    showRewardedAd({
+      onRewardEarned: () => {
+        void startAnalysis();
+      },
+      onError: (err) => {
+        console.warn('[AdMob] Falha ao carregar anúncio:', err);
+        Alert.alert(
+          'Anúncio indisponível',
+          'Não foi possível carregar o anúncio no momento. Verifique sua conexão com a internet e tente novamente em instantes.',
+          [{ text: 'OK' }]
+        );
+      },
+    });
   };
 
   const startAnalysis = async () => {
