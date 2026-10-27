@@ -70,7 +70,7 @@ jobs:
           "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.1.12297006"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Expo prebuild (Android)
         working-directory: artifacts/busca-facial-local

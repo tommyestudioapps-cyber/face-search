@@ -166,7 +166,9 @@ overrides:
   uuid@<11.1.1: '>=11.1.1'
 
 patchedDependencies:
-  react-native-mediapipe@0.6.0: 247e36f91c23f60beb04bf6c68a0e0bede56a899ae8f1b4841e6134acf75a069
+  react-native-mediapipe@0.6.0:
+    hash: 247e36f91c23f60beb04bf6c68a0e0bede56a899ae8f1b4841e6134acf75a069
+    path: patches/react-native-mediapipe@0.6.0.patch
 
 importers:
 
