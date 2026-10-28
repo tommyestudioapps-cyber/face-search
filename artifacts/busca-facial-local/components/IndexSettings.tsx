@@ -169,9 +169,9 @@ export function IndexSettings({
   };
 
   const handleSendFeedback = () => {
-    const url = 'mailto:suporte@buscafacial.local?subject=Feedback%20Busca%20Facial%20Local';
+    const url = 'mailto:tommyestudioapps@gmail.com?subject=Feedback%20Busca%20Facial%20Local';
     Linking.openURL(url).catch(() => {
-      Alert.alert('Suporte', 'Envie seu feedback para suporte@buscafacial.local');
+      Alert.alert('Suporte', 'Envie seu feedback para tommyestudioapps@gmail.com');
     });
   };
 
