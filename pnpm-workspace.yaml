@@ -146,3 +146,4 @@ overrides:
 patchedDependencies:
   react-native-google-mobile-ads@17.0.0: patches/react-native-google-mobile-ads@17.0.0.patch
   react-native-mediapipe@0.6.0: patches/react-native-mediapipe@0.6.0.patch
+  react-native-vision-camera@4.7.3: patches/react-native-vision-camera@4.7.3.patch

@@ -1,0 +1,59 @@
+diff --git a/android/src/main/java/com/mrousavy/camera/react/CameraDevicesManager.kt b/android/src/main/java/com/mrousavy/camera/react/CameraDevicesManager.kt
+index 03864788d82205627e84362690582a0fff1ec344..4e373f3b6ccc7ba2bc711a3bc4c64a79f823c2ee 100644
+--- a/android/src/main/java/com/mrousavy/camera/react/CameraDevicesManager.kt
++++ b/android/src/main/java/com/mrousavy/camera/react/CameraDevicesManager.kt	
+@@ -59,30 +59,23 @@ class CameraDevicesManager(private val reactContext: ReactApplicationContext) :
+ 
+   override fun getName(): String = TAG
+ 
+-  // Init cameraProvider + manager as early as possible
++  // Init cameraProvider + manager disabled to prevent cold-start crashes/NoClassDefFoundError on Android 9+
+   init {
+-    coroutineScope.launch {
+-      try {
+-        Log.i(TAG, "Initializing ProcessCameraProvider...")
+-        cameraProvider = ProcessCameraProvider.getInstance(reactContext).await(executor)
+-        Log.i(TAG, "Initializing ExtensionsManager...")
+-        extensionsManager = ExtensionsManager.getInstanceAsync(reactContext, cameraProvider!!).await(executor)
+-        Log.i(TAG, "Successfully initialized!")
+-      } catch (error: Throwable) {
+-        Log.e(TAG, "Failed to initialize ProcessCameraProvider/ExtensionsManager! Error: ${error.message}", error)
+-      }
+-    }
++    // Lazy or no-op on startup
+   }
+ 
+   // Note: initialize() will be called after getConstants on new arch!
+   override fun initialize() {
+     super.initialize()
+-    cameraManager.registerAvailabilityCallback(callback, null)
+-    sendAvailableDevicesChangedEvent()
++    try {
++      cameraManager.registerAvailabilityCallback(callback, null)
++    } catch (_: Throwable) {}
+   }
+ 
+   override fun invalidate() {
+-    cameraManager.unregisterAvailabilityCallback(callback)
++    try {
++      cameraManager.unregisterAvailabilityCallback(callback)
++    } catch (_: Throwable) {}
+     super.invalidate()
+   }
+ 
+@@ -99,9 +92,12 @@ class CameraDevicesManager(private val reactContext: ReactApplicationContext) :
+   }
+ 
+   fun sendAvailableDevicesChangedEvent() {
+-    val eventEmitter = reactContext.getJSModule(RCTDeviceEventEmitter::class.java)
+-    val devices = getDevicesJson()
+-    eventEmitter.emit("CameraDevicesChanged", devices)
++    try {
++      if (!reactContext.hasActiveReactInstance()) return
++      val eventEmitter = reactContext.getJSModule(RCTDeviceEventEmitter::class.java)
++      val devices = getDevicesJson()
++      eventEmitter.emit("CameraDevicesChanged", devices)
++    } catch (_: Throwable) {}
+   }
+ 
+   override fun getConstants(): MutableMap<String, Any?> {

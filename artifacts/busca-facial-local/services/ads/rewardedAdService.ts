@@ -3,11 +3,16 @@ import {
   RewardedAdEventType,
   AdEventType,
 } from 'react-native-google-mobile-ads';
-import { AD_CONFIG } from './adConfig';
+import {
+  AD_CONFIG,
+  isMobileAdsInitialized,
+  onMobileAdsInitialized,
+} from './adConfig';
 
 let rewardedAd: RewardedAd | null = null;
 let isAdLoaded = false;
 let isLoading = false;
+let waitingForInit = false;
 
 export function getRewardedAd(): RewardedAd {
   if (!rewardedAd) {
@@ -21,6 +26,17 @@ export function getRewardedAd(): RewardedAd {
 export function preloadRewardedAd(): void {
   if (isAdLoaded || isLoading) return;
 
+  if (!isMobileAdsInitialized()) {
+    if (!waitingForInit) {
+      waitingForInit = true;
+      onMobileAdsInitialized(() => {
+        waitingForInit = false;
+        preloadRewardedAd();
+      });
+    }
+    return;
+  }
+
   try {
     isLoading = true;
     const ad = getRewardedAd();
@@ -28,21 +44,18 @@ export function preloadRewardedAd(): void {
     const unsubscribeLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
       isAdLoaded = true;
       isLoading = false;
-      console.log('[AdMob:Rewarded] Anúncio carregado e pronto para exibição');
       unsubscribeLoaded();
     });
 
-    const unsubscribeError = ad.addAdEventListener(AdEventType.ERROR, (error) => {
+    const unsubscribeError = ad.addAdEventListener(AdEventType.ERROR, () => {
       isAdLoaded = false;
       isLoading = false;
-      console.warn('[AdMob:Rewarded] Falha ao carregar anúncio:', error);
       unsubscribeError();
     });
 
     ad.load();
-  } catch (err) {
+  } catch {
     isLoading = false;
-    console.warn('[AdMob:Rewarded] Erro ao disparar load:', err);
   }
 }
 
@@ -53,58 +66,59 @@ export interface ShowRewardedAdCallbacks {
 }
 
 export function showRewardedAd(callbacks: ShowRewardedAdCallbacks): void {
-  const ad = getRewardedAd();
+  if (!isMobileAdsInitialized()) {
+    callbacks.onError?.(new Error('Anúncios indisponíveis sem conexão.'));
+    return;
+  }
 
-  let earned = false;
+  try {
+    const ad = getRewardedAd();
 
-  const unsubscribeEarned = ad.addAdEventListener(
-    RewardedAdEventType.EARNED_REWARD,
-    (reward) => {
-      console.log('[AdMob:Rewarded] Recompensa conquistada pelo usuário:', reward);
-      earned = true;
-      callbacks.onRewardEarned();
-    }
-  );
+    const unsubscribeEarned = ad.addAdEventListener(
+      RewardedAdEventType.EARNED_REWARD,
+      () => {
+        callbacks.onRewardEarned();
+      }
+    );
 
-  const unsubscribeClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
-    console.log('[AdMob:Rewarded] Anúncio fechado pelo usuário');
-    isAdLoaded = false;
-    unsubscribeEarned();
-    unsubscribeClosed();
-    // Recarrega o próximo anúncio em segundo plano
-    preloadRewardedAd();
-    callbacks.onAdClosed?.();
-  });
-
-  const unsubscribeError = ad.addAdEventListener(AdEventType.ERROR, (error) => {
-    console.warn('[AdMob:Rewarded] Erro durante a exibição:', error);
-    isAdLoaded = false;
-    unsubscribeEarned();
-    unsubscribeClosed();
-    unsubscribeError();
-    callbacks.onError?.(new Error(error.message));
-  });
-
-  if (isAdLoaded) {
-    ad.show().catch((err) => {
-      console.warn('[AdMob:Rewarded] Erro ao chamar .show():', err);
-      callbacks.onError?.(err);
-      // Se falhar na exibição, tenta carregar um novo
+    const unsubscribeClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
       isAdLoaded = false;
+      unsubscribeEarned();
+      unsubscribeClosed();
+      // Recarrega o próximo anúncio em segundo plano
       preloadRewardedAd();
+      callbacks.onAdClosed?.();
     });
-  } else {
-    // Se ainda não estava pronto, tenta carregar e exibe assim que carregar
-    console.log('[AdMob:Rewarded] Anúncio ainda não pronto. Carregando sob demanda...');
-    const onLoadedThenShow = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
-      onLoadedThenShow();
-      isAdLoaded = true;
-      isLoading = false;
+
+    const unsubscribeError = ad.addAdEventListener(AdEventType.ERROR, (error) => {
+      isAdLoaded = false;
+      unsubscribeEarned();
+      unsubscribeClosed();
+      unsubscribeError();
+      callbacks.onError?.(new Error(error?.message ?? 'Erro ao exibir anúncio'));
+    });
+
+    if (isAdLoaded) {
       ad.show().catch((err) => {
-        callbacks.onError?.(err);
+        callbacks.onError?.(err instanceof Error ? err : new Error('Erro ao exibir anúncio'));
+        // Se falhar na exibição, tenta carregar um novo
+        isAdLoaded = false;
+        preloadRewardedAd();
       });
-    });
-    preloadRewardedAd();
+    } else {
+      // Se ainda não estava pronto, tenta carregar e exibe assim que carregar
+      const onLoadedThenShow = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        onLoadedThenShow();
+        isAdLoaded = true;
+        isLoading = false;
+        ad.show().catch((err) => {
+          callbacks.onError?.(err instanceof Error ? err : new Error('Erro ao exibir anúncio'));
+        });
+      });
+      preloadRewardedAd();
+    }
+  } catch (err) {
+    callbacks.onError?.(err instanceof Error ? err : new Error('Erro ao processar anúncio'));
   }
 }
 

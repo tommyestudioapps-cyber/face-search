@@ -1701,11 +1701,12 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    if (Platform.OS !== 'web') {
-      void initMobileAds().then(() => {
-        preloadRewardedAd();
-      });
-    }
+    if (Platform.OS === 'web') return undefined;
+    const timer = setTimeout(() => {
+      preloadRewardedAd();
+      void initMobileAds().catch(() => {});
+    }, 1500);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {

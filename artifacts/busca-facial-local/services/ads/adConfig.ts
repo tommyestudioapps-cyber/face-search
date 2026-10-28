@@ -1,3 +1,4 @@
+import NetInfo from '@react-native-community/netinfo';
 import mobileAds, { TestIds } from 'react-native-google-mobile-ads';
 
 export const AD_CONFIG = {
@@ -9,6 +10,8 @@ export const AD_CONFIG = {
 };
 
 let adsInitialized = false;
+let adsInitializing = false;
+let netReconnectUnsubscribe: (() => void) | null = null;
 const initCallbacks: (() => void)[] = [];
 
 export function isMobileAdsInitialized(): boolean {
@@ -27,19 +30,53 @@ export function onMobileAdsInitialized(cb: () => void): () => void {
   };
 }
 
-export async function initMobileAds(): Promise<void> {
-  if (adsInitialized) return;
+function scheduleInitWhenOnline(): void {
+  if (adsInitialized || netReconnectUnsubscribe) return;
   try {
+    netReconnectUnsubscribe = NetInfo.addEventListener((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        if (netReconnectUnsubscribe) {
+          netReconnectUnsubscribe();
+          netReconnectUnsubscribe = null;
+        }
+        void initMobileAds();
+      }
+    });
+  } catch {
+    // Ignora falhas de listener de rede de forma segura
+  }
+}
+
+export async function initMobileAds(): Promise<boolean> {
+  if (adsInitialized) return true;
+  if (adsInitializing) return false;
+
+  try {
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected || netState.isInternetReachable === false) {
+      scheduleInitWhenOnline();
+      return false;
+    }
+
+    adsInitializing = true;
     const adapterStatuses = await mobileAds().initialize();
     adsInitialized = true;
-    console.log('[AdMob] SDK inicializado com sucesso:', adapterStatuses);
-    initCallbacks.forEach((cb) => {
+    adsInitializing = false;
+
+    if (__DEV__) {
+      console.log('[AdMob] SDK inicializado com sucesso:', adapterStatuses);
+    }
+
+    const pending = [...initCallbacks];
+    initCallbacks.length = 0;
+    pending.forEach((cb) => {
       try {
         cb();
       } catch {}
     });
-    initCallbacks.length = 0;
-  } catch (error) {
-    console.warn('[AdMob] Erro ao inicializar SDK:', error);
+    return true;
+  } catch {
+    adsInitializing = false;
+    return false;
   }
 }
