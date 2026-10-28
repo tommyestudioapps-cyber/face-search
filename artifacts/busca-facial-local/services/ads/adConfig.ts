@@ -1,11 +1,11 @@
 import mobileAds, { TestIds } from 'react-native-google-mobile-ads';
 
 export const AD_CONFIG = {
-  // IDs Oficiais de Teste da Google AdMob para Android
-  testAppId: 'ca-app-pub-3940256099942544~3347511713',
-  bannerAdUnitId: TestIds.BANNER,
-  rewardedAdUnitId: TestIds.REWARDED,
-  isTestMode: true,
+  // IDs Oficiais do Google AdMob (Produção)
+  appId: 'ca-app-pub-6305008666977043~9018991848',
+  bannerAdUnitId: __DEV__ ? TestIds.BANNER : 'ca-app-pub-6305008666977043/7729960906',
+  rewardedAdUnitId: __DEV__ ? TestIds.REWARDED : 'ca-app-pub-6305008666977043/4884305710',
+  isTestMode: false,
 };
 
 let adsInitialized = false;
