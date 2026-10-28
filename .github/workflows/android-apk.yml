@@ -149,14 +149,14 @@ jobs:
           }
           EOF
 
-      - name: Build APK (release, ARM64 only)
+      - name: Build AAB and APK (release, ARM64 only)
         working-directory: artifacts/busca-facial-local/android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace
 
       - name: Inspect APK manifest (foreground service type, target SDK, permissions)
         working-directory: artifacts/busca-facial-local/android
@@ -241,5 +241,13 @@ jobs:
         with:
           name: search-face-release-apk
           path: artifacts/busca-facial-local/android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload AAB (Google Play Store Bundle)
+        uses: actions/upload-artifact@v4
+        with:
+          name: search-face-release-aab
+          path: artifacts/busca-facial-local/android/app/build/outputs/bundle/release/*.aab
           retention-days: 30
           if-no-files-found: error
