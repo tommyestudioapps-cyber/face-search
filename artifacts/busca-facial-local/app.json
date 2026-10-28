@@ -15,7 +15,7 @@
       "package": "com.buscafacial.local",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#080B14"
+        "backgroundColor": "#000000"
       },
       "allowBackup": false,
       "permissions": [

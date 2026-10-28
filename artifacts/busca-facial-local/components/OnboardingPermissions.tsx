@@ -312,14 +312,28 @@ export function OnboardingPermissions({
             </View>
           ) : (
             <>
-              <View style={[styles.icon, { backgroundColor: colors.accent }]}>
+              <View
+                style={[
+                  styles.icon,
+                  {
+                    backgroundColor: isConsentStep
+                      ? 'rgba(251, 191, 36, 0.12)'
+                      : colors.accent,
+                  },
+                ]}
+              >
                 <Feather
                   name={isConsentStep ? 'database' : 'image'}
                   size={21}
-                  color={colors.primary}
+                  color={isConsentStep ? '#FBBF24' : colors.primary}
                 />
               </View>
-              <Text style={[styles.title, { color: colors.foreground }]}>
+              <Text
+                style={[
+                  styles.title,
+                  { color: isConsentStep ? '#FBBF24' : colors.foreground },
+                ]}
+              >
                 {isConsentStep
                   ? 'Ativar catálogo local?'
                   : isDeniedStep
@@ -328,22 +342,56 @@ export function OnboardingPermissions({
               </Text>
               {isConsentStep ? (
                 <>
-                  <Text style={[styles.consentSubtitle, { color: colors.mutedForeground }]}>
+                  <Text style={[styles.consentSubtitle, { color: '#FDE68A' }]}>
                     A preparação do catálogo é essencial para suas buscas
                   </Text>
                   <View style={styles.consentList}>
                     <View style={styles.consentItem}>
-                      <Feather name="shield" size={15} color="#34D399" style={styles.consentIcon} />
-                      <Text style={[styles.consentItemText, { color: colors.foreground }]}>
-                        <Text style={styles.consentItemBold}>100% Privado: </Text>
-                        <Text style={{ color: colors.mutedForeground }}>Nenhuma foto sai do seu celular.</Text>
+                      <Feather
+                        name="cpu"
+                        size={15}
+                        color="#FBBF24"
+                        style={styles.consentIcon}
+                      />
+                      <Text
+                        style={[
+                          styles.consentItemText,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        <Text style={styles.consentItemBold}>Sem esforço: </Text>
+                        <Text style={{ color: colors.mutedForeground }}>
+                          O catálogo é preparado aos poucos enquanto você usa o
+                          aparelho.{' '}
+                          <Text
+                            style={{
+                              color: '#FDE68A',
+                              fontFamily: 'Inter_600SemiBold',
+                            }}
+                          >
+                            Pode levar um tempo
+                          </Text>
+                          , mas não atrapalha sua navegação.
+                        </Text>
                       </Text>
                     </View>
                     <View style={styles.consentItem}>
-                      <Feather name="cpu" size={15} color="#34D399" style={styles.consentIcon} />
-                      <Text style={[styles.consentItemText, { color: colors.foreground }]}>
-                        <Text style={styles.consentItemBold}>Sem esforço: </Text>
-                        <Text style={{ color: colors.mutedForeground }}>O catálogo roda em segundo plano apenas enquanto o aparelho estiver em uso.</Text>
+                      <Feather
+                        name="shield"
+                        size={15}
+                        color="#FBBF24"
+                        style={styles.consentIcon}
+                      />
+                      <Text
+                        style={[
+                          styles.consentItemText,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        <Text style={styles.consentItemBold}>100% Privado: </Text>
+                        <Text style={{ color: colors.mutedForeground }}>
+                          Nenhuma foto sai do seu celular.
+                        </Text>
                       </Text>
                     </View>
                   </View>
