@@ -8,6 +8,7 @@ import { WakeLock } from '../../modules/wake-lock';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, AppState } from 'react-native';
 import { bootMark } from '../observability/bootTrace';
+import { isAutoresumeDisabled } from '../../constants/buildFlags';
 
 bootMark('foregroundService module top-level start');
 
@@ -176,67 +177,71 @@ bootMark('registerForegroundService call done');
 
 // Auto-retomada em segundo plano quando o motor JS é inicializado
 // (cobre ressurreição do processo pelo Android/ColorOS sem Activity montada).
-void (async () => {
-  bootMark('auto-resume IIFE start');
-  try {
-    const { getBackgroundIndexConsent } = await import('./consent');
-    bootMark('auto-resume consent check start');
-    const consent = await getBackgroundIndexConsent();
-    bootMark('auto-resume consent result=' + consent);
-    if (consent !== 'accepted') return;
+if (!isAutoresumeDisabled) {
+  void (async () => {
+    bootMark('auto-resume IIFE start');
+    try {
+      const { getBackgroundIndexConsent } = await import('./consent');
+      bootMark('auto-resume consent check start');
+      const consent = await getBackgroundIndexConsent();
+      bootMark('auto-resume consent result=' + consent);
+      if (consent !== 'accepted') return;
 
-    bootMark('auto-resume getBackgroundIndexState start');
-    const { getBackgroundIndexState } = await import('../faceSearch');
-    const state = await getBackgroundIndexState();
-    bootMark('auto-resume state status=' + state.status);
-    if (
-      state.status === 'completed' ||
-      state.status === 'cancelled' ||
-      state.status === 'paused'
-    ) {
-      return;
-    }
-
-    bootMark('auto-resume WakeLock check start');
-    const { WakeLock } = await import('../../modules/wake-lock');
-    if (!WakeLock.hasAnyGalleryPermission()) {
-      bootMark('auto-resume no gallery permission');
-      return;
-    }
-
-    bootMark('auto-resume startForegroundIndexing start');
-    console.warn(
-      `[ForegroundService] Auto-retomando indexação no boot do JS (status=${state.status}, fotos=${state.processedAssets}/${state.totalAssets ?? '?'})...`,
-    );
-    const { startForegroundIndexing } = await import('./foregroundIndexLoop');
-    startForegroundIndexing();
-    bootMark('auto-resume startForegroundIndexing done');
-  } catch (err) {
-    bootMark('auto-resume error: ' + String(err));
-    console.warn('[ForegroundService] Falha na auto-retomada no boot do JS:', err);
-  }
-})();
-
-// Registra ouvinte nativo para desbloqueio da tela (USER_PRESENT) e carregador (POWER_CONNECTED)
-if (typeof WakeLock.addDeviceWakeListener === 'function') {
-  bootMark('addDeviceWakeListener registering');
-  WakeLock.addDeviceWakeListener((event) => {
-    console.warn('[ForegroundService] Evento de desbloqueio/carregador nativo recebido:', event.action);
-    void (async () => {
-      try {
-        const { getActiveForegroundIndexing, startForegroundIndexing } = await import('./foregroundIndexLoop');
-        const active = getActiveForegroundIndexing();
-        if (active && active.isRunning()) {
-          active.wakeUp?.();
-        } else {
-          startForegroundIndexing();
-        }
-      } catch (err) {
-        console.warn('[ForegroundService] Erro ao retomar indexação via wake listener:', err);
+      bootMark('auto-resume getBackgroundIndexState start');
+      const { getBackgroundIndexState } = await import('../faceSearch');
+      const state = await getBackgroundIndexState();
+      bootMark('auto-resume state status=' + state.status);
+      if (
+        state.status === 'completed' ||
+        state.status === 'cancelled' ||
+        state.status === 'paused'
+      ) {
+        return;
       }
-    })();
-  });
-  bootMark('addDeviceWakeListener registered');
+
+      bootMark('auto-resume WakeLock check start');
+      const { WakeLock } = await import('../../modules/wake-lock');
+      if (!WakeLock.hasAnyGalleryPermission()) {
+        bootMark('auto-resume no gallery permission');
+        return;
+      }
+
+      bootMark('auto-resume startForegroundIndexing start');
+      console.warn(
+        `[ForegroundService] Auto-retomando indexação no boot do JS (status=${state.status}, fotos=${state.processedAssets}/${state.totalAssets ?? '?'})...`,
+      );
+      const { startForegroundIndexing } = await import('./foregroundIndexLoop');
+      startForegroundIndexing();
+      bootMark('auto-resume startForegroundIndexing done');
+    } catch (err) {
+      bootMark('auto-resume error: ' + String(err));
+      console.warn('[ForegroundService] Falha na auto-retomada no boot do JS:', err);
+    }
+  })();
+
+  // Registra ouvinte nativo para desbloqueio da tela (USER_PRESENT) e carregador (POWER_CONNECTED)
+  if (typeof WakeLock.addDeviceWakeListener === 'function') {
+    bootMark('addDeviceWakeListener registering');
+    WakeLock.addDeviceWakeListener((event) => {
+      console.warn('[ForegroundService] Evento de desbloqueio/carregador nativo recebido:', event.action);
+      void (async () => {
+        try {
+          const { getActiveForegroundIndexing, startForegroundIndexing } = await import('./foregroundIndexLoop');
+          const active = getActiveForegroundIndexing();
+          if (active && active.isRunning()) {
+            active.wakeUp?.();
+          } else {
+            startForegroundIndexing();
+          }
+        } catch (err) {
+          console.warn('[ForegroundService] Erro ao retomar indexação via wake listener:', err);
+        }
+      })();
+    });
+    bootMark('addDeviceWakeListener registered');
+  }
+} else {
+  bootMark('auto-resume and wakeListener disabled by DIAG_AUTORESUME=off');
 }
 
 export function registerPauseHandler(handler: () => void): () => void {
