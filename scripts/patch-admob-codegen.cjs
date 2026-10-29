@@ -163,6 +163,76 @@ public abstract class NativeAppModuleSpec extends ReactContextBaseJavaModule {
   }
 }
 
+function patchNativeGoogleMobileAdsPoolModuleSpec(dir) {
+  const targetDir = path.join(dir, 'android/src/oldarch/io/invertase/googlemobileads');
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  const specPath = path.join(targetDir, 'NativeGoogleMobileAdsPoolModuleSpec.kt');
+  const specContent = `package io.invertase.googlemobileads
+
+import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReactContextBaseJavaModule
+import com.facebook.react.bridge.ReadableMap
+
+abstract class NativeGoogleMobileAdsPoolModuleSpec(
+  reactContext: ReactApplicationContext,
+) : ReactContextBaseJavaModule(reactContext) {
+  abstract fun poolStart(
+    preloadId: String,
+    format: String,
+    generation: Double,
+    adUnitId: String,
+    bufferSize: Double,
+    requestOptions: ReadableMap,
+    promise: Promise,
+  )
+
+  abstract fun poolGetAvailability(
+    preloadId: String,
+    format: String,
+    generation: Double,
+    promise: Promise,
+  )
+
+  abstract fun poolPeekResponseInfo(
+    preloadId: String,
+    format: String,
+    generation: Double,
+    promise: Promise,
+  )
+
+  abstract fun poolPoll(
+    preloadId: String,
+    format: String,
+    generation: Double,
+    requestId: Double,
+    adUnitId: String,
+    promise: Promise,
+  )
+
+  abstract fun poolDestroy(
+    preloadId: String,
+    format: String,
+    generation: Double,
+  )
+
+  open fun addListener(eventName: String) {}
+
+  open fun removeListeners(count: Double) {}
+}
+`;
+
+  try {
+    fs.writeFileSync(specPath, specContent, 'utf8');
+    console.log(`[patch-admob] NativeGoogleMobileAdsPoolModuleSpec.kt sincronizado em: ${specPath}`);
+  } catch (err) {
+    console.error(`[patch-admob] Erro ao sincronizar NativeGoogleMobileAdsPoolModuleSpec.kt em ${targetDir}:`, err);
+  }
+}
+
 function run() {
   const dirs = findAdMobDirs();
   if (dirs.length === 0) {
@@ -175,6 +245,7 @@ function run() {
     patchPackageJson(dir);
     patchBuildGradle(dir);
     writeNativeAppModuleSpec(dir);
+    patchNativeGoogleMobileAdsPoolModuleSpec(dir);
   }
 }
 
