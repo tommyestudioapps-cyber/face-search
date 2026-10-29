@@ -164,7 +164,7 @@ jobs:
           ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
         run: ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace
 
-      - name: Verify libappmodules is clean (no RNGoogleMobileAdsSpec C++ symbols)
+      - name: Verify libappmodules and Hermes bundle integrity
         working-directory: artifacts/busca-facial-local/android
         shell: bash
         run: |
@@ -178,6 +178,20 @@ jobs:
           fi
           echo "SUCESSO: libappmodules.so verificado e 100% livre de simbolos C++ de AdMob!"
           rm -f /tmp/libappmodules.so
+
+          unzip -p "$APK_PATH" assets/index.android.bundle > /tmp/index.android.bundle
+          node -e '
+            const fs = require("fs");
+            const buf = fs.readFileSync("/tmp/index.android.bundle");
+            const functionCount = buf.readUInt32LE(40);
+            console.log("Hermes bundle size:", buf.length, "functionCount:", functionCount);
+            if (functionCount > 22000) {
+              console.error("ERRO CRITICO: Duplicacao detectada no index.android.bundle! functionCount=" + functionCount);
+              process.exit(1);
+            }
+            console.log("SUCESSO: Hermes bundle sem duplicacao de react-native/reanimated/worklets!");
+          '
+          rm -f /tmp/index.android.bundle
 
       - name: Inspect APK manifest (foreground service type, target SDK, permissions)
         working-directory: artifacts/busca-facial-local/android
