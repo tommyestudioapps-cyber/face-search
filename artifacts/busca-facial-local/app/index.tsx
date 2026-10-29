@@ -84,6 +84,9 @@ import type {
   FaceCaptureStatus,
 } from '@/services/faceCapture';
 import '@/services/backgroundIndexing/foregroundService';
+import { bootMark } from '@/services/observability/bootTrace';
+
+bootMark('app/index.tsx top-level evaluated');
 
 import {
   DEFAULT_PRECISION_LEVEL,
@@ -591,6 +594,7 @@ function Home({
 }
 
 function AdFooter() {
+  bootMark('AdFooter render start');
   const insets = useSafeAreaInsets();
   const bottomInset = Platform.OS === 'web' ? 34 : insets.bottom;
 
@@ -1330,6 +1334,7 @@ function getFolderNameFromUri(uri: string): string {
 }
 
 export default function HomeScreen() {
+  bootMark('HomeScreen render start');
   const [screen, setScreen] = useState<AppScreen>('onboarding');
   const [indexedFilter, setIndexedFilter] = useState<'all' | 'withFaces'>('all');
   const [viewerPhotos, setViewerPhotos] = useState<string[]>([]);
@@ -1477,6 +1482,7 @@ export default function HomeScreen() {
   );
 
   useEffect(() => {
+    bootMark('HomeScreen boot useEffect (1483) start');
     if (__DEV__) {
       console.info('[startup] HomeScreen mounted');
     }
@@ -1656,6 +1662,7 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    bootMark('HomeScreen syncToken useEffect (1662) start');
     if (faceSearchBackgroundSyncToken === 0 || Platform.OS === 'web') return;
     let cancelled = false;
     void (async () => {
@@ -1676,6 +1683,7 @@ export default function HomeScreen() {
   }, [faceSearchBackgroundSyncToken]);
 
   useEffect(() => {
+    bootMark('HomeScreen mountedRef useEffect (1684) start');
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -1683,6 +1691,7 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    bootMark('HomeScreen restoreSession useEffect (1692) start');
     let cancelled = false;
     (async () => {
       const session = await restoreFromSession();
@@ -1701,8 +1710,10 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    bootMark('HomeScreen mobileAds useEffect (1712) start');
     if (Platform.OS === 'web') return undefined;
     const timer = setTimeout(() => {
+      bootMark('HomeScreen mobileAds timer fired (1500ms)');
       preloadRewardedAd();
       void initMobileAds().catch(() => {});
     }, 1500);
@@ -1727,6 +1738,7 @@ export default function HomeScreen() {
   }, [showReward]);
 
   useEffect(() => {
+    bootMark('HomeScreen auto-indexing check useEffect (1743) start');
     if (Platform.OS === 'web') return;
     if (backgroundIndexConsent !== 'accepted') return;
     if (!hasGalleryPhotoAccess) return;
@@ -1748,6 +1760,7 @@ export default function HomeScreen() {
   ]);
 
   useEffect(() => {
+    bootMark('HomeScreen AppState listener useEffect (1767) start');
     if (Platform.OS === 'web') return undefined;
     let cancelled = false;
     let subscription: { remove: () => void } | null = null;
@@ -1918,6 +1931,7 @@ export default function HomeScreen() {
   ]);
 
   useEffect(() => {
+    bootMark('HomeScreen watchdog useEffect (1938) start');
     if (Platform.OS === 'web') return undefined;
     const WATCHDOG_INTERVAL_MS = 15_000;
     const id = setInterval(() => {

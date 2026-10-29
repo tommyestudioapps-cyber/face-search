@@ -1,14 +1,21 @@
+const { bootMark } = require('./services/observability/bootTrace');
+bootMark('index.js start');
+
 // Task definitions must load before Expo Router mounts a screen (including headless launches).
 if (require('react-native').Platform.OS !== 'web') {
   try {
-    // Registra handlers do notifee (registerForegroundService, onBackgroundEvent)
-    // ANTES de qualquer UI, para funcionar em processo headless.
+    bootMark('index.js require foregroundService start');
     require('./services/backgroundIndexing/foregroundService');
+    bootMark('index.js require foregroundService done');
+
+    bootMark('index.js require backgroundIndexTask start');
     require('./services/backgroundIndexing/backgroundIndexTask');
+    bootMark('index.js require backgroundIndexTask done');
   } catch (error) {
-    // Older dev clients do not contain the new native modules until rebuilt.
     console.error('[BackgroundIndex] Native task unavailable; rebuild the app.', error);
   }
 }
 
+bootMark('index.js require expo-router/entry start');
 require('expo-router/entry');
+bootMark('index.js require expo-router/entry done');

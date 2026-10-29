@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
+import { bootMark } from '../services/observability/bootTrace';
 import {
   AD_CONFIG,
   isMobileAdsInitialized,
@@ -14,7 +15,10 @@ export function AdBanner() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
 
+  bootMark('AdBanner render (adsReady=' + adsReady + ' isOnline=' + isOnline + ')');
+
   useEffect(() => {
+    bootMark('AdBanner netInfo useEffect start');
     if (Platform.OS === 'web') return undefined;
     let mounted = true;
 
@@ -54,6 +58,8 @@ export function AdBanner() {
   if (Platform.OS === 'web' || !isOnline || hasError || !adsReady) {
     return null;
   }
+
+  bootMark('AdBanner rendering native BannerAd component');
 
   return (
     <View style={[styles.bannerContainer, !isLoaded && styles.hidden]}>

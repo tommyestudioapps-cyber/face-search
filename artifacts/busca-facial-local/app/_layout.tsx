@@ -12,9 +12,11 @@ import {
 } from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { bootMark } from '@/services/observability/bootTrace';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+bootMark('_layout.tsx top-level evaluated');
 
 const queryClient = new QueryClient();
 
@@ -27,6 +29,7 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  bootMark('RootLayout render start');
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -35,6 +38,7 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
+    bootMark('RootLayout mounted useEffect');
     if (__DEV__) {
       console.info('[startup] RootLayout mounted');
     }
@@ -42,12 +46,18 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
+      bootMark('RootLayout SplashScreen.hideAsync calling');
       SplashScreen.hideAsync();
+      bootMark('RootLayout SplashScreen.hideAsync called');
     }
   }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if (!fontsLoaded && !fontError) {
+    bootMark('RootLayout awaiting fonts - returning null');
+    return null;
+  }
 
+  bootMark('RootLayout returning JSX');
   return (
     <SafeAreaProvider>
       <ErrorBoundary>

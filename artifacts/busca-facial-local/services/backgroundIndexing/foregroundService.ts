@@ -7,6 +7,9 @@ import notifee, {
 import { WakeLock } from '../../modules/wake-lock';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, AppState } from 'react-native';
+import { bootMark } from '../observability/bootTrace';
+
+bootMark('foregroundService module top-level start');
 
 export const INDEXING_CHANNEL_ID = 'search-face-indexing';
 export const INDEXING_NOTIFICATION_ID = 'search-face-indexing-foreground';
@@ -156,7 +159,9 @@ if (Platform.OS === 'android') {
   });
 }
 
+bootMark('registerForegroundService call start');
 notifee.registerForegroundService(async () => {
+  bootMark('registerForegroundService handler executed');
   console.warn('[ForegroundService] Headless task executor acionado pelo Notifee!');
   try {
     const { runForegroundIndexLoopInternal } = await import('./foregroundIndexLoop');
@@ -167,17 +172,23 @@ notifee.registerForegroundService(async () => {
     console.warn('[ForegroundService] Headless task executor finalizado.');
   }
 });
+bootMark('registerForegroundService call done');
 
 // Auto-retomada em segundo plano quando o motor JS é inicializado
 // (cobre ressurreição do processo pelo Android/ColorOS sem Activity montada).
 void (async () => {
+  bootMark('auto-resume IIFE start');
   try {
     const { getBackgroundIndexConsent } = await import('./consent');
+    bootMark('auto-resume consent check start');
     const consent = await getBackgroundIndexConsent();
+    bootMark('auto-resume consent result=' + consent);
     if (consent !== 'accepted') return;
 
+    bootMark('auto-resume getBackgroundIndexState start');
     const { getBackgroundIndexState } = await import('../faceSearch');
     const state = await getBackgroundIndexState();
+    bootMark('auto-resume state status=' + state.status);
     if (
       state.status === 'completed' ||
       state.status === 'cancelled' ||
@@ -186,21 +197,29 @@ void (async () => {
       return;
     }
 
+    bootMark('auto-resume WakeLock check start');
     const { WakeLock } = await import('../../modules/wake-lock');
-    if (!WakeLock.hasAnyGalleryPermission()) return;
+    if (!WakeLock.hasAnyGalleryPermission()) {
+      bootMark('auto-resume no gallery permission');
+      return;
+    }
 
+    bootMark('auto-resume startForegroundIndexing start');
     console.warn(
       `[ForegroundService] Auto-retomando indexação no boot do JS (status=${state.status}, fotos=${state.processedAssets}/${state.totalAssets ?? '?'})...`,
     );
     const { startForegroundIndexing } = await import('./foregroundIndexLoop');
     startForegroundIndexing();
+    bootMark('auto-resume startForegroundIndexing done');
   } catch (err) {
+    bootMark('auto-resume error: ' + String(err));
     console.warn('[ForegroundService] Falha na auto-retomada no boot do JS:', err);
   }
 })();
 
 // Registra ouvinte nativo para desbloqueio da tela (USER_PRESENT) e carregador (POWER_CONNECTED)
 if (typeof WakeLock.addDeviceWakeListener === 'function') {
+  bootMark('addDeviceWakeListener registering');
   WakeLock.addDeviceWakeListener((event) => {
     console.warn('[ForegroundService] Evento de desbloqueio/carregador nativo recebido:', event.action);
     void (async () => {
@@ -217,6 +236,7 @@ if (typeof WakeLock.addDeviceWakeListener === 'function') {
       }
     })();
   });
+  bootMark('addDeviceWakeListener registered');
 }
 
 export function registerPauseHandler(handler: () => void): () => void {
@@ -241,6 +261,7 @@ function handlePauseAction(): void {
   }
 }
 
+bootMark('notifee.onForegroundEvent registering');
 notifee.onForegroundEvent(({ type, detail }) => {
   if (
     type === EventType.ACTION_PRESS &&
@@ -255,7 +276,9 @@ notifee.onForegroundEvent(({ type, detail }) => {
     isNotificationDismissedByUser = true;
   }
 });
+bootMark('notifee.onForegroundEvent registered');
 
+bootMark('notifee.onBackgroundEvent registering');
 notifee.onBackgroundEvent(async ({ type, detail }) => {
   if (
     type === EventType.ACTION_PRESS &&
@@ -270,6 +293,7 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
     isNotificationDismissedByUser = true;
   }
 });
+bootMark('notifee.onBackgroundEvent registered');
 
 export async function ensureIndexingChannel(): Promise<string | null> {
   if (Platform.OS !== 'android') return null;
