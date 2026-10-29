@@ -1,0 +1,190 @@
+name: Build Android Diagnostic Matrix (4 APKs)
+
+on:
+  push:
+    branches: [diag/boot-crash]
+  workflow_dispatch:
+
+jobs:
+  build-diag-apk:
+    name: build-${{ matrix.variant }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [baseline, no-ads, no-autoresume, no-ads-no-autoresume]
+        include:
+          - variant: baseline
+            diag_ads: "on"
+            diag_autoresume: "on"
+          - variant: no-ads
+            diag_ads: "off"
+            diag_autoresume: "on"
+          - variant: no-autoresume
+            diag_ads: "on"
+            diag_autoresume: "off"
+          - variant: no-ads-no-autoresume
+            diag_ads: "off"
+            diag_autoresume: "off"
+
+    env:
+      EXPO_PUBLIC_DIAG_ADS: ${{ matrix.diag_ads }}
+      EXPO_PUBLIC_DIAG_AUTORESUME: ${{ matrix.diag_autoresume }}
+      VARIANT_NAME: ${{ matrix.variant }}
+
+    steps:
+      - name: Checkout (com Git LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Verify LFS assets
+        run: |
+          echo "== assets/models =="
+          ls -la artifacts/busca-facial-local/assets/models/ || true
+          echo "== tamanhos =="
+          du -sh artifacts/busca-facial-local/assets/models/* 2>/dev/null || true
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          set -e
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "SDK_ROOT=$SDK_ROOT"
+          if [ ! -d "$SDK_ROOT" ]; then
+            echo "Android SDK not found at $SDK_ROOT" >&2
+            ls -la /usr/local/lib/android/ 2>/dev/null || true
+            exit 1
+          fi
+
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -1)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found under $SDK_ROOT/cmdline-tools" >&2
+            ls -la "$SDK_ROOT" || true
+            exit 1
+          fi
+          echo "Using SDKMANAGER=$SDKMANAGER"
+
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.1.12297006"
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Patch app.json versionName with variant suffix
+        run: |
+          python3 - << 'PYEOF'
+          import json, os
+          var = os.environ.get('VARIANT_NAME', 'diag')
+          p = 'artifacts/busca-facial-local/app.json'
+          with open(p, 'r') as f:
+              d = json.load(f)
+          d['expo']['version'] = f"1.0.0-{var}"
+          with open(p, 'w') as f:
+              json.dump(d, f, indent=2)
+          print(f"app.json version patched to 1.0.0-{var}")
+          PYEOF
+
+      - name: Expo prebuild (Android)
+        working-directory: artifacts/busca-facial-local
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          EXPO_PUBLIC_DIAG_ADS: ${{ matrix.diag_ads }}
+          EXPO_PUBLIC_DIAG_AUTORESUME: ${{ matrix.diag_autoresume }}
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > artifacts/busca-facial-local/android/app/release.keystore
+          ls -la artifacts/busca-facial-local/android/app/release.keystore
+
+      - name: Patch build.gradle for release signing
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib
+          p = pathlib.Path('artifacts/busca-facial-local/android/app/build.gradle')
+          s = p.read_text()
+
+          needle = "        debug {\n            storeFile file('debug.keystore')\n            storePassword 'android'\n            keyAlias 'androiddebugkey'\n            keyPassword 'android'\n        }\n"
+          if needle not in s:
+              raise SystemExit('ERRO: bloco debug signing nao encontrado em build.gradle')
+          release_block = needle + "        release {\n            storeFile file('release.keystore')\n            storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')\n            keyAlias System.getenv('ANDROID_KEY_ALIAS')\n            keyPassword System.getenv('ANDROID_KEY_PASSWORD')\n        }\n"
+          s = s.replace(needle, release_block, 1)
+
+          bt_marker = "buildTypes {"
+          bt_idx = s.find(bt_marker)
+          if bt_idx == -1:
+              raise SystemExit('ERRO: bloco buildTypes nao encontrado')
+          idx = s.find("release {", bt_idx)
+          if idx == -1:
+              raise SystemExit('ERRO: bloco release buildType nao encontrado')
+          sig_idx = s.find('signingConfig signingConfigs.debug', idx)
+          if sig_idx == -1:
+              raise SystemExit('ERRO: signingConfig de release nao encontrado')
+          s = s[:sig_idx] + 'signingConfig signingConfigs.release' + s[sig_idx + len('signingConfig signingConfigs.debug'):]
+
+          p.write_text(s)
+          print('build.gradle patched com sucesso')
+          PYEOF
+          cat >> artifacts/busca-facial-local/android/app/proguard-rules.pro << 'EOF'
+          -keep class com.google.android.gms.ads.** { *; }
+          -dontwarn com.google.android.gms.ads.**
+          -keep class io.invertase.googlemobileads.** { *; }
+          -dontwarn io.invertase.googlemobileads.**
+          EOF
+
+      - name: Neutralize CameraDevicesManager eager startup
+        run: node scripts/patch-camera-devices.cjs
+
+      - name: Build APK (release, ARM64 only)
+        working-directory: artifacts/busca-facial-local/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Rename APK with variant
+        shell: bash
+        run: |
+          set -e
+          cd artifacts/busca-facial-local/android/app/build/outputs/apk/release
+          ORIG_APK=$(ls *.apk | head -1)
+          NEW_NAME="search-face-diag-${{ matrix.variant }}.apk"
+          mv "$ORIG_APK" "$NEW_NAME"
+          echo "Renamed $ORIG_APK to $NEW_NAME"
+          ls -la "$NEW_NAME"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: diag-${{ matrix.variant }}-apk
+          path: artifacts/busca-facial-local/android/app/build/outputs/apk/release/*.apk
+          retention-days: 14
+          if-no-files-found: error
