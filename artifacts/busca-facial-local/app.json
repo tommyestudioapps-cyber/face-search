@@ -69,7 +69,10 @@
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-6305008666977043~9018991848"
+          "androidAppId": "ca-app-pub-6305008666977043~9018991848",
+          "delayAppMeasurementInit": true,
+          "optimizeInitialization": true,
+          "optimizeAdLoading": true
         }
       ]
     ],
@@ -84,6 +87,7 @@
     }
   },
   "react-native-google-mobile-ads": {
-    "android_app_id": "ca-app-pub-6305008666977043~9018991848"
+    "android_app_id": "ca-app-pub-6305008666977043~9018991848",
+    "delay_app_measurement_init": true
   }
 }

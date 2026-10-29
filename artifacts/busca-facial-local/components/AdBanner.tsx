@@ -1,7 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
-import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import {
   AD_CONFIG,
   isMobileAdsInitialized,
@@ -54,6 +53,8 @@ export function AdBanner() {
   if (Platform.OS === 'web' || !isOnline || hasError || !adsReady) {
     return null;
   }
+
+  const { BannerAd, BannerAdSize } = require('react-native-google-mobile-ads');
 
   return (
     <View style={[styles.bannerContainer, !isLoaded && styles.hidden]}>

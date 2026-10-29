@@ -1,11 +1,10 @@
 import NetInfo from '@react-native-community/netinfo';
-import mobileAds, { TestIds } from 'react-native-google-mobile-ads';
 
 export const AD_CONFIG = {
   // IDs Oficiais do Google AdMob (Produção)
   appId: 'ca-app-pub-6305008666977043~9018991848',
-  bannerAdUnitId: __DEV__ ? TestIds.BANNER : 'ca-app-pub-6305008666977043/7729960906',
-  rewardedAdUnitId: __DEV__ ? TestIds.REWARDED : 'ca-app-pub-6305008666977043/4884305710',
+  bannerAdUnitId: __DEV__ ? 'ca-app-pub-3940256099942544/6300978111' : 'ca-app-pub-6305008666977043/7729960906',
+  rewardedAdUnitId: __DEV__ ? 'ca-app-pub-3940256099942544/5224354917' : 'ca-app-pub-6305008666977043/4884305710',
   isTestMode: false,
 };
 
@@ -59,6 +58,7 @@ export async function initMobileAds(): Promise<boolean> {
     }
 
     adsInitializing = true;
+    const mobileAds = require('react-native-google-mobile-ads').default;
     const adapterStatuses = await mobileAds().initialize();
     adsInitialized = true;
     adsInitializing = false;

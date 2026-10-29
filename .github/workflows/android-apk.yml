@@ -72,6 +72,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: Neutralize AdMob C++ Codegen in libappmodules
+        run: node scripts/patch-admob-codegen.cjs
+
       - name: Expo prebuild (Android)
         working-directory: artifacts/busca-facial-local
         env:
@@ -160,6 +163,21 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
         run: ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace
+
+      - name: Verify libappmodules is clean (no RNGoogleMobileAdsSpec C++ symbols)
+        working-directory: artifacts/busca-facial-local/android
+        shell: bash
+        run: |
+          set -e
+          APK_PATH="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          echo "Checking $APK_PATH for native library integrity..."
+          unzip -p "$APK_PATH" lib/arm64-v8a/libappmodules.so > /tmp/libappmodules.so
+          if strings /tmp/libappmodules.so | grep -q "RNGoogleMobileAdsSpec"; then
+            echo "ERRO CRITICO: libappmodules.so ainda contem simbolos C++ RNGoogleMobileAdsSpec!" >&2
+            exit 1
+          fi
+          echo "SUCESSO: libappmodules.so verificado e 100% livre de simbolos C++ de AdMob!"
+          rm -f /tmp/libappmodules.so
 
       - name: Inspect APK manifest (foreground service type, target SDK, permissions)
         working-directory: artifacts/busca-facial-local/android

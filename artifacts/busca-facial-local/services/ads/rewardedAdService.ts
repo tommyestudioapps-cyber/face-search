@@ -1,8 +1,4 @@
-import {
-  RewardedAd,
-  RewardedAdEventType,
-  AdEventType,
-} from 'react-native-google-mobile-ads';
+import type { RewardedAd } from 'react-native-google-mobile-ads';
 import {
   AD_CONFIG,
   isMobileAdsInitialized,
@@ -14,13 +10,18 @@ let isAdLoaded = false;
 let isLoading = false;
 let waitingForInit = false;
 
+function getAdMob() {
+  return require('react-native-google-mobile-ads');
+}
+
 export function getRewardedAd(): RewardedAd {
   if (!rewardedAd) {
-    rewardedAd = RewardedAd.createForAdRequest(AD_CONFIG.rewardedAdUnitId, {
+    const { RewardedAd: RewardedAdClass } = getAdMob();
+    rewardedAd = RewardedAdClass.createForAdRequest(AD_CONFIG.rewardedAdUnitId, {
       requestNonPersonalizedAdsOnly: true,
     });
   }
-  return rewardedAd;
+  return rewardedAd!;
 }
 
 export function preloadRewardedAd(): void {
@@ -39,6 +40,7 @@ export function preloadRewardedAd(): void {
 
   try {
     isLoading = true;
+    const { RewardedAdEventType, AdEventType } = getAdMob();
     const ad = getRewardedAd();
 
     const unsubscribeLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
@@ -72,6 +74,7 @@ export function showRewardedAd(callbacks: ShowRewardedAdCallbacks): void {
   }
 
   try {
+    const { RewardedAdEventType, AdEventType } = getAdMob();
     const ad = getRewardedAd();
 
     const unsubscribeEarned = ad.addAdEventListener(
@@ -90,7 +93,7 @@ export function showRewardedAd(callbacks: ShowRewardedAdCallbacks): void {
       callbacks.onAdClosed?.();
     });
 
-    const unsubscribeError = ad.addAdEventListener(AdEventType.ERROR, (error) => {
+    const unsubscribeError = ad.addAdEventListener(AdEventType.ERROR, (error: any) => {
       isAdLoaded = false;
       unsubscribeEarned();
       unsubscribeClosed();
@@ -99,7 +102,7 @@ export function showRewardedAd(callbacks: ShowRewardedAdCallbacks): void {
     });
 
     if (isAdLoaded) {
-      ad.show().catch((err) => {
+      ad.show().catch((err: unknown) => {
         callbacks.onError?.(err instanceof Error ? err : new Error('Erro ao exibir anúncio'));
         // Se falhar na exibição, tenta carregar um novo
         isAdLoaded = false;
@@ -111,7 +114,7 @@ export function showRewardedAd(callbacks: ShowRewardedAdCallbacks): void {
         onLoadedThenShow();
         isAdLoaded = true;
         isLoading = false;
-        ad.show().catch((err) => {
+        ad.show().catch((err: unknown) => {
           callbacks.onError?.(err instanceof Error ? err : new Error('Erro ao exibir anúncio'));
         });
       });
