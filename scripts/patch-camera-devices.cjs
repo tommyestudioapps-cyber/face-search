@@ -25,41 +25,62 @@ console.log(`[patch-camera-devices] Found ${matches.length} target file(s):`, ma
 let patchedCount = 0;
 for (const file of matches) {
   let content = fs.readFileSync(file, 'utf8');
+  const isCrlf = content.includes('\r\n');
+  let normalized = content.replace(/\r\n/g, '\n');
   let modified = false;
 
-  // 1. Desativa inicializacao avida do ExtensionsManager no init
-  if (content.includes('coroutineScope.launch')) {
-    content = content.replace(
-      /init\s*\{[\s\S]*?coroutineScope\.launch[\s\S]*?\}\s*\}/,
+  // Clean any previously corrupted replacement if present (extra brace)
+  if (normalized.includes('init {\n    // Eager initialization disabled to prevent cold-start crashes/NoClassDefFoundError on Android 9+\n  }\n  }')) {
+    normalized = normalized.replace(
+      'init {\n    // Eager initialization disabled to prevent cold-start crashes/NoClassDefFoundError on Android 9+\n  }\n  }',
       'init {\n    // Eager initialization disabled to prevent cold-start crashes/NoClassDefFoundError on Android 9+\n  }'
     );
     modified = true;
   }
 
-  // 2. Protege sendAvailableDevicesChangedEvent com hasActiveReactInstance e try/catch
-  if (!content.includes('hasActiveReactInstance')) {
-    content = content.replace(
-      /fun sendAvailableDevicesChangedEvent\(\)\s*\{[\s\S]*?eventEmitter\.emit\("CameraDevicesChanged", devices\)[\s\S]*?\}/,
-      'fun sendAvailableDevicesChangedEvent() {\n    try {\n      if (!reactContext.hasActiveReactInstance()) return\n      val eventEmitter = reactContext.getJSModule(RCTDeviceEventEmitter::class.java)\n      val devices = getDevicesJson()\n      eventEmitter.emit("CameraDevicesChanged", devices)\n    } catch (_: Throwable) {}\n  }'
-    );
+  // Target 1: Init block with eager ExtensionsManager
+  const targetInit = `  // Init cameraProvider + manager as early as possible\n  init {\n    coroutineScope.launch {\n      try {\n        Log.i(TAG, "Initializing ProcessCameraProvider...")\n        cameraProvider = ProcessCameraProvider.getInstance(reactContext).await(executor)\n        Log.i(TAG, "Initializing ExtensionsManager...")\n        extensionsManager = ExtensionsManager.getInstanceAsync(reactContext, cameraProvider!!).await(executor)\n        Log.i(TAG, "Successfully initialized!")\n      } catch (error: Throwable) {\n        Log.e(TAG, "Failed to initialize ProcessCameraProvider/ExtensionsManager! Error: \${error.message}", error)\n      }\n    }\n  }`;
+  const replaceInit = `  // Init cameraProvider + manager as early as possible\n  init {\n    // Eager initialization disabled to prevent cold-start crashes/NoClassDefFoundError on Android 9+\n  }`;
+
+  if (normalized.includes(targetInit)) {
+    normalized = normalized.replace(targetInit, replaceInit);
     modified = true;
   }
 
-  // 3. Protege o registro de callback do initialize
-  if (content.includes('cameraManager.registerAvailabilityCallback(callback, null)\n    sendAvailableDevicesChangedEvent()')) {
-    content = content.replace(
-      /cameraManager\.registerAvailabilityCallback\(callback,\s*null\)\s*\n\s*sendAvailableDevicesChangedEvent\(\)/,
-      'try {\n      cameraManager.registerAvailabilityCallback(callback, null)\n    } catch (_: Throwable) {}'
-    );
+  // Target 2: Initialize callback registration without immediate emit
+  const targetInitialize = `  override fun initialize() {\n    super.initialize()\n    cameraManager.registerAvailabilityCallback(callback, null)\n    sendAvailableDevicesChangedEvent()\n  }`;
+  const replaceInitialize = `  override fun initialize() {\n    super.initialize()\n    try {\n      cameraManager.registerAvailabilityCallback(callback, null)\n    } catch (_: Throwable) {}\n  }`;
+
+  if (normalized.includes(targetInitialize)) {
+    normalized = normalized.replace(targetInitialize, replaceInitialize);
+    modified = true;
+  }
+
+  // Target 3: Invalidate with try/catch
+  const targetInvalidate = `  override fun invalidate() {\n    cameraManager.unregisterAvailabilityCallback(callback)\n    super.invalidate()\n  }`;
+  const replaceInvalidate = `  override fun invalidate() {\n    try {\n      cameraManager.unregisterAvailabilityCallback(callback)\n    } catch (_: Throwable) {}\n    super.invalidate()\n  }`;
+
+  if (normalized.includes(targetInvalidate)) {
+    normalized = normalized.replace(targetInvalidate, replaceInvalidate);
+    modified = true;
+  }
+
+  // Target 4: Send event with hasActiveReactInstance and try/catch
+  const targetSendEvent = `  fun sendAvailableDevicesChangedEvent() {\n    val eventEmitter = reactContext.getJSModule(RCTDeviceEventEmitter::class.java)\n    val devices = getDevicesJson()\n    eventEmitter.emit("CameraDevicesChanged", devices)\n  }`;
+  const replaceSendEvent = `  fun sendAvailableDevicesChangedEvent() {\n    try {\n      if (!reactContext.hasActiveReactInstance()) return\n      val eventEmitter = reactContext.getJSModule(RCTDeviceEventEmitter::class.java)\n      val devices = getDevicesJson()\n      eventEmitter.emit("CameraDevicesChanged", devices)\n    } catch (_: Throwable) {}\n  }`;
+
+  if (normalized.includes(targetSendEvent)) {
+    normalized = normalized.replace(targetSendEvent, replaceSendEvent);
     modified = true;
   }
 
   if (modified) {
-    fs.writeFileSync(file, content, 'utf8');
+    const finalContent = isCrlf ? normalized.replace(/\n/g, '\r\n') : normalized;
+    fs.writeFileSync(file, finalContent, 'utf8');
     patchedCount++;
     console.log(`[patch-camera-devices] Successfully patched: ${file}`);
   } else {
-    console.log(`[patch-camera-devices] Already patched: ${file}`);
+    console.log(`[patch-camera-devices] Up-to-date or already patched: ${file}`);
   }
 }
 
