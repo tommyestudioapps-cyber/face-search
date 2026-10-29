@@ -149,6 +149,9 @@ jobs:
           }
           EOF
 
+      - name: Neutralize CameraDevicesManager eager startup
+        run: node scripts/patch-camera-devices.cjs
+
       - name: Build AAB and APK (release, ARM64 only)
         working-directory: artifacts/busca-facial-local/android
         env:
