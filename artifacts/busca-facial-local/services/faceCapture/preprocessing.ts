@@ -2,7 +2,7 @@ import {
   manipulateAsync,
   SaveFormat,
 } from 'expo-image-manipulator';
-import { Platform } from 'react-native';
+import { Image, Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import type { FaceCaptureError, NormalizedImage } from './types';
 import { FaceCaptureError as FaceCaptureFailure } from './types';
@@ -15,7 +15,11 @@ import {
 
 async function readSourceJpegMetadata(sourceUri: string) {
   try {
-    const bytes = await new File(sourceUri).bytes();
+    const file = new File(sourceUri);
+    if (typeof file.size === 'number' && file.size > 1_500_000) {
+      return null;
+    }
+    const bytes = await file.bytes();
     return readJpegMetadata(bytes);
   } catch (error) {
     // Android content:// providers may not expose bytes to JavaScript. The
@@ -28,6 +32,16 @@ async function readSourceJpegMetadata(sourceUri: string) {
   }
 }
 
+function getImageSizeAsync(uri: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      (error) => reject(error),
+    );
+  });
+}
+
 export async function normalizeImage(sourceUri: string): Promise<NormalizedImage> {
   if (!sourceUri) {
     throw new FaceCaptureFailure('invalid-image', 'A imagem selecionada é inválida.');
@@ -38,92 +52,42 @@ export async function normalizeImage(sourceUri: string): Promise<NormalizedImage
     const exifOrientation = sourceMetadata?.orientation ?? 1;
     console.warn('[EXIF:Read] status=' + (sourceMetadata ? 'ok' : 'fail') + ' orientation=' + exifOrientation + ' uri=' + sourceUri.slice(0, 100));
 
-    // Always render a new bitmap. This bakes EXIF rotation and mirroring into
-    // pixels before MediaPipe sees them, including Android camera/gallery
-    // providers that expose content:// URIs with inconsistent EXIF handling.
-    const orientedInitial = await manipulateAsync(
+    let raw = sourceMetadata ? { width: sourceMetadata.width, height: sourceMetadata.height } : null;
+    if (!raw) {
+      raw = await getImageSizeAsync(sourceUri);
+    }
+
+    const expected = getNormalizedImageDimensions(raw.width, raw.height, exifOrientation);
+    const scale = Math.min(1, faceCapture.maxInputDimension / Math.max(expected.width, expected.height));
+    const targetWidth = Math.round(expected.width * scale);
+    const targetHeight = Math.round(expected.height * scale);
+
+    const out = await manipulateAsync(
       sourceUri,
-      [{ rotate: 0 }],
+      scale < 1
+        ? [{ rotate: 0 }, { resize: { width: targetWidth, height: targetHeight } }]
+        : [{ rotate: 0 }],
       {
-        compress: 0.92,
+        compress: 0.85,
         format: SaveFormat.JPEG,
       },
     );
-    if (__DEV__) {
-      console.log('[FaceCapture] EXIF orientation applied', {
-        platform: Platform.OS,
-        exifOrientation,
-      });
-    }
-    if (orientedInitial.width <= 0 || orientedInitial.height <= 0) {
-      throw new FaceCaptureFailure('invalid-image', 'A imagem normalizada não possui dimensões válidas.');
-    }
-    if (sourceMetadata) {
-      const expectedDimensions = getNormalizedImageDimensions(
-        sourceMetadata.width,
-        sourceMetadata.height,
-        sourceMetadata.orientation,
-      );
-      if (
-        orientedInitial.width !== expectedDimensions.width ||
-        orientedInitial.height !== expectedDimensions.height
-      ) {
-        throw new FaceCaptureFailure(
-          'invalid-image',
-          'A orientação da imagem não pôde ser normalizada com segurança.',
-        );
-      }
-    }
 
-    const oriented = orientedInitial;
-    const temporaryUris = [oriented.uri];
-
-    const largestDimension = Math.max(oriented.width, oriented.height);
-    if (largestDimension <= faceCapture.maxInputDimension) {
-      if (__DEV__) {
-        console.log(
-          `[Normalize] ${oriented.width}x${oriented.height} mantida (abaixo do limite)`,
-        );
-      }
-      console.warn('[Prep:Output] uri=' + sourceUri.slice(0, 100) + ' final=' + oriented.width + 'x' + oriented.height);
-      return {
-        uri: oriented.uri,
-        width: oriented.width,
-        height: oriented.height,
-        orientation: getPhysicalOrientation(oriented.width, oriented.height),
-        temporaryUris,
-      };
-    }
-
-    const scale = faceCapture.maxInputDimension / largestDimension;
-    const resized = await manipulateAsync(
-      oriented.uri,
-      [
-        {
-          resize: {
-            width: Math.max(1, Math.round(oriented.width * scale)),
-            height: Math.max(1, Math.round(oriented.height * scale)),
-          },
-        },
-      ],
-      {
-        compress: 0.92,
-        format: SaveFormat.JPEG,
-      },
-    );
-    if (__DEV__) {
-      console.log(
-        `[Normalize] ${oriented.width}x${oriented.height} → ${resized.width}x${resized.height}`,
+    if (Math.abs(out.width - targetWidth) > 2 || Math.abs(out.height - targetHeight) > 2) {
+      throw new FaceCaptureFailure(
+        'invalid-image',
+        'A orientação da imagem não pôde ser normalizada com segurança.',
       );
     }
 
-    temporaryUris.push(resized.uri);
-    console.warn('[Prep:Output] uri=' + sourceUri.slice(0, 100) + ' final=' + resized.width + 'x' + resized.height);
+    const temporaryUris = [out.uri];
+    console.warn('[Prep:Output] uri=' + sourceUri.slice(0, 100) + ' final=' + out.width + 'x' + out.height);
+
     return {
-      uri: resized.uri,
-      width: resized.width,
-      height: resized.height,
-      orientation: getPhysicalOrientation(resized.width, resized.height),
+      uri: out.uri,
+      width: out.width,
+      height: out.height,
+      orientation: getPhysicalOrientation(out.width, out.height),
       temporaryUris,
     };
   } catch (error) {

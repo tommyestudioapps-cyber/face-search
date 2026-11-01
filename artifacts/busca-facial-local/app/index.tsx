@@ -1417,6 +1417,7 @@ export default function HomeScreen() {
         '@/services/backgroundIndexing/foregroundIndexLoop'
       );
       foregroundIndexLoop.startForegroundIndexing({
+        allowServiceStart: true,
         trigger,
         onPartialProgress: (processedAssets, totalAssets) => {
           if (!mountedRef.current) return;
@@ -1920,7 +1921,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
-    const WATCHDOG_INTERVAL_MS = 15_000;
+    const WATCHDOG_INTERVAL_MS = 60_000;
     const id = setInterval(() => {
       void (async () => {
         try {
@@ -1990,6 +1991,7 @@ export default function HomeScreen() {
               `[Watchdog] loop status=${backgroundIndexState.status}`,
             );
           }
+          if (foregroundIndexLoop.getActiveForegroundIndexing()?.isRunning()) return;
           await startForegroundIndexingIfNeeded();
         } catch (error) {
           if (__DEV__) {

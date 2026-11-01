@@ -25,7 +25,11 @@ TaskManager.defineTask(BACKGROUND_INDEX_TASK_NAME, async ({ error }) => {
 
   try {
     const { runBackgroundIndexBatch } = await import('./batchRunner');
-    await runBackgroundIndexBatch();
+    await runBackgroundIndexBatch({
+      maxAssets: 200,
+      timeBudgetMs: 600_000,
+      trigger: 'auto',
+    });
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch (cause) {
     console.error('[BackgroundIndex] Task preparation failed', cause);

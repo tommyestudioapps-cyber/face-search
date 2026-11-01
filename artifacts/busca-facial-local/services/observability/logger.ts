@@ -54,7 +54,7 @@ export function logPhotoTiming(timing: PhotoTiming): void {
  * Android recuperem memória entre fotos, evitando OOM killer.
  */
 export async function yieldToEventLoop(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise((resolve) => setTimeout(resolve, 12));
 }
 
 export function logDelegateAttempt(

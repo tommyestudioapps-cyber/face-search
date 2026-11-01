@@ -20,6 +20,7 @@ export interface ForegroundIndexingHandle {
 }
 
 export interface ForegroundIndexingOptions {
+  allowServiceStart?: boolean;
   maxAssets?: number;
   timeBudgetMs?: number;
   trigger?: 'auto' | 'explicit';
@@ -103,12 +104,14 @@ export function startForegroundIndexing(
     registerPauseHandler(() => {
       cancelled = true;
     });
-    try {
-      await startIndexingForeground();
-    } catch (error) {
-      console.warn('[ForegroundIndex] FGS não subiu; abortando loop', error);
-      activeHandle = null;
-      return;
+    if (options.allowServiceStart !== false) {
+      try {
+        await startIndexingForeground();
+      } catch (error) {
+        console.warn('[ForegroundIndex] FGS não subiu; abortando loop', error);
+        activeHandle = null;
+        return;
+      }
     }
     try {
       let finalOutcome: BackgroundIndexBatchOutcome | null = null;

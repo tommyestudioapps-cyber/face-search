@@ -37,12 +37,12 @@ export function HomeIndexingIndicator({
         Animated.timing(pulse, {
           toValue: 1,
           duration: 700,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
         Animated.timing(pulse, {
           toValue: 0,
           duration: 700,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
       ]),
     );
@@ -52,15 +52,18 @@ export function HomeIndexingIndicator({
     };
   }, [state, pulse]);
 
-  const backgroundColor =
+  const opacity =
     state === 'indexing'
       ? pulse.interpolate({
           inputRange: [0, 1],
-          outputRange: [DARK_GREEN, LIGHT_GREEN],
+          outputRange: [0.35, 1],
         })
-      : state === 'completed'
-        ? LIGHT_GREEN
-        : DARK_GREEN;
+      : 1;
+
+  const dotColor =
+    state === 'indexing' || state === 'completed'
+      ? LIGHT_GREEN
+      : DARK_GREEN;
 
   const label =
     state === 'indexing'
@@ -95,7 +98,7 @@ export function HomeIndexingIndicator({
         },
       ]}
     >
-      <Animated.View style={[styles.dot, { backgroundColor }]} />
+      <Animated.View style={[styles.dot, { backgroundColor: dotColor, opacity }]} />
       <View style={styles.content}>
         <Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
           {label}

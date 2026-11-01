@@ -148,7 +148,7 @@ export function restoreIndexingNotification(): void {
   })();
 }
 
-if (Platform.OS === 'android') {
+if (Platform.OS === 'android' && AppState?.addEventListener) {
   AppState.addEventListener('change', (nextAppState) => {
     if (nextAppState === 'active') {
       restoreIndexingNotification();
@@ -157,47 +157,9 @@ if (Platform.OS === 'android') {
 }
 
 notifee.registerForegroundService(async () => {
-  console.warn('[ForegroundService] Headless task executor acionado pelo Notifee!');
-  try {
-    const { runForegroundIndexLoopInternal } = await import('./foregroundIndexLoop');
-    await runForegroundIndexLoopInternal();
-  } catch (error) {
-    console.warn('[ForegroundService] Erro no loop da headless task:', error);
-  } finally {
-    console.warn('[ForegroundService] Headless task executor finalizado.');
-  }
+  // Headless NÃO inicia nem para o loop/serviço: o dono é o runtime da UI.
+  console.warn('[ForegroundService] Executor headless acionado (no-op por design).');
 });
-
-// Auto-retomada em segundo plano quando o motor JS é inicializado
-// (cobre ressurreição do processo pelo Android/ColorOS sem Activity montada).
-void (async () => {
-  try {
-    const { getBackgroundIndexConsent } = await import('./consent');
-    const consent = await getBackgroundIndexConsent();
-    if (consent !== 'accepted') return;
-
-    const { getBackgroundIndexState } = await import('../faceSearch');
-    const state = await getBackgroundIndexState();
-    if (
-      state.status === 'completed' ||
-      state.status === 'cancelled' ||
-      state.status === 'paused'
-    ) {
-      return;
-    }
-
-    const { WakeLock } = await import('../../modules/wake-lock');
-    if (!WakeLock.hasAnyGalleryPermission()) return;
-
-    console.warn(
-      `[ForegroundService] Auto-retomando indexação no boot do JS (status=${state.status}, fotos=${state.processedAssets}/${state.totalAssets ?? '?'})...`,
-    );
-    const { startForegroundIndexing } = await import('./foregroundIndexLoop');
-    startForegroundIndexing();
-  } catch (err) {
-    console.warn('[ForegroundService] Falha na auto-retomada no boot do JS:', err);
-  }
-})();
 
 // Registra ouvinte nativo para desbloqueio da tela (USER_PRESENT) e carregador (POWER_CONNECTED)
 if (typeof WakeLock.addDeviceWakeListener === 'function') {
@@ -205,12 +167,10 @@ if (typeof WakeLock.addDeviceWakeListener === 'function') {
     console.warn('[ForegroundService] Evento de desbloqueio/carregador nativo recebido:', event.action);
     void (async () => {
       try {
-        const { getActiveForegroundIndexing, startForegroundIndexing } = await import('./foregroundIndexLoop');
+        const { getActiveForegroundIndexing } = await import('./foregroundIndexLoop');
         const active = getActiveForegroundIndexing();
         if (active && active.isRunning()) {
           active.wakeUp?.();
-        } else {
-          startForegroundIndexing();
         }
       } catch (err) {
         console.warn('[ForegroundService] Erro ao retomar indexação via wake listener:', err);
@@ -337,11 +297,6 @@ export async function updateIndexingProgress(
   lastProcessedAssets = processedAssets;
   lastTotalAssets = totalAssets;
 
-  // Renova o wake lock a cada update (~2s por batch). O acquire substitui
-  // o anterior, então não há leak. Timeout de 10 min garante liberação
-  // se o app crashar sem chamar stop.
-  WakeLock.acquire(10 * 60 * 1000);
-
   // Se o usuário dispensou a notificação da barra via swipe, respeitamos o silêncio visual
   // mantendo o processamento em segundo plano sem recriar o card na barra.
   if (isNotificationDismissedByUser) {
@@ -353,10 +308,13 @@ export async function updateIndexingProgress(
     typeof totalAssets === 'number' &&
     totalAssets > 0 &&
     processedAssets >= totalAssets;
-  if (isComplete || now - lastNotificationUpdateAt < 2_000) {
+  if (isComplete || now - lastNotificationUpdateAt < 3_000) {
     return;
   }
   lastNotificationUpdateAt = now;
+
+  // Renova o wake lock apenas a cada emissão de notificação (a cada 3s).
+  WakeLock.acquire(10 * 60 * 1000);
   const hasTotal = typeof totalAssets === 'number' && totalAssets > 0;
   const percent = hasTotal
     ? Math.min(100, Math.max(0, Math.floor((processedAssets / totalAssets) * 100)))

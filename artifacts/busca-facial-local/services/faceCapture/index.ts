@@ -43,9 +43,6 @@ export async function detectFaces(
   const detectionWindowUris: string[] = [];
 
   try {
-    const qualitySample = await createAnalysisSample(normalized.uri);
-    qualitySampleUri = qualitySample.uri;
-    const qualityImage = await decodeImage(qualitySample.uri);
     const layout = createDetectionWindowLayout(normalized.width, normalized.height);
     const facesPerWindow: number[] = [];
     const windowedFaces: WindowedFaceDetection[] = [];
@@ -110,6 +107,10 @@ export async function detectFaces(
         'Nenhum rosto foi encontrado na imagem selecionada.',
       );
     }
+
+    const qualitySample = await createAnalysisSample(normalized.uri);
+    qualitySampleUri = qualitySample.uri;
+    const qualityImage = await decodeImage(qualitySample.uri);
 
     const faces: DetectedFace[] = [];
     let rejectedCount = 0;

@@ -730,10 +730,11 @@ async function runGalleryIndex(
     }
     let cursor: string | undefined = batch?.after;
     let hasNextPage = true;
+    let sinceShouldContinue = 0;
 
     while (hasNextPage) {
       throwIfCancelled(cancellation);
-      if (batch && !(await batch.shouldContinue())) {
+      if (batch && sinceShouldContinue++ % 10 === 0 && !(await batch.shouldContinue())) {
         cancellation.cancel();
         throwIfCancelled(cancellation);
       }
@@ -760,7 +761,7 @@ async function runGalleryIndex(
       let page: MediaLibrary.PagedInfo<MediaLibrary.Asset>;
       try {
         page = await MediaLibrary.getAssetsAsync({
-          first: batch ? 250 : faceSearch.indexing.batchSize,
+          first: batch ? 100 : faceSearch.indexing.batchSize,
           after: cursor,
           mediaType: MediaLibrary.MediaType.photo,
           sortBy: [MediaLibrary.SortBy.modificationTime],
@@ -806,6 +807,7 @@ async function runGalleryIndex(
       };
 
       for (const asset of page.assets) {
+        await yieldToEventLoop();
         throwIfCancelled(cancellation);
         const existingPhoto = indexedById.get(asset.id);
 
@@ -838,13 +840,13 @@ async function runGalleryIndex(
           };
           lastAssetId = asset.id;
           options.onProgress?.(progress);
-          if (progress.processedAssets % 50 === 0) {
-            await new Promise((resolve) => setTimeout(resolve, 16));
+          if (progress.processedAssets % 10 === 0) {
+            await yieldToEventLoop();
           }
           continue;
         }
 
-        if (batch && !(await batch.shouldContinue())) {
+        if (batch && sinceShouldContinue++ % 10 === 0 && !(await batch.shouldContinue())) {
           cancellation.cancel();
           throwIfCancelled(cancellation);
         }

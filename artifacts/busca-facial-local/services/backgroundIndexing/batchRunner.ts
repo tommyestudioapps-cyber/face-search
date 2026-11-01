@@ -44,15 +44,6 @@ async function persistBackgroundState(
   await faceSearchRepository.updateBackgroundIndexState(patch);
 }
 
-async function canContinue(): Promise<boolean> {
-  const consentOk = (await getBackgroundIndexConsent()) === 'accepted';
-  const hasFull = await hasFullGalleryPhotoPermission();
-  if (__DEV__) {
-    console.log(`[Perm:diag] ctx=batch-canContinue consent=${consentOk} full=${hasFull}`);
-  }
-  return consentOk && hasFull;
-}
-
 function createBatchCancellation(): GalleryIndexCancellationContract {
   let cancelled = false;
   let reason: CancelReason | null = null;
@@ -86,13 +77,18 @@ async function runCoordinatedBackgroundIndexBatch(
   const previousProcessed = previousState.processedAssets ?? 0;
   const onPartialProgress = options.onPartialProgress;
   let cachedFullPermission: boolean | null = null;
-  const checkFullPermissionOnce = async (): Promise<boolean> => {
-    if (cachedFullPermission === null) {
-      cachedFullPermission = await hasFullGalleryPhotoPermission();
+  let lastPermissionCheckAt = 0;
+  const checkPermissionThrottled = async (force = false): Promise<boolean> => {
+    const now = Date.now();
+    if (force || cachedFullPermission === null || now - lastPermissionCheckAt >= 30_000) {
+      cachedFullPermission =
+        (await getBackgroundIndexConsent()) === 'accepted' &&
+        (await hasFullGalleryPhotoPermission());
+      lastPermissionCheckAt = now;
     }
     return cachedFullPermission;
   };
-  if (!(await canContinue())) {
+  if (!(await checkPermissionThrottled())) {
     // Permission could have been reduced to a limited selection since the last page.
     const checkpoint = await loadBackgroundIndexCursor();
     await clearBackgroundIndexCursor();
@@ -129,10 +125,11 @@ async function runCoordinatedBackgroundIndexBatch(
   }
   if (!checkpoint && activeGeneration !== null) {
     if (!(await faceSearchRepository.abortScanIfUnleased(activeGeneration))) {
-      console.warn(
-        `[batchRunner] Lease zumbi da geração ${activeGeneration} retido após encerramento do processo. Forçando liberação...`,
-      );
-      await faceSearchRepository.forceAbortActiveScan();
+      return {
+        status: 'blocked',
+        cumulativeProcessed: previousProcessed,
+        cumulativeTotal: previousState.totalAssets,
+      };
     }
   }
   const leaseOwner = `${Date.now()}-${Math.random()}`;
@@ -251,19 +248,31 @@ async function runCoordinatedBackgroundIndexBatch(
       cancellation,
       onProgress: (() => {
         let lastEmitAt = 0;
+        let lastPersistAt = 0;
         return (progress: { processedAssets: number; totalAssets: number | null }) => {
           currentBatchProcessedRef.current = progress.processedAssets;
           if (typeof progress.totalAssets === 'number') {
             latestTotalRef.current = progress.totalAssets;
           }
-          if (!onPartialProgress) return;
           const cumulative = startOffset + progress.processedAssets;
           const total = latestTotalRef.current ?? assumedTotal ?? null;
           const capped = total !== null
             ? Math.min(cumulative, total)
             : cumulative;
-          const reachedTotal = total !== null && total > 0 && capped >= total;
+
           const now = Date.now();
+          if (now - lastPersistAt >= 5_000) {
+            lastPersistAt = now;
+            void persistBackgroundState({
+              status: 'running',
+              scope: 'gallery',
+              processedAssets: capped,
+              totalAssets: total,
+            });
+          }
+
+          if (!onPartialProgress) return;
+          const reachedTotal = total !== null && total > 0 && capped >= total;
           if (!reachedTotal && now - lastEmitAt < 500) return;
           lastEmitAt = now;
           onPartialProgress(capped, total);
@@ -280,7 +289,7 @@ async function runCoordinatedBackgroundIndexBatch(
             cancellation.cancel('lease');
             return false;
           }
-          if (!(await canContinue())) {
+          if (!(await checkPermissionThrottled())) {
             cancellation.cancel('ineligible');
             return false;
           }
@@ -288,7 +297,7 @@ async function runCoordinatedBackgroundIndexBatch(
         },
         shouldYield: () => indexCoordinator.shouldYieldBackground(),
         onCheckpoint: async (cursor) => {
-          if (!(await canContinue())) {
+          if (!(await checkPermissionThrottled(true))) {
             await clearBackgroundIndexCursor();
             return;
           }
@@ -304,7 +313,7 @@ async function runCoordinatedBackgroundIndexBatch(
             generation,
             cappedForCheckpoint,
           );
-          if (!(await canContinue())) await clearBackgroundIndexCursor();
+          if (!(await checkPermissionThrottled(true))) await clearBackgroundIndexCursor();
         },
       },
     });
