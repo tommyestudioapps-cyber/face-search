@@ -8,7 +8,7 @@ import { WakeLock } from '../../modules/wake-lock';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, AppState } from 'react-native';
 
-export const INDEXING_CHANNEL_ID = 'search-face-indexing';
+export const INDEXING_CHANNEL_ID = 'search-face-indexing-v2';
 export const INDEXING_NOTIFICATION_ID = 'search-face-indexing-foreground';
 export const INDEXING_PAUSE_ACTION = 'search-face-pause-indexing';
 
@@ -156,9 +156,20 @@ if (Platform.OS === 'android' && AppState?.addEventListener) {
   });
 }
 
-notifee.registerForegroundService(async () => {
-  // Headless NÃO inicia nem para o loop/serviço: o dono é o runtime da UI.
-  console.warn('[ForegroundService] Executor headless acionado (no-op por design).');
+notifee.registerForegroundService(async (notification) => {
+  // Não inicia indexação (o dono do loop continua sendo o runtime da UI).
+  // Apenas garante que o serviço tenha uma notificação visível quando o
+  // sistema o reiniciar sozinho.
+  console.warn('[ForegroundService] executor headless acionado; reexibindo notificação.');
+  try {
+    if (notification) {
+      await notifee.displayNotification(notification);
+    } else {
+      await reviveIndexingNotification('headless');
+    }
+  } catch (error) {
+    console.warn('[ForegroundService] falha no executor headless', error);
+  }
 });
 
 // Registra ouvinte nativo para desbloqueio da tela (USER_PRESENT) e carregador (POWER_CONNECTED)
@@ -170,7 +181,10 @@ if (typeof WakeLock.addDeviceWakeListener === 'function') {
         const { getActiveForegroundIndexing } = await import('./foregroundIndexLoop');
         const active = getActiveForegroundIndexing();
         if (active && active.isRunning()) {
+          await reviveIndexingNotification('wake');
           active.wakeUp?.();
+        } else {
+          await reviveIndexingNotification('wake-sem-loop');
         }
       } catch (err) {
         console.warn('[ForegroundService] Erro ao retomar indexação via wake listener:', err);
@@ -233,10 +247,15 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 
 export async function ensureIndexingChannel(): Promise<string | null> {
   if (Platform.OS !== 'android') return null;
+  try {
+    await notifee.deleteChannel('search-face-indexing');
+  } catch (error) {
+    console.warn('[ForegroundService] falha ao apagar canal legado', error);
+  }
   return notifee.createChannel({
     id: INDEXING_CHANNEL_ID,
     name: 'Preparação do índice',
-    importance: AndroidImportance.LOW,
+    importance: AndroidImportance.DEFAULT,
     description: 'Progresso da preparação automática do índice local.',
   });
 }
@@ -246,6 +265,7 @@ export async function startIndexingForeground(): Promise<void> {
   isNotificationDismissedByUser = false;
   lastNotificationUpdateAt = 0;
   await ensureIndexingChannel();
+  WakeLock.clearRevivalNotification?.();
   // Wake lock de 10 min, renovado a cada 5 min se a indexação ainda estiver ativa.
   // Sem isso, a CPU suspende (mWakefulness=Dozing) e os timers JS congelam.
   const acquired = WakeLock.acquire(10 * 60 * 1000);
@@ -349,6 +369,19 @@ export async function updateIndexingProgress(
       ],
     },
   });
+}
+
+/** Reexibe a notificação com o último progresso conhecido (wake, headless, retomada). */
+export async function reviveIndexingNotification(reason: string): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  isNotificationDismissedByUser = false;
+  lastNotificationUpdateAt = 0;
+  console.warn(`[ForegroundService] reexibindo notificação (${reason})`);
+  try {
+    await updateIndexingProgress(lastProcessedAssets, lastTotalAssets);
+  } catch (error) {
+    console.warn('[ForegroundService] falha ao reexibir notificação', error);
+  }
 }
 
 export async function stopIndexingForeground(): Promise<void> {

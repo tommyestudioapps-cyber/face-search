@@ -23,7 +23,7 @@ import {
   type SimilarityThresholds,
 } from './searchMath';
 import { indexCoordinator } from '../backgroundIndexing/indexCoordinator';
-import { getRecognitionModelIdentity } from './modelIdentity';
+import { getCachedRecognitionModelIdentity } from './modelIdentityCache';
 
 export async function searchAlignedFace(
   alignedFace: AlignedFace,
@@ -147,7 +147,7 @@ async function runSearchAlignedFace(
   }
 
   try {
-    const modelIdentity = await getRecognitionModelIdentity();
+    const modelIdentity = await getCachedRecognitionModelIdentity();
     console.warn(
       `[Search:agg] modelSha256=${modelIdentity.sha256} modelVersion=${modelIdentity.modelVersion} pipelineVersion=${modelIdentity.pipelineVersion}`,
     );

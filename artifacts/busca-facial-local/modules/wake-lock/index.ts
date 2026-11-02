@@ -9,6 +9,7 @@ interface WakeLockNativeModule {
   openBatteryOptimizationSettings?(): boolean;
   hasFullGalleryPermission?(): boolean;
   hasAnyGalleryPermission?(): boolean;
+  clearRevivalNotification?(): boolean;
   addListener?(eventName: string, listener: (event: { action: string }) => void): { remove: () => void };
 }
 
@@ -130,6 +131,15 @@ export const WakeLock = {
     } catch (error) {
       console.warn('[WakeLock] addDeviceWakeListener falhou', error);
       return null;
+    }
+  },
+  clearRevivalNotification(): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.clearRevivalNotification !== 'function') return false;
+    try {
+      return m.clearRevivalNotification();
+    } catch {
+      return false;
     }
   },
   isAvailable(): boolean {

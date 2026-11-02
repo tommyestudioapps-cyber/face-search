@@ -124,13 +124,13 @@ async function runCoordinatedBackgroundIndexBatch(
     await clearBackgroundIndexCursor();
   }
   if (!checkpoint && activeGeneration !== null) {
-    if (!(await faceSearchRepository.abortScanIfUnleased(activeGeneration))) {
-      return {
-        status: 'blocked',
-        cumulativeProcessed: previousProcessed,
-        cumulativeTotal: previousState.totalAssets,
-      };
-    }
+    // Reserva de um processo anterior já encerrado: no Android só existe um
+    // processo, então não há concorrência real. Aborta imediatamente em vez de
+    // esperar o lease de 60 s vencer (o que prendia o loop em 'blocked').
+    console.warn(
+      `[Batch] reserva zumbi da geração ${activeGeneration} detectada; abortando imediatamente.`,
+    );
+    await faceSearchRepository.forceAbortActiveScan();
   }
   const leaseOwner = `${Date.now()}-${Math.random()}`;
   const trigger = options.trigger ?? 'auto';

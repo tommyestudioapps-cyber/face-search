@@ -16,7 +16,7 @@ import type {
 } from '../backgroundIndexing/status';
 
 const DATABASE_NAME = 'face-search.sqlite';
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const INDEXED_STATUS = 'indexed';
 export const SCAN_LEASE_MS = 60_000;
 
@@ -55,6 +55,22 @@ interface IndexedPhotoRow {
 
 interface ModelVersionRow {
   model_version: string;
+}
+
+interface ModelIdentityRow {
+  sha256: string;
+  model_version: string;
+  pipeline_version: string;
+  fingerprint: string;
+  computed_at: number;
+}
+
+export interface ModelIdentityRecord {
+  sha256: string;
+  modelVersion: string;
+  pipelineVersion: string;
+  fingerprint: string;
+  computedAt: number;
 }
 
 interface BackgroundIndexStateRow {
@@ -323,6 +339,14 @@ async function migrateSchema(database: SQLiteDatabase): Promise<void> {
         INSERT OR IGNORE INTO background_index_state (
           id, status, scope, processed_assets
         ) VALUES (1, 'idle', 'gallery', 0);
+        CREATE TABLE IF NOT EXISTS model_identity (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          sha256 TEXT NOT NULL,
+          model_version TEXT NOT NULL,
+          pipeline_version TEXT NOT NULL,
+          fingerprint TEXT NOT NULL,
+          computed_at INTEGER NOT NULL
+        );
         PRAGMA user_version = ${SCHEMA_VERSION};
       `);
     });
@@ -397,6 +421,33 @@ async function migrateSchema(database: SQLiteDatabase): Promise<void> {
         PRAGMA user_version = ${SCHEMA_VERSION};
       `);
     });
+  } else if (currentVersion === 4) {
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.execAsync(`
+        CREATE TABLE IF NOT EXISTS model_identity (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          sha256 TEXT NOT NULL,
+          model_version TEXT NOT NULL,
+          pipeline_version TEXT NOT NULL,
+          fingerprint TEXT NOT NULL,
+          computed_at INTEGER NOT NULL
+        );
+        PRAGMA user_version = ${SCHEMA_VERSION};
+      `);
+    });
+  }
+
+  if (currentVersion >= 1 && currentVersion <= 3) {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS model_identity (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        sha256 TEXT NOT NULL,
+        model_version TEXT NOT NULL,
+        pipeline_version TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        computed_at INTEGER NOT NULL
+      );
+    `);
   }
 }
 
@@ -1051,6 +1102,38 @@ export class FaceSearchRepository {
     return row ? mapIndexedPhotoRow(row) : null;
   }
 
+  /** Busca apenas as fotos indexadas de uma página da galeria (evita carregar o índice inteiro). */
+  async getIndexedPhotosByIds(assetIds: string[]): Promise<IndexedPhoto[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+    const database = await this.getDatabase();
+    const CHUNK_SIZE = 500;
+    const photos: IndexedPhoto[] = [];
+    for (let offset = 0; offset < assetIds.length; offset += CHUNK_SIZE) {
+      const chunk = assetIds.slice(offset, offset + CHUNK_SIZE);
+      const placeholders = chunk.map(() => '?').join(', ');
+      const rows = await database.getAllAsync<IndexedPhotoRow>(
+        `
+          SELECT
+            id_media_library,
+            uri_local,
+            file_name,
+            created_at,
+            updated_at,
+            dimensions,
+            indexing_status,
+            model_version
+          FROM indexed_photos
+          WHERE indexing_status = ? AND id_media_library IN (${placeholders})
+        `,
+        [INDEXED_STATUS, ...chunk],
+      );
+      photos.push(...rows.map(mapIndexedPhotoRow));
+    }
+    return photos;
+  }
+
   async getIndexedPhotosWithFaceCounts(): Promise<IndexedPhoto[]> {
     const photos = await this.getIndexedPhotos();
     if (photos.length === 0) {
@@ -1096,6 +1179,43 @@ export class FaceSearchRepository {
       indexedPhotos: Number(photoCount?.count ?? 0),
       indexedFaces: Number(faceCount?.count ?? 0),
     };
+  }
+
+  async getModelIdentityRecord(): Promise<ModelIdentityRecord | null> {
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<ModelIdentityRow>(
+      `SELECT sha256, model_version, pipeline_version, fingerprint, computed_at
+       FROM model_identity
+       WHERE id = 1`,
+    );
+    if (!row) {
+      return null;
+    }
+    return {
+      sha256: row.sha256,
+      modelVersion: row.model_version,
+      pipelineVersion: row.pipeline_version,
+      fingerprint: row.fingerprint,
+      computedAt: row.computed_at,
+    };
+  }
+
+  async saveModelIdentityRecord(record: ModelIdentityRecord): Promise<void> {
+    return this.enqueueWrite(async () => {
+      const database = await this.getDatabase();
+      await database.runAsync(
+        `INSERT OR REPLACE INTO model_identity
+           (id, sha256, model_version, pipeline_version, fingerprint, computed_at)
+         VALUES (1, ?, ?, ?, ?, ?)`,
+        [
+          record.sha256,
+          record.modelVersion,
+          record.pipelineVersion,
+          record.fingerprint,
+          record.computedAt,
+        ],
+      );
+    });
   }
 
   async getStoredModelVersion(): Promise<string | null> {

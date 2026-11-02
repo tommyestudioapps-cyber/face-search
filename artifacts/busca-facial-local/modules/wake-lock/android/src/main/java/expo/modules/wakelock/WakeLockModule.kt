@@ -1,5 +1,9 @@
 package expo.modules.wakelock
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -41,6 +45,63 @@ class WakeLockModule : Module() {
     @JvmStatic
     var instance: WakeLockModule? = null
 
+    private const val REVIVAL_CHANNEL_ID = "search-face-indexing-alive"
+    private const val REVIVAL_NOTIFICATION_ID = 424242
+
+    @JvmStatic
+    fun clearRevivalNotification(context: Context) {
+      try {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(REVIVAL_NOTIFICATION_ID)
+      } catch (_: Throwable) {
+      }
+    }
+
+    @JvmStatic
+    fun postRevivalNotification(context: Context) {
+      try {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          val channel = NotificationChannel(
+            REVIVAL_CHANNEL_ID,
+            "Catálogo local",
+            NotificationManager.IMPORTANCE_DEFAULT
+          )
+          channel.description = "Aviso de catálogo pendente"
+          channel.setShowBadge(true)
+          nm.createNotificationChannel(channel)
+        }
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val piFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+          (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        val pendingIntent = launch?.let { PendingIntent.getActivity(context, 0, it, piFlags) }
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          Notification.Builder(context, REVIVAL_CHANNEL_ID)
+        } else {
+          @Suppress("DEPRECATION")
+          Notification.Builder(context)
+        }
+        val icon = context.applicationInfo.icon.takeIf { it != 0 }
+          ?: android.R.drawable.stat_notify_sync
+        builder
+          .setSmallIcon(icon)
+          .setContentTitle("Catálogo local pendente")
+          .setContentText("Toque para retomar a preparação do índice.")
+          .setOngoing(true)
+          .setOnlyAlertOnce(true)
+        if (pendingIntent != null) builder.setContentIntent(pendingIntent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          builder.setChannelId(REVIVAL_CHANNEL_ID)
+        } else {
+          @Suppress("DEPRECATION")
+          builder.setPriority(Notification.PRIORITY_DEFAULT)
+        }
+        nm.notify(REVIVAL_NOTIFICATION_ID, builder.build())
+      } catch (t: Throwable) {
+        android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Falha ao postar notificação de retomada", t)
+      }
+    }
+
     @JvmStatic
     fun onDeviceWakeEvent(context: Context, action: String) {
       try {
@@ -62,13 +123,18 @@ class WakeLockModule : Module() {
         val wl = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "busca-facial-local:device-wake")
         wl.acquire(60_000L)
 
-        // 2. Notifica a instancia JS se estiver ativa
-        instance?.let { mod ->
+        val current = instance
+        if (current != null) {
           try {
-            mod.sendEvent("onDeviceWake", mapOf("action" to action))
+            current.sendEvent("onDeviceWake", mapOf("action" to action))
+            clearRevivalNotification(appCtx)
           } catch (t: Throwable) {
             android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Falha ao enviar evento para JS", t)
+            postRevivalNotification(appCtx)
           }
+        } else {
+          // Processo reiniciado só pelo receiver: não há JS para reexibir a notificação.
+          postRevivalNotification(appCtx)
         }
       } catch (t: Throwable) {
         android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Erro ao tratar evento de wake", t)
@@ -287,6 +353,16 @@ class WakeLockModule : Module() {
         threadToInterrupt?.interrupt()
       } catch (_: Throwable) {}
       true
+    }
+
+    Function("clearRevivalNotification") {
+      try {
+        val ctx = appContext.reactContext?.applicationContext
+        if (ctx != null) clearRevivalNotification(ctx)
+        true
+      } catch (_: Throwable) {
+        false
+      }
     }
 
     Function("isHeld") {

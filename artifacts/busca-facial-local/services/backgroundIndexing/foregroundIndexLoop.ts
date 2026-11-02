@@ -1,5 +1,6 @@
 import {
   registerPauseHandler,
+  reviveIndexingNotification,
   startIndexingForeground,
   stopIndexingForeground,
   updateIndexingProgress,
@@ -125,6 +126,10 @@ export function startForegroundIndexing(
           }
           break;
         }
+
+        // Garante que a notificação esteja viva no início de cada ciclo
+        // (idempotente: mesmo id, ongoing, onlyAlertOnce).
+        void reviveIndexingNotification('loop-cycle');
 
         let outcome: BackgroundIndexBatchOutcome | null = null;
         let batchTimeoutId: ReturnType<typeof setTimeout> | null = null;

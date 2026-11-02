@@ -30,7 +30,7 @@ import {
   releaseRecognitionModel,
   runFaceEmbedding,
 } from './model';
-import { getRecognitionModelIdentity } from './modelIdentity';
+import { getCachedRecognitionModelIdentity } from './modelIdentityCache';
 import { cosineSimilarity } from './searchMath';
 import {
   shouldLogPhoto,
@@ -639,7 +639,7 @@ async function runGalleryIndex(
       );
     }
 
-    const modelIdentity = await getRecognitionModelIdentity();
+    const modelIdentity = await getCachedRecognitionModelIdentity();
     console.warn(
       `[Index:agg] modelSha256=${modelIdentity.sha256} modelVersion=${modelIdentity.modelVersion} pipelineVersion=${modelIdentity.pipelineVersion}`,
     );
@@ -657,10 +657,6 @@ async function runGalleryIndex(
     await faceSearchRepository.initialize();
     await faceSearchRepository.invalidateIfModelChanged(
       getCurrentModelMetadata(),
-    );
-    const indexedPhotos = await faceSearchRepository.getIndexedPhotos();
-    const indexedById = new Map(
-      indexedPhotos.map((photo) => [photo.assetId, photo]),
     );
     if (options.queryEmbeddings && options.queryEmbeddings.length > 0) {
       const storedEmbeddingsByAsset = new Map<string, Float32Array[]>();
@@ -792,6 +788,13 @@ async function runGalleryIndex(
         }
         break;
       }
+
+      const pageIndexedPhotos = await faceSearchRepository.getIndexedPhotosByIds(
+        page.assets.map((asset) => asset.id),
+      );
+      const indexedById = new Map(
+        pageIndexedPhotos.map((photo) => [photo.assetId, photo]),
+      );
 
       const seenUnchangedAssetIds: string[] = [];
       const flushSeenAssets = async () => {
