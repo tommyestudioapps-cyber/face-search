@@ -62,6 +62,16 @@ module.exports = function withNotifeeForegroundService(config) {
       app.service.push({ $: guardianAttrs });
     }
 
+    const HEADLESS_SERVICE = 'expo.modules.wakelock.IndexingHeadlessService';
+    if (!app.service.some((s) => s.$?.['android:name'] === HEADLESS_SERVICE)) {
+      app.service.push({
+        $: {
+          'android:name': HEADLESS_SERVICE,
+          'android:exported': 'false',
+        },
+      });
+    }
+
     // 3. Adicionar DeviceWakeReceiver para USER_PRESENT e ACTION_POWER_CONNECTED
     if (!app.receiver) app.receiver = [];
     const RECEIVER_NAME = 'expo.modules.wakelock.DeviceWakeReceiver';

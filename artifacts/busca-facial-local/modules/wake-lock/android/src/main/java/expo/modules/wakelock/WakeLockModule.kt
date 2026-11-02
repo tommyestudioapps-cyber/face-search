@@ -29,11 +29,16 @@ import java.net.InetAddress
 class DeviceWakeReceiver : BroadcastReceiver() {
   companion object {
     const val ACTION_GUARDIAN_REVIVE = "expo.modules.wakelock.ACTION_GUARDIAN_REVIVE"
+    const val ACTION_RESUME_INDEXING = "expo.modules.wakelock.ACTION_RESUME_INDEXING"
   }
 
   override fun onReceive(context: Context, intent: Intent?) {
     val action = intent?.action ?: return
     android.util.Log.i("DeviceWakeReceiver", "[DeviceWake] Evento do sistema recebido: $action")
+    if (action == ACTION_RESUME_INDEXING) {
+      WakeLockModule.resumeFromNotification(context)
+      return
+    }
     if (
       action == Intent.ACTION_USER_PRESENT ||
       action == Intent.ACTION_POWER_CONNECTED ||
@@ -58,6 +63,18 @@ class IndexingGuardianService : Service() {
     const val EXTRA_TOTAL = "total"
     const val GUARDIAN_CHANNEL_ID = "search-face-indexing-v2"
     const val GUARDIAN_NOTIFICATION_ID = 1000747637
+
+    private const val PREFS_NAME = "indexing_guardian"
+    private const val PREF_PROCESSED = "processed"
+    private const val PREF_TOTAL = "total"
+    private const val PREF_VISIBLE = "visible"
+
+    fun prefs(context: Context): android.content.SharedPreferences =
+      context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun setVisible(context: Context, visible: Boolean) {
+      prefs(context).edit().putBoolean(PREF_VISIBLE, visible).apply()
+    }
   }
 
   private var lastProcessed: Int = 0
@@ -102,7 +119,9 @@ class IndexingGuardianService : Service() {
       Notification.Builder(this)
     }
 
-    val icon = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.stat_notify_sync
+    val appIcon = applicationInfo.icon.takeIf { it != 0 }
+    val customIcon = resources.getIdentifier("ic_notification", "drawable", packageName)
+    val icon = if (customIcon != 0) customIcon else (appIcon ?: android.R.drawable.stat_notify_sync)
     builder
       .setSmallIcon(icon)
       .setContentTitle("Criando catálogo local")
@@ -120,6 +139,7 @@ class IndexingGuardianService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     val action = intent?.action
     if (action == ACTION_STOP) {
+      prefs(this).edit().putBoolean(PREF_VISIBLE, false).apply()
       isStopping = true
       try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -137,6 +157,18 @@ class IndexingGuardianService : Service() {
     if (intent != null && intent.hasExtra(EXTRA_PROCESSED)) {
       lastProcessed = intent.getIntExtra(EXTRA_PROCESSED, lastProcessed)
       lastTotal = intent.getIntExtra(EXTRA_TOTAL, lastTotal)
+    }
+
+    prefs(this).edit()
+      .putInt(PREF_PROCESSED, lastProcessed)
+      .putInt(PREF_TOTAL, lastTotal)
+      .apply()
+
+    val shouldShowCard = prefs(this).getBoolean(PREF_VISIBLE, false)
+    if (!shouldShowCard) {
+      // Dono do card é o notifee no processo principal. O Guardião só anota.
+      stopSelf(startId)
+      return START_NOT_STICKY
     }
 
     try {
@@ -162,10 +194,37 @@ class IndexingGuardianService : Service() {
     if (isStopping) return
     android.util.Log.w("IndexingGuardian", "[Guardian] Swipe nos Recentes detectado! Blindando notificacao e acordando processo principal...")
     try {
+      val storedPrefs = prefs(this)
+      lastProcessed = storedPrefs.getInt(PREF_PROCESSED, lastProcessed)
+      lastTotal = storedPrefs.getInt(PREF_TOTAL, lastTotal)
+      storedPrefs.edit().putBoolean(PREF_VISIBLE, true).apply()
+      try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+          startForeground(
+            GUARDIAN_NOTIFICATION_ID,
+            buildProgressNotification(lastProcessed, lastTotal),
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+          )
+        } else {
+          startForeground(GUARDIAN_NOTIFICATION_ID, buildProgressNotification(lastProcessed, lastTotal))
+        }
+      } catch (t: Throwable) {
+        android.util.Log.w("IndexingGuardian", "[Guardian] Falha ao assumir card no swipe", t)
+      }
+
       val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       nm.notify(GUARDIAN_NOTIFICATION_ID, buildProgressNotification(lastProcessed, lastTotal))
 
       // Reafirma em 100ms e 350ms (logo após o o-kill matar o PID principal) e acorda o processo principal via Broadcast
+      try {
+        // HeadlessJsTaskService NÃO é um foreground service: usar startService.
+        val headless = Intent(this, IndexingHeadlessService::class.java)
+        startService(headless)
+        android.util.Log.i("IndexingGuardian", "[Guardian] Headless task solicitado")
+      } catch (t: Throwable) {
+        android.util.Log.w("IndexingGuardian", "[Guardian] Falha ao iniciar headless", t)
+      }
+
       handler.postDelayed({
         if (!isStopping) {
           try {
@@ -213,6 +272,28 @@ class WakeLockModule : Module() {
     private const val REVIVAL_NOTIFICATION_ID = 424242
 
     @JvmStatic
+    fun resumeFromNotification(context: Context) {
+      // Isenção "ação do usuário na notificação": aqui o app está temporariamente
+      // liberado para iniciar serviços, mesmo sem Activity visível.
+      try {
+        // 1. O Guardião passa a ser o dono do card (com os contadores persistidos).
+        IndexingGuardianService.setVisible(context, true)
+        val guardian = Intent(context, IndexingGuardianService::class.java).apply {
+          action = IndexingGuardianService.ACTION_START_OR_UPDATE
+        }
+        context.startService(guardian)
+
+        // 2. O lote roda sem Activity.
+        val headless = Intent(context, IndexingHeadlessService::class.java)
+        context.startService(headless)
+
+        android.util.Log.i("DeviceWakeReceiver", "[DeviceWake] Retomada solicitada pelo toque")
+      } catch (t: Throwable) {
+        android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Falha ao retomar pelo toque", t)
+      }
+    }
+
+    @JvmStatic
     fun clearRevivalNotification(context: Context) {
       try {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -247,25 +328,30 @@ class WakeLockModule : Module() {
           channel.setShowBadge(true)
           nm.createNotificationChannel(channel)
         }
-        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val resumeIntent = Intent(context, DeviceWakeReceiver::class.java).apply {
+          action = DeviceWakeReceiver.ACTION_RESUME_INDEXING
+          setPackage(context.packageName)
+        }
         val piFlags = PendingIntent.FLAG_UPDATE_CURRENT or
           (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-        val pendingIntent = launch?.let { PendingIntent.getActivity(context, 0, it, piFlags) }
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
           Notification.Builder(context, REVIVAL_CHANNEL_ID)
         } else {
           @Suppress("DEPRECATION")
           Notification.Builder(context)
         }
-        val icon = context.applicationInfo.icon.takeIf { it != 0 }
+        val notifIcon = context.resources.getIdentifier("ic_notification", "drawable", context.packageName).takeIf { it != 0 }
+        val icon = notifIcon ?: context.applicationInfo.icon.takeIf { it != 0 }
           ?: android.R.drawable.stat_notify_sync
         builder
           .setSmallIcon(icon)
-          .setContentTitle("Catálogo local pendente")
+          .setContentTitle("Preparação pausada")
           .setContentText("Toque para retomar a preparação do índice.")
           .setOngoing(true)
           .setOnlyAlertOnce(true)
-        if (pendingIntent != null) builder.setContentIntent(pendingIntent)
+        builder.setContentIntent(
+          PendingIntent.getBroadcast(context, 1, resumeIntent, piFlags)
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
           builder.setChannelId(REVIVAL_CHANNEL_ID)
         } else {
@@ -554,11 +640,7 @@ class WakeLockModule : Module() {
           putExtra(IndexingGuardianService.EXTRA_PROCESSED, processed.toInt())
           putExtra(IndexingGuardianService.EXTRA_TOTAL, total.toInt())
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          ctx.startForegroundService(intent)
-        } else {
-          ctx.startService(intent)
-        }
+        ctx.startService(intent)
         true
       } catch (t: Throwable) {
         android.util.Log.w("WakeLockModule", "Falha ao sincronizar IndexingGuardianService", t)

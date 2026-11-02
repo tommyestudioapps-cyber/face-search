@@ -177,7 +177,7 @@ notifee.registerForegroundService(async (notification) => {
 // Auto-retomada quando o processo principal renasce via reactHost.start() sem MainActivity (pós-swipe)
 if (Platform.OS === 'android') {
   setTimeout(() => {
-    if (AppState.currentState === 'active') return; // Se a UI está aberta, o index.tsx já é o dono
+    if (AppState?.currentState === 'active') return; // Se a UI está aberta, o index.tsx já é o dono
     void (async () => {
       try {
         const { getActiveForegroundIndexing, startForegroundIndexing } = await import('./foregroundIndexLoop');
