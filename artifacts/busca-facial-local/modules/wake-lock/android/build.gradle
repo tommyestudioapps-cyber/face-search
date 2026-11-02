@@ -29,6 +29,7 @@ def safeExtGet(prop, fallback) {
 
 dependencies {
   implementation project(':expo-modules-core')
+  implementation 'com.facebook.react:react-android'
   implementation "org.jetbrains.kotlin:kotlin-stdlib:${getKotlinVersion()}"
 }
 
