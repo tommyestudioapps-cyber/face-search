@@ -10,6 +10,8 @@ interface WakeLockNativeModule {
   hasFullGalleryPermission?(): boolean;
   hasAnyGalleryPermission?(): boolean;
   clearRevivalNotification?(): boolean;
+  syncGuardianProgress?(processed: number, total: number): boolean;
+  stopGuardian?(): boolean;
   addListener?(eventName: string, listener: (event: { action: string }) => void): { remove: () => void };
 }
 
@@ -138,6 +140,24 @@ export const WakeLock = {
     if (!m || typeof m.clearRevivalNotification !== 'function') return false;
     try {
       return m.clearRevivalNotification();
+    } catch {
+      return false;
+    }
+  },
+  syncGuardianProgress(processed: number, total: number): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.syncGuardianProgress !== 'function') return false;
+    try {
+      return m.syncGuardianProgress(processed, total);
+    } catch {
+      return false;
+    }
+  },
+  stopGuardian(): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.stopGuardian !== 'function') return false;
+    try {
+      return m.stopGuardian();
     } catch {
       return false;
     }

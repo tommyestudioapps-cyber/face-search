@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import {
   registerPauseHandler,
   reviveIndexingNotification,
@@ -75,6 +76,19 @@ export function startForegroundIndexing(
     activeHandle.updateCallbacks(options);
     activeHandle.wakeUp?.();
     return activeHandle;
+  }
+
+  // Android 14+ proíbe startForegroundService em background. Se o app não está
+  // visível, não iniciamos o loop: o AppState listener da Home o inicia quando a
+  // tela voltar. Isso elimina a exceção em vez de tratá-la.
+  if (options.allowServiceStart !== false) {
+    const state = AppState.currentState;
+    if (state === 'background' || state === 'inactive') {
+      console.warn(
+        `[ForegroundIndex] app não visível (${state}); adiando início da indexação para o foreground`,
+      );
+      return createInactiveHandle();
+    }
   }
 
   const maxAssets = options.maxAssets ?? DEFAULT_MAX_ASSETS;

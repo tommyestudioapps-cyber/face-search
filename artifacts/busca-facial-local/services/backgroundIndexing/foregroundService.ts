@@ -157,34 +157,62 @@ if (Platform.OS === 'android' && AppState?.addEventListener) {
 }
 
 notifee.registerForegroundService(async (notification) => {
-  // Não inicia indexação (o dono do loop continua sendo o runtime da UI).
-  // Apenas garante que o serviço tenha uma notificação visível quando o
-  // sistema o reiniciar sozinho.
-  console.warn('[ForegroundService] executor headless acionado; reexibindo notificação.');
+  console.warn('[ForegroundService] executor headless acionado; garantindo notificação e loop.');
   try {
     if (notification) {
       await notifee.displayNotification(notification);
     } else {
       await reviveIndexingNotification('headless');
     }
+    const { getActiveForegroundIndexing, startForegroundIndexing } = await import('./foregroundIndexLoop');
+    if (!getActiveForegroundIndexing()?.isRunning()) {
+      console.warn('[ForegroundService] Retomando loop de indexação em background (pós-swipe)...');
+      startForegroundIndexing();
+    }
   } catch (error) {
     console.warn('[ForegroundService] falha no executor headless', error);
   }
 });
 
-// Registra ouvinte nativo para desbloqueio da tela (USER_PRESENT) e carregador (POWER_CONNECTED)
-if (typeof WakeLock.addDeviceWakeListener === 'function') {
-  WakeLock.addDeviceWakeListener((event) => {
-    console.warn('[ForegroundService] Evento de desbloqueio/carregador nativo recebido:', event.action);
+// Auto-retomada quando o processo principal renasce via reactHost.start() sem MainActivity (pós-swipe)
+if (Platform.OS === 'android') {
+  setTimeout(() => {
+    if (AppState.currentState === 'active') return; // Se a UI está aberta, o index.tsx já é o dono
     void (async () => {
       try {
-        const { getActiveForegroundIndexing } = await import('./foregroundIndexLoop');
+        const { getActiveForegroundIndexing, startForegroundIndexing } = await import('./foregroundIndexLoop');
+        if (getActiveForegroundIndexing()?.isRunning()) return;
+        const { faceSearchRepository } = await import('@/services/faceSearch/repository');
+        const { loadBackgroundIndexCursor } = await import('./checkpoint');
+        const [state, checkpoint] = await Promise.all([
+          faceSearchRepository.getBackgroundIndexState(),
+          loadBackgroundIndexCursor(),
+        ]);
+        if (state.status === 'running' || Boolean(checkpoint)) {
+          console.warn('[ForegroundService] Boot em background detectado com indexação pendente; retomando loop...');
+          startForegroundIndexing();
+        }
+      } catch (err) {
+        console.warn('[ForegroundService] Falha na checagem de auto-retomada em background:', err);
+      }
+    })();
+  }, 1500);
+}
+
+// Registra ouvinte nativo para desbloqueio da tela (USER_PRESENT), carregador (POWER_CONNECTED) e revive pós-swipe
+if (typeof WakeLock.addDeviceWakeListener === 'function') {
+  WakeLock.addDeviceWakeListener((event) => {
+    console.warn('[ForegroundService] Evento de wake/revive nativo recebido:', event.action);
+    void (async () => {
+      try {
+        const { getActiveForegroundIndexing, startForegroundIndexing } = await import('./foregroundIndexLoop');
         const active = getActiveForegroundIndexing();
         if (active && active.isRunning()) {
           await reviveIndexingNotification('wake');
           active.wakeUp?.();
         } else {
           await reviveIndexingNotification('wake-sem-loop');
+          startForegroundIndexing();
         }
       } catch (err) {
         console.warn('[ForegroundService] Erro ao retomar indexação via wake listener:', err);
@@ -266,6 +294,7 @@ export async function startIndexingForeground(): Promise<void> {
   lastNotificationUpdateAt = 0;
   await ensureIndexingChannel();
   WakeLock.clearRevivalNotification?.();
+  WakeLock.syncGuardianProgress?.(lastProcessedAssets, lastTotalAssets ?? 0);
   // Wake lock de 10 min, renovado a cada 5 min se a indexação ainda estiver ativa.
   // Sem isso, a CPU suspende (mWakefulness=Dozing) e os timers JS congelam.
   const acquired = WakeLock.acquire(10 * 60 * 1000);
@@ -332,6 +361,7 @@ export async function updateIndexingProgress(
     return;
   }
   lastNotificationUpdateAt = now;
+  WakeLock.syncGuardianProgress?.(processedAssets, totalAssets ?? 0);
 
   // Renova o wake lock apenas a cada emissão de notificação (a cada 3s).
   WakeLock.acquire(10 * 60 * 1000);
@@ -390,6 +420,7 @@ export async function stopIndexingForeground(): Promise<void> {
   lastNotificationUpdateAt = 0;
   lastProcessedAssets = 0;
   lastTotalAssets = null;
+  WakeLock.stopGuardian?.();
   WakeLock.release();
   console.warn('[A12Diag] stopIndexingForeground iniciando');
   try {

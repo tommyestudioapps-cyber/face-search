@@ -4,7 +4,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.Service
 import android.content.BroadcastReceiver
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -23,11 +27,171 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 
 class DeviceWakeReceiver : BroadcastReceiver() {
+  companion object {
+    const val ACTION_GUARDIAN_REVIVE = "expo.modules.wakelock.ACTION_GUARDIAN_REVIVE"
+  }
+
   override fun onReceive(context: Context, intent: Intent?) {
     val action = intent?.action ?: return
     android.util.Log.i("DeviceWakeReceiver", "[DeviceWake] Evento do sistema recebido: $action")
-    if (action == Intent.ACTION_USER_PRESENT || action == Intent.ACTION_POWER_CONNECTED) {
+    if (
+      action == Intent.ACTION_USER_PRESENT ||
+      action == Intent.ACTION_POWER_CONNECTED ||
+      action == ACTION_GUARDIAN_REVIVE
+    ) {
       WakeLockModule.onDeviceWakeEvent(context, action)
+    }
+  }
+}
+
+/**
+ * Roda no processo isolado ":keepalive".
+ * Quando o usuário fecha o app nos Recentes, o ColorOS aplica o-kill no PID principal,
+ * mas este processo permanece vivo, mantendo a notificação firme na barra de status
+ * e religando o processo principal imediatamente sem o buraco de 18 segundos.
+ */
+class IndexingGuardianService : Service() {
+  companion object {
+    const val ACTION_START_OR_UPDATE = "expo.modules.wakelock.GUARDIAN_UPDATE"
+    const val ACTION_STOP = "expo.modules.wakelock.GUARDIAN_STOP"
+    const val EXTRA_PROCESSED = "processed"
+    const val EXTRA_TOTAL = "total"
+    const val GUARDIAN_CHANNEL_ID = "search-face-indexing-v2"
+    const val GUARDIAN_NOTIFICATION_ID = 1000747637
+  }
+
+  private var lastProcessed: Int = 0
+  private var lastTotal: Int = 0
+  private var isStopping: Boolean = false
+  private val handler = Handler(Looper.getMainLooper())
+
+  override fun onBind(intent: Intent?): IBinder? = null
+
+  private fun buildProgressNotification(processed: Int, total: Int): Notification {
+    val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val channel = NotificationChannel(
+        GUARDIAN_CHANNEL_ID,
+        "Preparação do índice",
+        NotificationManager.IMPORTANCE_DEFAULT
+      ).apply {
+        description = "Progresso da preparação local de busca facial"
+        setShowBadge(true)
+        enableVibration(false)
+        setSound(null, null)
+      }
+      nm.createNotificationChannel(channel)
+    }
+
+    val launch = packageManager.getLaunchIntentForPackage(packageName)
+    val piFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+      (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+    val pendingIntent = launch?.let { PendingIntent.getActivity(this, 0, it, piFlags) }
+
+    val pct = if (total > 0) ((processed.coerceAtMost(total) * 100) / total) else 0
+    val body = if (total > 0) {
+      "Progresso: $pct% concluído ($processed/$total)"
+    } else {
+      "Preparando fotos da galeria em segundo plano..."
+    }
+
+    val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      Notification.Builder(this, GUARDIAN_CHANNEL_ID)
+    } else {
+      @Suppress("DEPRECATION")
+      Notification.Builder(this)
+    }
+
+    val icon = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.stat_notify_sync
+    builder
+      .setSmallIcon(icon)
+      .setContentTitle("Criando catálogo local")
+      .setContentText(body)
+      .setProgress(100, pct, total <= 0)
+      .setOngoing(true)
+      .setOnlyAlertOnce(true)
+
+    if (pendingIntent != null) {
+      builder.setContentIntent(pendingIntent)
+    }
+    return builder.build()
+  }
+
+  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    val action = intent?.action
+    if (action == ACTION_STOP) {
+      isStopping = true
+      try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+          stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+          @Suppress("DEPRECATION")
+          stopForeground(true)
+        }
+      } catch (_: Throwable) {}
+      stopSelf()
+      return START_NOT_STICKY
+    }
+
+    isStopping = false
+    if (intent != null && intent.hasExtra(EXTRA_PROCESSED)) {
+      lastProcessed = intent.getIntExtra(EXTRA_PROCESSED, lastProcessed)
+      lastTotal = intent.getIntExtra(EXTRA_TOTAL, lastTotal)
+    }
+
+    try {
+      val notification = buildProgressNotification(lastProcessed, lastTotal)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        startForeground(
+          GUARDIAN_NOTIFICATION_ID,
+          notification,
+          android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        )
+      } else {
+        startForeground(GUARDIAN_NOTIFICATION_ID, notification)
+      }
+    } catch (t: Throwable) {
+      android.util.Log.w("IndexingGuardian", "Falha em startForeground no guardiao", t)
+    }
+
+    return START_STICKY
+  }
+
+  override fun onTaskRemoved(rootIntent: Intent?) {
+    super.onTaskRemoved(rootIntent)
+    if (isStopping) return
+    android.util.Log.w("IndexingGuardian", "[Guardian] Swipe nos Recentes detectado! Blindando notificacao e acordando processo principal...")
+    try {
+      val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+      nm.notify(GUARDIAN_NOTIFICATION_ID, buildProgressNotification(lastProcessed, lastTotal))
+
+      // Reafirma em 100ms e 350ms (logo após o o-kill matar o PID principal) e acorda o processo principal via Broadcast
+      handler.postDelayed({
+        if (!isStopping) {
+          try {
+            startForeground(GUARDIAN_NOTIFICATION_ID, buildProgressNotification(lastProcessed, lastTotal))
+          } catch (_: Throwable) {
+            nm.notify(GUARDIAN_NOTIFICATION_ID, buildProgressNotification(lastProcessed, lastTotal))
+          }
+        }
+      }, 100L)
+
+      handler.postDelayed({
+        if (!isStopping) {
+          try {
+            nm.notify(GUARDIAN_NOTIFICATION_ID, buildProgressNotification(lastProcessed, lastTotal))
+            val wakeIntent = Intent(this, DeviceWakeReceiver::class.java).apply {
+              action = DeviceWakeReceiver.ACTION_GUARDIAN_REVIVE
+              setPackage(packageName)
+            }
+            sendBroadcast(wakeIntent)
+          } catch (e: Throwable) {
+            android.util.Log.w("IndexingGuardian", "[Guardian] Falha ao enviar broadcast de revive", e)
+          }
+        }
+      }, 350L)
+    } catch (t: Throwable) {
+      android.util.Log.w("IndexingGuardian", "[Guardian] Erro em onTaskRemoved", t)
     }
   }
 }
@@ -54,6 +218,18 @@ class WakeLockModule : Module() {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(REVIVAL_NOTIFICATION_ID)
       } catch (_: Throwable) {
+      }
+    }
+
+    @JvmStatic
+    fun isGuardianNotificationVisible(context: Context): Boolean {
+      return try {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.activeNotifications.any { it.id == IndexingGuardianService.GUARDIAN_NOTIFICATION_ID }
+      } catch (t: Throwable) {
+        android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Falha ao consultar notificações ativas", t)
+        false
       }
     }
 
@@ -130,11 +306,16 @@ class WakeLockModule : Module() {
             clearRevivalNotification(appCtx)
           } catch (t: Throwable) {
             android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Falha ao enviar evento para JS", t)
-            postRevivalNotification(appCtx)
           }
-        } else {
-          // Processo reiniciado só pelo receiver: não há JS para reexibir a notificação.
+        }
+
+        // Dono único do card é o Guardião. A notificação de retomada só entra
+        // quando não há NENHUM card na barra — nunca por suposição.
+        if (!isGuardianNotificationVisible(appCtx)) {
+          android.util.Log.i("DeviceWakeReceiver", "[DeviceWake] Sem card ativo; postando notificação de retomada")
           postRevivalNotification(appCtx)
+        } else {
+          android.util.Log.i("DeviceWakeReceiver", "[DeviceWake] Guardião já exibe card; nada a postar")
         }
       } catch (t: Throwable) {
         android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Erro ao tratar evento de wake", t)
@@ -359,6 +540,39 @@ class WakeLockModule : Module() {
       try {
         val ctx = appContext.reactContext?.applicationContext
         if (ctx != null) clearRevivalNotification(ctx)
+        true
+      } catch (_: Throwable) {
+        false
+      }
+    }
+
+    Function("syncGuardianProgress") { processed: Double, total: Double ->
+      try {
+        val ctx = appContext.reactContext?.applicationContext ?: return@Function false
+        val intent = Intent(ctx, IndexingGuardianService::class.java).apply {
+          action = IndexingGuardianService.ACTION_START_OR_UPDATE
+          putExtra(IndexingGuardianService.EXTRA_PROCESSED, processed.toInt())
+          putExtra(IndexingGuardianService.EXTRA_TOTAL, total.toInt())
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          ctx.startForegroundService(intent)
+        } else {
+          ctx.startService(intent)
+        }
+        true
+      } catch (t: Throwable) {
+        android.util.Log.w("WakeLockModule", "Falha ao sincronizar IndexingGuardianService", t)
+        false
+      }
+    }
+
+    Function("stopGuardian") {
+      try {
+        val ctx = appContext.reactContext?.applicationContext ?: return@Function false
+        val intent = Intent(ctx, IndexingGuardianService::class.java).apply {
+          action = IndexingGuardianService.ACTION_STOP
+        }
+        ctx.startService(intent)
         true
       } catch (_: Throwable) {
         false
