@@ -1,9 +1,46 @@
 const {
   withAndroidManifest,
+  withMainApplication,
 } = require('expo/config-plugins');
 
 const SERVICE_NAME = 'app.notifee.core.ForegroundService';
 const TOOLS_NS = 'http://schemas.android.com/tools';
+
+const BOOT_MARKER = '// BGD_REACT_HOST_BOOT';
+
+function withBackgroundReactHostBootstrap(config) {
+  return withMainApplication(config, (cfg) => {
+    let contents = cfg.modResults.contents;
+
+    if (contents.includes(BOOT_MARKER)) {
+      return cfg;
+    }
+
+    const marker = 'ApplicationLifecycleDispatcher.onApplicationCreate(this)';
+    const index = contents.indexOf(marker);
+    if (index === -1) {
+      throw new Error(
+        'withBackgroundReactHostBootstrap: fim de onCreate() não encontrado em MainApplication',
+      );
+    }
+
+    const insertAt = index + marker.length;
+    const snippet = `
+    ${BOOT_MARKER}
+    // Sobe o runtime JS mesmo quando o processo nasce por um Service (sem Activity).
+    try {
+      reactHost.start()
+      android.util.Log.i("MainApplication", "[BGD] reactHost.start() solicitado")
+    } catch (t: Throwable) {
+      android.util.Log.w("MainApplication", "[BGD] Falha ao iniciar reactHost", t)
+    }
+`;
+
+    contents = contents.slice(0, insertAt) + snippet + contents.slice(insertAt);
+    cfg.modResults.contents = contents;
+    return cfg;
+  });
+}
 
 module.exports = function withNotifeeForegroundService(config) {
   config = withAndroidManifest(config, async (config) => {
@@ -98,5 +135,6 @@ module.exports = function withNotifeeForegroundService(config) {
     return config;
   });
 
+  config = withBackgroundReactHostBootstrap(config);
   return config;
 };
