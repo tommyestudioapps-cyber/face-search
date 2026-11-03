@@ -36,28 +36,13 @@ export async function runIndexBatchHeadless(): Promise<void> {
 }
 
 async function runHeadlessBatch(): Promise<void> {
-  console.warn('[Headless] lote iniciado');
-
-  let ownsCard = false;
+  console.warn('[Headless] task iniciada; rodando loop de indexação');
   try {
-    await startIndexingForeground();
-    ownsCard = true;
-    WakeLock.clearRevivalNotification?.();
-    console.warn('[Headless] card de progresso assumido');
+    const { runForegroundIndexLoopInternal } = await import('./foregroundIndexLoop');
+    await runForegroundIndexLoopInternal({ allowServiceStart: false });
+    console.warn('[Headless] loop headless encerrado');
   } catch (error) {
-    console.warn('[Headless] não foi possível assumir o card; seguindo sem ele', error);
-  }
-
-  try {
-    await runIndexBatchHeadless();
-  } finally {
-    if (ownsCard) {
-      try {
-        await stopIndexingForeground();
-      } catch (error) {
-        console.warn('[Headless] falha ao encerrar card', error);
-      }
-    }
+    console.warn('[Headless] loop headless falhou', error);
   }
 }
 

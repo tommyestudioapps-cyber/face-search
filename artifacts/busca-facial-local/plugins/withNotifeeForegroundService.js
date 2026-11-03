@@ -35,6 +35,11 @@ function withBackgroundReactHostBootstrap(config) {
     } catch (t: Throwable) {
       android.util.Log.w("MainApplication", "[BGD] Falha ao iniciar reactHost", t)
     }
+    try {
+      expo.modules.wakelock.BootHeadlessDispatcher.schedule(this)
+    } catch (t: Throwable) {
+      android.util.Log.w("MainApplication", "[BGD] Falha ao agendar dispatcher headless", t)
+    }
 `;
 
     contents = contents.slice(0, insertAt) + snippet + contents.slice(insertAt);
