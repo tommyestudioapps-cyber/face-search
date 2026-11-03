@@ -1,6 +1,7 @@
 const {
   withAndroidManifest,
   withMainApplication,
+  withMainActivity,
 } = require('expo/config-plugins');
 
 const SERVICE_NAME = 'app.notifee.core.ForegroundService';
@@ -37,6 +38,40 @@ function withBackgroundReactHostBootstrap(config) {
 `;
 
     contents = contents.slice(0, insertAt) + snippet + contents.slice(insertAt);
+    cfg.modResults.contents = contents;
+    return cfg;
+  });
+}
+
+const KEEPALIVE_MARKER = '// BGD_KEEPALIVE_GUARD';
+
+function withKeepAliveActivityGuard(config) {
+  return withMainActivity(config, (cfg) => {
+    let contents = cfg.modResults.contents;
+
+    if (contents.includes(KEEPALIVE_MARKER)) {
+      return cfg;
+    }
+
+    const method = `
+  override fun onDestroy() {
+    ${KEEPALIVE_MARKER}
+    if (expo.modules.wakelock.WakeLockModule.isKeepAliveActive()) {
+      android.util.Log.w("MainActivity", "[KeepAlive] Preservando runtime JS durante onDestroy")
+      return
+    }
+    android.util.Log.i("MainActivity", "[KeepAlive] liberado; destruindo normalmente")
+    super.onDestroy()
+  }
+`;
+
+    const lastBrace = contents.lastIndexOf('}');
+    if (lastBrace === -1) {
+      throw new Error('withKeepAliveActivityGuard: fim da classe não encontrado');
+    }
+
+    contents =
+      contents.slice(0, lastBrace) + method + contents.slice(lastBrace);
     cfg.modResults.contents = contents;
     return cfg;
   });
@@ -136,5 +171,6 @@ module.exports = function withNotifeeForegroundService(config) {
   });
 
   config = withBackgroundReactHostBootstrap(config);
+  config = withKeepAliveActivityGuard(config);
   return config;
 };

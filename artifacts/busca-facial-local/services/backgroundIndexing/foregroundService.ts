@@ -322,7 +322,7 @@ export async function startIndexingForeground(): Promise<void> {
         smallIcon: 'ic_notification',
         asForegroundService: true,
         foregroundServiceTypes: [AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_DATA_SYNC],
-        ongoing: true,
+        ongoing: false,
         onlyAlertOnce: true,
         progress: {
           max: 100,
@@ -392,7 +392,7 @@ export async function updateIndexingProgress(
       smallIcon: 'ic_notification',
       asForegroundService: true,
       foregroundServiceTypes: [AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_DATA_SYNC],
-      ongoing: true,
+      ongoing: false,
       onlyAlertOnce: true,
       progress: {
         max: 100,
