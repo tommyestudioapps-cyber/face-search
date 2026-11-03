@@ -6,6 +6,10 @@ if (require('react-native').Platform.OS !== 'web') {
     require('./services/backgroundIndexing/foregroundService');
     require('./services/backgroundIndexing/backgroundIndexTask');
     require('./services/backgroundIndexing/headlessBatch');
+
+    // Fase 5: se este processo nasceu por serviço (sem Activity), retomar o lote.
+    void require('./services/backgroundIndexing/headlessBatch')
+      .maybeResumeIndexingOnBoot?.();
   } catch (error) {
     // Older dev clients do not contain the new native modules until rebuilt.
     console.error('[BackgroundIndex] Native task unavailable; rebuild the app.', error);
