@@ -157,20 +157,31 @@ if (Platform.OS === 'android' && AppState?.addEventListener) {
 }
 
 notifee.registerForegroundService(async (notification) => {
-  console.warn('[ForegroundService] executor headless acionado; garantindo notificação e loop.');
+  console.warn('[ForegroundService] executor headless acionado; reexibindo notificação.');
   try {
     if (notification) {
       await notifee.displayNotification(notification);
     } else {
       await reviveIndexingNotification('headless');
     }
-    const { getActiveForegroundIndexing, startForegroundIndexing } = await import('./foregroundIndexLoop');
-    if (!getActiveForegroundIndexing()?.isRunning()) {
-      console.warn('[ForegroundService] Retomando loop de indexação em background (pós-swipe)...');
-      startForegroundIndexing();
-    }
   } catch (error) {
     console.warn('[ForegroundService] falha no executor headless', error);
+  }
+
+  // Retomada sem Activity: só quando o app NÃO está na tela e nenhum loop está ativo.
+  try {
+    if (AppState.currentState === 'active') {
+      return;
+    }
+    const { getActiveForegroundIndexing } = await import('./foregroundIndexLoop');
+    if (getActiveForegroundIndexing()?.isRunning()) {
+      return;
+    }
+    const { runIndexBatchHeadless } = await import('./headlessBatch');
+    console.warn('[ForegroundService] executor: retomando lote sem Activity');
+    void runIndexBatchHeadless();
+  } catch (error) {
+    console.warn('[ForegroundService] falha ao retomar lote pelo executor', error);
   }
 });
 
@@ -294,7 +305,6 @@ export async function startIndexingForeground(): Promise<void> {
   lastNotificationUpdateAt = 0;
   await ensureIndexingChannel();
   WakeLock.clearRevivalNotification?.();
-  WakeLock.syncGuardianProgress?.(lastProcessedAssets, lastTotalAssets ?? 0);
   // Wake lock de 10 min, renovado a cada 5 min se a indexação ainda estiver ativa.
   // Sem isso, a CPU suspende (mWakefulness=Dozing) e os timers JS congelam.
   const acquired = WakeLock.acquire(10 * 60 * 1000);
@@ -361,7 +371,6 @@ export async function updateIndexingProgress(
     return;
   }
   lastNotificationUpdateAt = now;
-  WakeLock.syncGuardianProgress?.(processedAssets, totalAssets ?? 0);
 
   // Renova o wake lock apenas a cada emissão de notificação (a cada 3s).
   WakeLock.acquire(10 * 60 * 1000);
@@ -420,7 +429,6 @@ export async function stopIndexingForeground(): Promise<void> {
   lastNotificationUpdateAt = 0;
   lastProcessedAssets = 0;
   lastTotalAssets = null;
-  WakeLock.stopGuardian?.();
   WakeLock.release();
   console.warn('[A12Diag] stopIndexingForeground iniciando');
   try {

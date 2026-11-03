@@ -1,10 +1,8 @@
 const {
   withAndroidManifest,
-  withMainApplication,
 } = require('expo/config-plugins');
 
 const SERVICE_NAME = 'app.notifee.core.ForegroundService';
-const GUARDIAN_SERVICE_NAME = 'expo.modules.wakelock.IndexingGuardianService';
 const TOOLS_NS = 'http://schemas.android.com/tools';
 
 module.exports = function withNotifeeForegroundService(config) {
@@ -16,7 +14,7 @@ module.exports = function withNotifeeForegroundService(config) {
     if (!manifestRoot.$) manifestRoot.$ = {};
     manifestRoot.$['xmlns:tools'] = TOOLS_NS;
 
-    // 2. Localizar/criar o <service> do notifee e do Guardião (:keepalive)
+    // 2. Localizar/criar o <service> do notifee
     const app = manifestRoot.application?.[0];
     if (!app) {
       throw new Error(
@@ -44,22 +42,6 @@ module.exports = function withNotifeeForegroundService(config) {
           'android:stopWithTask': 'false',
         },
       });
-    }
-
-    const existingGuardian = app.service.find(
-      (s) => s.$?.['android:name'] === GUARDIAN_SERVICE_NAME,
-    );
-    const guardianAttrs = {
-      'android:name': GUARDIAN_SERVICE_NAME,
-      'android:process': ':keepalive',
-      'android:foregroundServiceType': 'dataSync',
-      'android:exported': 'false',
-      'android:stopWithTask': 'false',
-    };
-    if (existingGuardian) {
-      existingGuardian.$ = { ...existingGuardian.$, ...guardianAttrs };
-    } else {
-      app.service.push({ $: guardianAttrs });
     }
 
     const HEADLESS_SERVICE = 'expo.modules.wakelock.IndexingHeadlessService';
@@ -113,29 +95,6 @@ module.exports = function withNotifeeForegroundService(config) {
       existingAdMobMeta.$['android:value'] = PROD_ADMOB_APP_ID;
     }
 
-    return config;
-  });
-
-  // 5. Garantir que quando o processo principal subir em background (após swipe nos Recentes,
-  // sem MainActivity), a VM JS (mqt_v_js) seja iniciada. Ignora o processo :keepalive.
-  config = withMainApplication(config, (config) => {
-    let contents = config.modResults.contents;
-    if (!contents.includes('isKeepAliveProcess')) {
-      contents = contents.replace(
-        'ApplicationLifecycleDispatcher.onApplicationCreate(this)',
-        `val currentProcessName = if (android.os.Build.VERSION.SDK_INT >= 28) android.app.Application.getProcessName() else ""
-    val isKeepAliveProcess = currentProcessName.endsWith(":keepalive")
-    if (!isKeepAliveProcess) {
-      ApplicationLifecycleDispatcher.onApplicationCreate(this)
-      try {
-        reactHost.start()
-      } catch (e: Throwable) {
-        android.util.Log.w("MainApplication", "Falha ao iniciar ReactHost no boot", e)
-      }
-    }`
-      );
-      config.modResults.contents = contents;
-    }
     return config;
   });
 

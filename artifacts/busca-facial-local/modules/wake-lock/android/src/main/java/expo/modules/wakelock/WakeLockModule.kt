@@ -273,23 +273,13 @@ class WakeLockModule : Module() {
 
     @JvmStatic
     fun resumeFromNotification(context: Context) {
-      // Isenção "ação do usuário na notificação": aqui o app está temporariamente
-      // liberado para iniciar serviços, mesmo sem Activity visível.
+      // Isenção "ação do usuário na notificação": permite iniciar serviço sem Activity.
       try {
-        // 1. O Guardião passa a ser o dono do card (com os contadores persistidos).
-        IndexingGuardianService.setVisible(context, true)
-        val guardian = Intent(context, IndexingGuardianService::class.java).apply {
-          action = IndexingGuardianService.ACTION_START_OR_UPDATE
-        }
-        context.startService(guardian)
-
-        // 2. O lote roda sem Activity.
         val headless = Intent(context, IndexingHeadlessService::class.java)
         context.startService(headless)
-
-        android.util.Log.i("DeviceWakeReceiver", "[DeviceWake] Retomada solicitada pelo toque")
+        android.util.Log.i("DeviceWakeReceiver", "[DeviceWake] Retomada solicitada; headless iniciado")
       } catch (t: Throwable) {
-        android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Falha ao retomar pelo toque", t)
+        android.util.Log.w("DeviceWakeReceiver", "[DeviceWake] Falha ao iniciar headless pelo toque", t)
       }
     }
 
