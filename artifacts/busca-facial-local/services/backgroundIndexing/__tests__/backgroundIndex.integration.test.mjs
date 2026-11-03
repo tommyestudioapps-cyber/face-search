@@ -409,14 +409,45 @@ test('reinicia geração abandonada antes do primeiro checkpoint sem remover fot
   );
 });
 
-test('lote não aborta uma geração manual ativa sem checkpoint', async () => {
-  const generation = await repository.beginScan('foreground');
+test('lote aborta reserva ativa sem checkpoint via forceAbortActiveScan e inicia nova geração', async () => {
+  const previousGeneration = await repository.beginScan('foreground');
+  assert.equal(await repository.getActiveScanGeneration(), previousGeneration);
+  assert.equal(await loadBackgroundIndexCursor(), undefined);
+
+  let forceAbortCalled = false;
+  const originalForceAbort = repository.forceAbortActiveScan.bind(repository);
+  repository.forceAbortActiveScan = async () => {
+    forceAbortCalled = true;
+    return originalForceAbort();
+  };
+
+  let newGenerationCreated = null;
+  const originalBeginScan = repository.beginScan.bind(repository);
+  repository.beginScan = async (...args) => {
+    const gen = await originalBeginScan(...args);
+    newGenerationCreated = gen;
+    return gen;
+  };
+
   try {
-    await runBackgroundIndexBatch();
-    assert.equal(await repository.getActiveScanGeneration(), generation);
-    assert.equal(await repository.claimScan(generation, 'background'), false);
+    const outcome = await runBackgroundIndexBatch();
+
+    // 1. O lote NÃO retorna 'blocked'
+    assert.notEqual(outcome.status, 'blocked');
+
+    // 2. forceAbortActiveScan foi explicitamente chamado para limpar a reserva zumbi
+    assert.equal(forceAbortCalled, true);
+
+    // 3. Uma nova geração foi criada e é diferente da geração anterior
+    assert.ok(newGenerationCreated !== null);
+    assert.notEqual(newGenerationCreated, previousGeneration);
+
+    // 4. A nova varredura prosseguiu e completou
+    assert.equal(outcome.status, 'completed');
+    assert.equal(await repository.getActiveScanGeneration(), null);
   } finally {
-    await repository.abortScan(generation, 'foreground');
+    repository.forceAbortActiveScan = originalForceAbort;
+    repository.beginScan = originalBeginScan;
   }
 });
 

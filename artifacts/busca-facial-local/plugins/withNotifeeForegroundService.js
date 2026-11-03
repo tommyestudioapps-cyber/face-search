@@ -35,11 +35,7 @@ function withBackgroundReactHostBootstrap(config) {
     } catch (t: Throwable) {
       android.util.Log.w("MainApplication", "[BGD] Falha ao iniciar reactHost", t)
     }
-    try {
-      expo.modules.wakelock.BootHeadlessDispatcher.schedule(this)
-    } catch (t: Throwable) {
-      android.util.Log.w("MainApplication", "[BGD] Falha ao agendar dispatcher headless", t)
-    }
+    // O gatilho de headless agora é responsabilidade do IndexadorForegroundService.
 `;
 
     contents = contents.slice(0, insertAt) + snippet + contents.slice(insertAt);
@@ -127,6 +123,18 @@ module.exports = function withNotifeeForegroundService(config) {
         $: {
           'android:name': HEADLESS_SERVICE,
           'android:exported': 'false',
+        },
+      });
+    }
+
+    const INDEXER_SERVICE = 'expo.modules.wakelock.IndexadorForegroundService';
+    if (!app.service.some((s) => s.$?.['android:name'] === INDEXER_SERVICE)) {
+      app.service.push({
+        $: {
+          'android:name': INDEXER_SERVICE,
+          'android:exported': 'false',
+          'android:foregroundServiceType': 'dataSync',
+          'android:stopWithTask': 'false',
         },
       });
     }

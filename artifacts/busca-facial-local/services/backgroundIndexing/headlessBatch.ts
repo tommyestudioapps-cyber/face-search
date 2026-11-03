@@ -24,14 +24,23 @@ export async function runIndexBatchHeadless(): Promise<void> {
       timeBudgetMs: 120_000,
       trigger: 'explicit',
       onPartialProgress: (processed, total) => {
+        if (WakeLock.isIndexerPaused()) {
+          console.warn('[Headless] pausa solicitada; interrompendo lote');
+          throw new Error('paused-by-user');
+        }
         void updateIndexingProgress(processed, total ?? 0);
       },
     });
     console.warn('[Headless] lote concluído');
   } catch (error) {
-    console.warn('[Headless] lote falhou', error);
+    if (error instanceof Error && error.message === 'paused-by-user') {
+      console.warn('[Headless] lote interrompido por pausa');
+    } else {
+      console.warn('[Headless] lote falhou', error);
+    }
   } finally {
     batchRunning = false;
+    WakeLock.notifyHeadlessDone();
   }
 }
 
@@ -43,6 +52,8 @@ async function runHeadlessBatch(): Promise<void> {
     console.warn('[Headless] loop headless encerrado');
   } catch (error) {
     console.warn('[Headless] loop headless falhou', error);
+  } finally {
+    WakeLock.notifyHeadlessDone();
   }
 }
 

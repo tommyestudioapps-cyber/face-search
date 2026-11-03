@@ -10,6 +10,11 @@ interface WakeLockNativeModule {
   hasFullGalleryPermission?(): boolean;
   hasAnyGalleryPermission?(): boolean;
   clearRevivalNotification?(): boolean;
+  startIndexer?(): boolean;
+  updateIndexerProgress?(processed: number, total: number): boolean;
+  notifyHeadlessDone?(): boolean;
+  stopIndexer?(): boolean;
+  isIndexerPaused?(): boolean;
   addListener?(eventName: string, listener: (event: { action: string }) => void): { remove: () => void };
 }
 
@@ -141,6 +146,31 @@ export const WakeLock = {
     } catch {
       return false;
     }
+  },
+  startIndexer(): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.startIndexer !== 'function') return false;
+    try { return m.startIndexer(); } catch { return false; }
+  },
+  updateIndexerProgress(processed: number, total: number): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.updateIndexerProgress !== 'function') return false;
+    try { return m.updateIndexerProgress(processed, total); } catch { return false; }
+  },
+  notifyHeadlessDone(): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.notifyHeadlessDone !== 'function') return false;
+    try { return m.notifyHeadlessDone(); } catch { return false; }
+  },
+  stopIndexer(): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.stopIndexer !== 'function') return false;
+    try { return m.stopIndexer(); } catch { return false; }
+  },
+  isIndexerPaused(): boolean {
+    const m = getNativeModule();
+    if (!m || typeof m.isIndexerPaused !== 'function') return false;
+    try { return m.isIndexerPaused(); } catch { return false; }
   },
   isAvailable(): boolean {
     return getNativeModule() !== null;

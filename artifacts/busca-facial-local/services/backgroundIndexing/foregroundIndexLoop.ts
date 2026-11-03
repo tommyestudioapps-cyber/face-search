@@ -11,6 +11,7 @@ import {
 } from './batchRunner';
 import { getBackgroundIndexConsent } from './consent';
 import { indexCoordinator } from './indexCoordinator';
+import { WakeLock } from '../../modules/wake-lock';
 
 export interface ForegroundIndexingHandle {
   promise: Promise<void>;
@@ -150,6 +151,10 @@ export function startForegroundIndexing(
             abortHungBatch = abort;
           },
           onPartialProgress: (processedAssets, totalAssets) => {
+            if (WakeLock.isIndexerPaused()) {
+              console.warn('[Indexer] pausa solicitada pelo card; encerrando lote');
+              cancelled = true;
+            }
             inactiveSteps = 0;
             consecutiveBatchErrors = 0;
             latestProgress = { processedAssets, totalAssets };

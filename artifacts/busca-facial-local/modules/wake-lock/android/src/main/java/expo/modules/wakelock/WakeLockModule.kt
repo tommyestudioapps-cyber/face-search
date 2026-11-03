@@ -752,5 +752,50 @@ class WakeLockModule : Module() {
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
       }
     }
+
+    Function("startIndexer") {
+      val ctx = appContext.reactContext ?: return@Function false
+      val intent = Intent(ctx, IndexadorForegroundService::class.java).apply {
+        action = IndexadorForegroundService.ACTION_START
+      }
+      try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(intent) else ctx.startService(intent)
+        true
+      } catch (t: Throwable) {
+        android.util.Log.w("WakeLockModule", "startIndexer falhou", t)
+        false
+      }
+    }
+
+    Function("updateIndexerProgress") { processed: Int, total: Int ->
+      val ctx = appContext.reactContext ?: return@Function false
+      ctx.startService(Intent(ctx, IndexadorForegroundService::class.java).apply {
+        action = IndexadorForegroundService.ACTION_UPDATE_PROGRESS
+        putExtra(IndexadorForegroundService.EXTRA_PROCESSED, processed)
+        putExtra(IndexadorForegroundService.EXTRA_TOTAL, total)
+      })
+      true
+    }
+
+    Function("notifyHeadlessDone") {
+      val ctx = appContext.reactContext ?: return@Function false
+      ctx.startService(Intent(ctx, IndexadorForegroundService::class.java).apply {
+        action = IndexadorForegroundService.ACTION_HEADLESS_DONE
+      })
+      true
+    }
+
+    Function("stopIndexer") {
+      val ctx = appContext.reactContext ?: return@Function false
+      ctx.startService(Intent(ctx, IndexadorForegroundService::class.java).apply {
+        action = IndexadorForegroundService.ACTION_STOP
+      })
+      true
+    }
+
+    Function("isIndexerPaused") {
+      val ctx = appContext.reactContext ?: return@Function false
+      IndexadorForegroundService.isPauseRequested(ctx)
+    }
   }
 }

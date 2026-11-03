@@ -2,19 +2,24 @@ import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 
 const platform = { OS: 'android' };
-let displayNotification = async () => {};
 let acquireCalls = 0;
 let releaseCalls = 0;
 let releaseFailure = null;
 let batteryExempt = false;
 let requestExemptionCalls = 0;
+let startIndexerCalls = 0;
+let updateProgressCalls = [];
+let stopIndexerCalls = 0;
+let isPaused = false;
 
 const notifeeMock = {
   registerForegroundService: () => {},
   onForegroundEvent: () => {},
   onBackgroundEvent: () => {},
   createChannel: async () => 'search-face-indexing',
-  displayNotification: (...args) => displayNotification(...args),
+  displayNotification: async () => {},
+  stopForegroundService: async () => {},
+  cancelNotification: async () => {},
 };
 
 const wakeLockMock = {
@@ -32,6 +37,19 @@ const wakeLockMock = {
     requestExemptionCalls += 1;
     return true;
   },
+  startIndexer: () => {
+    startIndexerCalls += 1;
+    return true;
+  },
+  updateIndexerProgress: (processed, total) => {
+    updateProgressCalls.push({ processed, total });
+    return true;
+  },
+  stopIndexer: () => {
+    stopIndexerCalls += 1;
+    return true;
+  },
+  isIndexerPaused: () => isPaused,
 };
 
 mock.module('react-native', {
@@ -64,49 +82,42 @@ mock.module(new URL('../../../modules/wake-lock/index.ts', import.meta.url), {
 
 const {
   startIndexingForeground,
-  ensureBatteryOptimizationExemptionAsked,
+  updateIndexingProgress,
+  stopIndexingForeground,
 } = await import('../foregroundService.ts');
 
 function resetMocks() {
-  displayNotification = async () => {};
   acquireCalls = 0;
   releaseCalls = 0;
   releaseFailure = null;
   batteryExempt = false;
   requestExemptionCalls = 0;
+  startIndexerCalls = 0;
+  updateProgressCalls = [];
+  stopIndexerCalls = 0;
+  isPaused = false;
 }
 
-test('libera o wake lock e permite nova inicialização após falha da notificação', async () => {
+test('startIndexingForeground adquire o wake lock e despacha o indexador nativo', async () => {
   resetMocks();
-  const notificationError = new Error('notification unavailable');
-  displayNotification = async () => {
-    throw notificationError;
-  };
-
-  await assert.rejects(
-    startIndexingForeground(),
-    (error) => error === notificationError,
-  );
-  assert.equal(releaseCalls, 1);
-
-  displayNotification = async () => {};
   await startIndexingForeground();
 
-  assert.equal(acquireCalls, 2);
-  assert.equal(releaseCalls, 1);
+  assert.equal(acquireCalls, 1);
+  assert.equal(startIndexerCalls, 1);
 });
 
-test('preserva o erro da notificação se a liberação do wake lock também falhar', async () => {
+test('updateIndexingProgress delega o progresso para o serviço nativo', async () => {
   resetMocks();
-  const notificationError = new Error('notification unavailable');
-  releaseFailure = new Error('wake lock release failed');
-  displayNotification = async () => {
-    throw notificationError;
-  };
+  await updateIndexingProgress(42, 100);
 
-  await assert.rejects(
-    startIndexingForeground(),
-    (error) => error === notificationError,
-  );
+  assert.equal(updateProgressCalls.length, 1);
+  assert.deepEqual(updateProgressCalls[0], { processed: 42, total: 100 });
+});
+
+test('stopIndexingForeground para o indexador nativo e libera o wake lock', async () => {
+  resetMocks();
+  await stopIndexingForeground();
+
+  assert.equal(stopIndexerCalls, 1);
   assert.equal(releaseCalls, 1);
 });
