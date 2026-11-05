@@ -23,6 +23,12 @@ export interface ForegroundIndexingHandle {
 
 export interface ForegroundIndexingOptions {
   allowServiceStart?: boolean;
+  /**
+   * Quem é o dono do serviço/card ao terminar. `false` no headless: o loop não
+   * pode derrubar o IndexadorForegroundService — quem encerra é o headless, e
+   * somente quando a indexação termina de fato.
+   */
+  ownsService?: boolean;
   maxAssets?: number;
   timeBudgetMs?: number;
   trigger?: 'auto' | 'explicit';
@@ -81,6 +87,7 @@ export function startForegroundIndexing(
 
   const maxAssets = options.maxAssets ?? DEFAULT_MAX_ASSETS;
   const timeBudgetMs = options.timeBudgetMs ?? DEFAULT_TIME_BUDGET_MS;
+  const ownsService = options.ownsService !== false;
 
   let cancelled = false;
   let wakeUpRequested = false;
@@ -301,11 +308,15 @@ export function startForegroundIndexing(
       console.warn('[A12Diag] finally iniciado');
       // Delay extra para garantir que updates pendentes resolveram.
       await new Promise<void>((resolve) => setTimeout(resolve, 300));
-      try {
-        await stopIndexingForeground();
-        console.warn('[A12Diag] stopIndexingForeground OK');
-      } catch (error) {
-        console.warn('[A12Diag] stopIndexingForeground falhou', error);
+      if (ownsService) {
+        try {
+          await stopIndexingForeground();
+          console.warn('[A12Diag] stopIndexingForeground OK');
+        } catch (error) {
+          console.warn('[A12Diag] stopIndexingForeground falhou', error);
+        }
+      } else {
+        console.warn('[A12Diag] ownsService=false: card permanece sob o IndexadorForegroundService');
       }
       activeHandle = null;
       console.warn('[A12Diag] loop finalizado');

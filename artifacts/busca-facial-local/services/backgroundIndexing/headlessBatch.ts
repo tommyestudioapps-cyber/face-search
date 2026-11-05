@@ -46,14 +46,28 @@ export async function runIndexBatchHeadless(): Promise<void> {
 
 async function runHeadlessBatch(): Promise<void> {
   console.warn('[Headless] task iniciada; rodando loop de indexação');
+  let completed = false;
   try {
     const { runForegroundIndexLoopInternal } = await import('./foregroundIndexLoop');
-    await runForegroundIndexLoopInternal({ allowServiceStart: false });
+    await runForegroundIndexLoopInternal({
+      allowServiceStart: false,
+      // O headless NÃO é dono do serviço: o card pertence ao IndexadorForegroundService.
+      ownsService: false,
+      onFinalOutcome: (outcome) => {
+        completed = outcome.status === 'completed';
+      },
+    });
     console.warn('[Headless] loop headless encerrado');
   } catch (error) {
     console.warn('[Headless] loop headless falhou', error);
   } finally {
-    WakeLock.notifyHeadlessDone();
+    if (completed) {
+      console.warn('[Headless] indexação concluída; encerrando serviço e card');
+      WakeLock.stopIndexer();
+    } else {
+      // Pausa, troca de contexto ou erro: o card deve continuar vivo.
+      WakeLock.notifyHeadlessDone();
+    }
   }
 }
 
