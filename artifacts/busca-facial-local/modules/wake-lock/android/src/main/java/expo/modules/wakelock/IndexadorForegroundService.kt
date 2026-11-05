@@ -124,17 +124,25 @@ class IndexadorForegroundService : Service() {
     val paused = p.getBoolean(KEY_PAUSED, false)
 
     // Obrigatório em TODO caminho, inclusive intent == null (reinício START_STICKY).
+    // specialUse: sem cota do dataSync, sem onTimeout, logo sem FGS Crashed.
+    val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+    } else {
+      0
+    }
     try {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        ServiceCompat.startForeground(
-          this, NOTIFICATION_ID, buildNotification(processed, total, paused, false),
-          ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-        )
-      } else {
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(processed, total, paused, false), 0)
-      }
+      ServiceCompat.startForeground(
+        this,
+        NOTIFICATION_ID,
+        buildNotification(processed, total, paused, false),
+        fgsType,
+      )
+      android.util.Log.i("Indexador", "[Indexer] FGS ativo type=specialUse")
     } catch (t: Throwable) {
-      android.util.Log.w("Indexador", "[Indexer] startForeground falhou", t)
+      android.util.Log.w(
+        "Indexador",
+        "[Indexer] FGS negado: ${t.javaClass.simpleName} - ${t.message}",
+      )
     }
 
     when (intent?.action) {

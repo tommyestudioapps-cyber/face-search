@@ -128,14 +128,30 @@ module.exports = function withNotifeeForegroundService(config) {
     }
 
     const INDEXER_SERVICE = 'expo.modules.wakelock.IndexadorForegroundService';
-    if (!app.service.some((s) => s.$?.['android:name'] === INDEXER_SERVICE)) {
-      app.service.push({
-        $: {
-          'android:name': INDEXER_SERVICE,
-          'android:exported': 'false',
-          'android:foregroundServiceType': 'dataSync',
-          'android:stopWithTask': 'false',
-        },
+    const SPECIAL_USE_PROP = 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE';
+    const SPECIAL_USE_SUBTYPE =
+      'Indexação facial local e geração de embeddings sobre a galeria do usuário, para busca offline; iniciada pelo usuário e limitada ao processamento das fotos.';
+
+    let indexer = app.service.find((s) => s.$?.['android:name'] === INDEXER_SERVICE);
+    if (!indexer) {
+      indexer = { $: { 'android:name': INDEXER_SERVICE } };
+      app.service.push(indexer);
+    }
+
+    // specialUse: sem cota de 6h/24h do dataSync e sem onTimeout -> sem FGS Crashed.
+    indexer.$['android:exported'] = 'false';
+    indexer.$['android:stopWithTask'] = 'false';
+    indexer.$['android:foregroundServiceType'] = 'specialUse';
+
+    if (!indexer.property) indexer.property = [];
+    const existingProp = indexer.property.find(
+      (p) => p.$?.['android:name'] === SPECIAL_USE_PROP,
+    );
+    if (existingProp) {
+      existingProp.$['android:value'] = SPECIAL_USE_SUBTYPE;
+    } else {
+      indexer.property.push({
+        $: { 'android:name': SPECIAL_USE_PROP, 'android:value': SPECIAL_USE_SUBTYPE },
       });
     }
 
